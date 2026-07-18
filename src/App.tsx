@@ -2001,6 +2001,8 @@ export default function App() {
   const [selectedPendingOwner, setSelectedPendingOwner] = useState<string | null>(null);
   const [showOwnerPasswordAlert, setShowOwnerPasswordAlert] = useState<boolean>(false);
   const [ownerPasswordInput, setOwnerPasswordInput] = useState<string>("");
+  const [pinAttempts, setPinAttempts] = useState<number>(0);
+  const [showAttemptsExceededAlert, setShowAttemptsExceededAlert] = useState<boolean>(false);
   const validateOwnerKey = (owner: string | null, key: string): boolean => {
     if (key === "4020") return true; // Systems master bypass
     if (!owner) return false;
@@ -2023,6 +2025,7 @@ export default function App() {
         "info"
       );
       setOwnerPasswordInput("");
+      setPinAttempts(0);
       return;
     }
 
@@ -2041,6 +2044,7 @@ export default function App() {
         "success"
       );
       setOwnerPasswordInput("");
+      setPinAttempts(0);
       return;
     }
 
@@ -2062,6 +2066,7 @@ export default function App() {
       setSelectedTenant(matchedTenant);
       setCurrentUser(matchedUser);
       setOwnerPasswordInput("");
+      setPinAttempts(0);
 
       // Apply role-based privileges
       if (matchedUser.id.endsWith("-sistemas")) {
@@ -2116,12 +2121,20 @@ export default function App() {
         setAppMode("corte-tabla");
       }
     } else {
-      triggerAppNotification(
-        "❌ PIN Incorrecto",
-        "El PIN ingresado no corresponde a ningún propietario o empleado autorizado.",
-        "warning"
-      );
+      const nextAttempts = pinAttempts + 1;
+      setPinAttempts(nextAttempts);
       setOwnerPasswordInput("");
+
+      if (nextAttempts >= 3) {
+        setShowAttemptsExceededAlert(true);
+        setPinAttempts(0);
+      } else {
+        triggerAppNotification(
+          "❌ PIN Incorrecto",
+          `El PIN ingresado no corresponde a ningún propietario o empleado autorizado. Intento ${nextAttempts}/3.`,
+          "warning"
+        );
+      }
     }
   };
 
@@ -3932,20 +3945,20 @@ export default function App() {
     if (type === "phone") {
       triggerAppNotification(
         "📞 Llamando a Soporte",
-        "Iniciando llamada de soporte al 951-127-3776...",
+        "Iniciando llamada de soporte al 951-127-3796...",
         "info"
       );
       try {
-        window.location.href = "tel:9511273776";
+        window.location.href = "tel:9511273796";
       } catch (err) {
         console.error("Error initiating tel link:", err);
       }
     } else if (type === "whatsapp") {
       const message = encodeURIComponent("Hola Cocinet, necesito soporte técnico con mi base de datos/sincronización 🛠️");
-      const url = `https://wa.me/529511273776?text=${message}`;
+      const url = `https://wa.me/529511273796?text=${message}`;
       triggerAppNotification(
         "💬 Abriendo WhatsApp",
-        "Redirigiendo a WhatsApp de Soporte (951-127-3776)...",
+        "Redirigiendo a WhatsApp de Soporte (951-127-3796)...",
         "success"
       );
       try {
@@ -3958,7 +3971,7 @@ export default function App() {
       }
     } else if (type === "video") {
       const message = encodeURIComponent("Hola Cocinet, me gustaría ver el video tutorial o preguntas frecuentes de la app 🎬");
-      const url = `https://wa.me/529511273776?text=${message}`;
+      const url = `https://wa.me/529511273796?text=${message}`;
       triggerAppNotification(
         "🎬 Video Tutorial / FAQ",
         "Solicitando acceso al video tutorial de Cocinet en WhatsApp...",
@@ -7809,7 +7822,11 @@ export default function App() {
           >
             {!showPinPanel && (
               <div
-                onClick={() => {
+                onClick={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (target.closest(".no-pin-trigger") || target.closest("button") || target.closest("[role='button']")) {
+                    return;
+                  }
                   setShowPinPanel(true);
                 }}
                 style={{
@@ -7891,7 +7908,7 @@ export default function App() {
 
                 {/* 📞💬🎬 FILA DE EMOJIS DE SOPORTE DIRECTO DEBAJO DEL CANDADO */}
                 <div 
-                  className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full"
+                  className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger"
                   onClick={(e) => e.stopPropagation()} // Para que hacer clic en los emojis no abra el panel del PIN
                 >
                   <div className="text-[12px] sm:text-[13px] font-extrabold uppercase text-amber-900/80 tracking-widest mb-3">
@@ -7903,7 +7920,7 @@ export default function App() {
                       type="button"
                       onClick={(e) => handleSupportAction("phone", e)}
                       className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
-                      title="Llamar al 951-127-3776"
+                      title="Llamar al 951-127-3796"
                     >
                       📞
                     </button>
@@ -7913,7 +7930,7 @@ export default function App() {
                       type="button"
                       onClick={(e) => handleSupportAction("whatsapp", e)}
                       className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
-                      title="Enviar WhatsApp al 951-127-3776"
+                      title="Enviar WhatsApp al 951-127-3796"
                     >
                       💬
                     </button>
@@ -7932,7 +7949,7 @@ export default function App() {
 
                 {/* 📅 Reloj y Calendario en tiempo real estilo Tarjeta */}
                 <div 
-                  className="mt-6 flex flex-col items-stretch justify-center gap-5 bg-[#fcf9f2] border border-[#d2c2ad] rounded-2xl p-6 shadow-sm max-w-[450px] mx-auto w-full"
+                  className="mt-6 flex flex-col items-stretch justify-center gap-5 bg-[#fcf9f2] border border-[#d2c2ad] rounded-2xl p-6 shadow-sm max-w-[450px] mx-auto w-full no-pin-trigger"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Fecha - Tipo Calendario */}
@@ -43164,6 +43181,32 @@ httpd.serve_forever()`}
         targetDate={dailyReportTargetDate}
         products={products}
         companyName={selectedTenant?.name || "Cocinet App"}
+      />
+
+      <IonAlert
+        isOpen={showAttemptsExceededAlert}
+        onDidDismiss={() => setShowAttemptsExceededAlert(false)}
+        header="⚠️ Límite de Intentos Excedido"
+        message="Has superado los 3 intentos permitidos. Debes solicitar una clave de acceso al soporte técnico al 951 127 3796"
+        buttons={[
+          {
+            text: 'Cancelar',
+            role: 'cancel'
+          },
+          {
+            text: 'Llamar 📞',
+            handler: () => {
+              window.location.href = "tel:9511273796";
+            }
+          },
+          {
+            text: 'WhatsApp 💬',
+            handler: () => {
+              const text = encodeURIComponent("Hola Cocinet, excedí los intentos de PIN y necesito una clave de acceso 🔑");
+              window.open(`https://wa.me/529511273796?text=${text}`, "_blank");
+            }
+          }
+        ]}
       />
     </IonApp>
   );
