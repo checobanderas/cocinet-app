@@ -23065,6 +23065,30 @@ Instrucciones:
               }
               return true;
             });
+
+            const handleBulkAddSortOrder = (amount: number) => {
+              if (relationMatches.length === 0) {
+                alert("No hay productos en la lista para modificar.");
+                return;
+              }
+              const confirm = window.confirm(`¿Estás seguro de que deseas sumar ${amount} a la prioridad de orden de todos los productos en la lista?`);
+              if (!confirm) return;
+
+              setRelationMatches(prev => prev.map(match => {
+                const currentOrder = Number(match.proposedSortOrder) || 0;
+                return {
+                  ...match,
+                  proposedSortOrder: currentOrder + amount
+                };
+              }));
+
+              triggerAppNotification(
+                "Orden Actualizado",
+                `Se sumó ${amount} al orden de todos los productos.`,
+                "success"
+              );
+            };
+
             return (
               <div style={{ padding: "10px" }}>
                 <div
@@ -23222,7 +23246,57 @@ Instrucciones:
                           <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", textAlign: "left" }}>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Producto Original (Waiter Menu)</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Nombre en Reportes (Deseado por Dueño)</th>
-                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Orden en Reportes</th>
+                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700", minWidth: "180px" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <span>Orden en Reportes</span>
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      handleBulkAddSortOrder(10);
+                                    }}
+                                    style={{
+                                      background: "#0284c7",
+                                      color: "white",
+                                      border: "none",
+                                      borderRadius: "6px",
+                                      padding: "4px 8px",
+                                      fontSize: "10px",
+                                      fontWeight: "bold",
+                                      cursor: "pointer",
+                                      boxShadow: "0 2px 4px rgba(2, 132, 199, 0.15)",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "#0369a1"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "#0284c7"; }}
+                                  >
+                                    Aumentar 10
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      handleBulkAddSortOrder(100);
+                                    }}
+                                    style={{
+                                      background: "#0f766e",
+                                      color: "white",
+                                      border: "none",
+                                      borderRadius: "6px",
+                                      padding: "4px 8px",
+                                      fontSize: "10px",
+                                      fontWeight: "bold",
+                                      cursor: "pointer",
+                                      boxShadow: "0 2px 4px rgba(15, 118, 110, 0.15)",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "#115e59"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "#0f766e"; }}
+                                  >
+                                    Aumentar 100
+                                  </button>
+                                </div>
+                              </div>
+                            </th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700", textAlign: "center" }}>Estado</th>
                           </tr>
                         </thead>
