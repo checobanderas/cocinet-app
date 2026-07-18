@@ -23050,12 +23050,18 @@ Instrucciones:
               const pObj = products.find(p => p.id === match.productId);
               const q = relationSearch.trim().toLowerCase();
               if (q) {
-                return (
-                  (match.originalName || "").toLowerCase().includes(q) ||
-                  (match.proposedReportName || "").toLowerCase().includes(q) ||
-                  (pObj?.subcategory || "").toLowerCase().includes(q) ||
-                  (pObj?.subgroup || "").toLowerCase().includes(q)
-                );
+                const searchTerms = q.split(/\s+/).filter(Boolean);
+                if (searchTerms.length === 0) return true;
+                
+                const targetText = [
+                  match.originalName,
+                  match.proposedReportName,
+                  pObj?.subcategory,
+                  pObj?.subgroup,
+                  pObj?.category
+                ].filter(Boolean).join(" ").toLowerCase();
+                
+                return searchTerms.every(term => targetText.includes(term));
               }
               return true;
             });
