@@ -7847,7 +7847,7 @@ export default function App() {
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                className="active:scale-[0.99] select-none"
+                className="select-none"
               >
                 <div
                   style={{
@@ -7910,6 +7910,9 @@ export default function App() {
                 <div 
                   className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger"
                   onClick={(e) => e.stopPropagation()} // Para que hacer clic en los emojis no abra el panel del PIN
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 >
                   <div className="text-[12px] sm:text-[13px] font-extrabold uppercase text-amber-900/80 tracking-widest mb-3">
                     Soporte técnico
@@ -7919,6 +7922,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={(e) => handleSupportAction("phone", e)}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
                       title="Llamar al 951-127-3796"
                     >
@@ -7929,6 +7935,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={(e) => handleSupportAction("whatsapp", e)}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
                       title="Enviar WhatsApp al 951-127-3796"
                     >
@@ -7939,6 +7948,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={(e) => handleSupportAction("video", e)}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
                       title="Video Tutorial y Preguntas Frecuentes"
                     >
@@ -7951,6 +7963,9 @@ export default function App() {
                 <div 
                   className="mt-6 flex flex-col items-stretch justify-center gap-5 bg-[#fcf9f2] border border-[#d2c2ad] rounded-2xl p-6 shadow-sm max-w-[450px] mx-auto w-full no-pin-trigger"
                   onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 >
                   {/* Fecha - Tipo Calendario */}
                   <div className="flex items-center gap-4 text-[#5c4d3c] w-full pl-3">
@@ -43185,7 +43200,10 @@ httpd.serve_forever()`}
 
       <IonAlert
         isOpen={showAttemptsExceededAlert}
-        onDidDismiss={() => setShowAttemptsExceededAlert(false)}
+        onDidDismiss={() => {
+          setShowAttemptsExceededAlert(false);
+          setShowPinPanel(false);
+        }}
         header="⚠️ Límite de Intentos Excedido"
         message="Has superado los 3 intentos permitidos. Debes solicitar una clave de acceso al soporte técnico al 951 127 3796"
         buttons={[
