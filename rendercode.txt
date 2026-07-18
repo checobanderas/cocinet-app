@@ -1,0 +1,296 @@
+  const renderManageMenu = () => {
+    return (
+      <IonPage>
+        <IonHeader className="ion-no-border">
+          <IonToolbar style={{ '--background': "rgb(40, 45, 52)", '--color': 'white' }}>
+            <IonButtons slot="start">
+              <IonButton onClick={() => setAppMode('admin')}>
+                <IonIcon icon={arrowBackOutline} slot="icon-only" />
+              </IonButton>
+            </IonButtons>
+            <IonTitle>Administrar Menú</IonTitle>
+            <IonButtons slot="end">
+              <IonBadge color="light" style={{ fontSize: '0.8rem', padding: '5px 10px', borderRadius: '8px', marginRight: '8px', color: '#1e293b' }}>
+                {products.length} productos
+              </IonBadge>
+            </IonButtons>
+          </IonToolbar>
+          <IonToolbar style={{ '--background': "rgb(40, 45, 52)", '--color': 'white' }}>
+            <IonSegment value={manageMenuTab} onIonChange={e => setManageMenuTab(e.detail.value as any)} style={{ '--background': 'rgba(255,255,255,0.1)' }}>
+              <IonSegmentButton value="upload" style={manageMenuTab === 'upload' ? { background: '#3b82f6', borderRadius: '8px', margin: '4px' } : { margin: '4px' }}>
+                <IonLabel style={{ color: 'white', fontWeight: 'bold' }}>📸 Subir</IonLabel>
+              </IonSegmentButton>
+              <IonSegmentButton value="crud" style={manageMenuTab === 'crud' ? { background: '#f59e0b', borderRadius: '8px', margin: '4px' } : { margin: '4px' }}>
+                <IonLabel style={{ color: 'white', fontWeight: 'bold' }}>📝 Gestionar</IonLabel>
+              </IonSegmentButton>
+              <IonSegmentButton value="inventory" style={manageMenuTab === 'inventory' ? { background: '#8b5cf6', borderRadius: '8px', margin: '4px' } : { margin: '4px' }}>
+                <IonLabel style={{ color: 'white', fontWeight: 'bold' }}>📦 Insumos</IonLabel>
+              </IonSegmentButton>
+              <IonSegmentButton value="recipes" style={manageMenuTab === 'recipes' ? { background: '#10b981', borderRadius: '8px', margin: '4px' } : { margin: '4px' }}>
+                <IonLabel style={{ color: 'white', fontWeight: 'bold' }}>🍲 Recetas</IonLabel>
+              </IonSegmentButton>
+            </IonSegment>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent className="ion-padding">
+          {manageMenuTab === 'upload' && (
+            <div style={{ textAlign: 'center', padding: '10px' }}>
+              <IonText color="medium">
+                <p>Sube una imagen del menú para que la IA detecte los productos y los agregue al sistema.</p>
+              </IonText>
+              
+              <input
+                type="file"
+                id="menu-upload"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleMenuImageUpload}
+              />
+              
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <IonButton expand="block" color="secondary" onClick={() => document.getElementById('menu-upload')?.click()} style={{ flex: 1 }}>
+                  <IonIcon slot="start" icon={cloudUploadOutline} />
+                  {menuImage ? 'Cambiar Imagen' : 'Subir Imagen'}
+                </IonButton>
+                {menuImage && (
+                  <IonButton fill="outline" color="primary" onClick={() => analyzeMenuImage(menuImage)}>
+                    <IonIcon slot="start" icon={refreshCircleOutline} />
+                    Comenzar Análisis
+                  </IonButton>
+                )}
+              </div>
+
+              {isAddingProducts && (
+                <div style={{ margin: '20px 0', textAlign: 'center' }}>
+                  <IonSpinner name="crescent" />
+                  <p style={{ marginTop: '10px', color: '#64748b' }}>Procesando menú con IA...</p>
+                </div>
+              )}
+
+              {menuImage && !isAddingProducts && (
+                <div style={{ border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '10px', background: '#f8fafc' }}>
+                  <img src={menuImage} alt="Menu Preview" style={{ width: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px' }} />
+                </div>
+              )}
+              
+              {!menuImage && !isAddingProducts && (
+                <div style={{ border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '40px 10px', background: '#f8fafc', color: '#94a3b8' }}>
+                  <IonIcon icon={imageOutline} style={{ fontSize: '48px', marginBottom: '10px' }} />
+                  <p>No se ha subido ninguna imagen</p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {manageMenuTab === 'crud' && (
+            <div style={{ padding: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontWeight: 'bold', margin: '0', color: '#1e293b' }}>Catálogo de Productos</h3>
+                <IonButton color="primary" onClick={() => setProductCrudModal({isOpen: true, product: null})}>
+                  <IonIcon icon={addOutline} slot="start" />
+                  Nuevo Producto
+                </IonButton>
+              </div>
+              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead style={{ background: '#f1f5f9', color: '#475569', textTransform: 'uppercase', fontSize: '0.75rem' }}>
+                    <tr>
+                      <th style={{ padding: '12px 16px' }}>Nombre</th>
+                      <th style={{ padding: '12px 16px' }}>Categoría</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Precio</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map(p => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '500', color: '#1e293b' }}>{p.name} <br/><span style={{fontSize:'0.75rem', color:'#64748b'}}>{p.subcategory || ''}</span></td>
+                        <td style={{ padding: '12px 16px' }}>{p.category === 'food' ? 'Comida' : p.category === 'drinks' ? 'Bebidas' : 'Postre'}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold', color: '#059669' }}>${p.price.toFixed(2)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <button onClick={() => setProductCrudModal({isOpen: true, product: p})} style={{ color: '#3b82f6', marginRight: '16px', fontWeight: 'bold' }}>Editar</button>
+                          <button onClick={() => {
+                            if(window.confirm('¿Seguro de eliminar?')) deleteProductFromFirebase(p.id);
+                          }} style={{ color: '#ef4444', fontWeight: 'bold' }}>Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {manageMenuTab === 'inventory' && (
+            <div style={{ padding: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontWeight: 'bold', margin: '0', color: '#1e293b' }}>📦 Inventario Base</h3>
+                <button onClick={() => setInventoryCrudModal({isOpen: true, item: null})} style={{ fontSize: '0.85rem', background: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold' }}>
+                  + Agregar Insumo
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff' }}>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead style={{ background: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '0.8rem' }}>
+                    <tr>
+                      <th style={{ padding: '12px 16px' }}>Insumo</th>
+                      <th style={{ padding: '12px 16px' }}>Unidad</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Stock (Inventario)</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventory.map(inv => (
+                      <tr key={inv.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '500', color: '#334155' }}>{inv.name}</td>
+                        <td style={{ padding: '12px 16px', color: '#64748b' }}>{inv.unit}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold', color: '#10b981' }}>{inv.stock}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <button onClick={() => setInventoryCrudModal({isOpen: true, item: inv})} style={{ color: '#4f46e5', marginRight: '16px', fontWeight: 'bold' }}>Editar</button>
+                          <button onClick={() => {
+                            if(window.confirm(`¿Eliminar ${inv.name}?`)) deleteInventoryItemFromFirebase(inv.id);
+                          }} style={{ color: '#e11d48', fontWeight: 'bold' }}>Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {inventory.length === 0 && (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No hay insumos en el inventario</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {manageMenuTab === 'recipes' && (
+            <div style={{ padding: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(400px, 1.5fr)', gap: '24px' }}>
+                
+                {/* Left: Product Selection with Search Table */}
+                <div style={{ border: '1px solid #e2e8f0', padding: '16px', borderRadius: '12px', background: '#fff' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <h3 style={{ fontWeight: 'bold', margin: '0 0 12px 0', color: '#1e293b' }}>🍔 Selección de Platillo</h3>
+                    <input 
+                      type="text" 
+                      placeholder="Buscar platillo por nombre..." 
+                      value={productSearch}
+                      onChange={e => setProductSearch(e.target.value)}
+                      style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+                  <div style={{ overflowY: 'auto', height: '400px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                     <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                       <tbody>
+                         {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => {
+                           const isSelected = selectedRecipeProduct?.id === p.id;
+                           return (
+                             <tr 
+                               key={p.id} 
+                               onClick={() => setSelectedRecipeProduct(p)} 
+                               style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: isSelected ? '#e0f2fe' : 'white', borderLeft: isSelected ? '4px solid #0ea5e9' : '4px solid transparent' }}
+                             >
+                               <td style={{ padding: '12px', fontWeight: isSelected ? 'bold' : 'normal', color: '#334155' }}>
+                                  {p.name} <br/>
+                                  <span style={{fontSize: '0.75rem', color: '#64748b'}}>
+                                    {p.category === 'food' ? 'Comida' : p.category === 'drinks' ? 'Bebidas' : 'Postres'} - ${p.price}
+                                  </span>
+                               </td>
+                             </tr>
+                           )
+                         })}
+                       </tbody>
+                     </table>
+                  </div>
+                </div>
+
+                {/* Right: Recipe Editor details */}
+                <div style={{ border: '1px solid #e2e8f0', padding: '16px', borderRadius: '12px', background: '#fff' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <h3 style={{ fontWeight: 'bold', margin: '0', color: '#1e293b' }}>
+                      🍲 Insumos: <span style={{ color: '#4f46e5' }}>{selectedRecipeProduct ? selectedRecipeProduct.name : 'Ninguno seleccionado'}</span>
+                    </h3>
+                  </div>
+                  
+                  {selectedRecipeProduct ? (
+                    <div style={{ overflowY: 'auto', height: '440px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead style={{ background: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '0.75rem', position: 'sticky', top: 0, zIndex: 1 }}>
+                          <tr>
+                            <th style={{ padding: '10px 16px' }}>Insumo</th>
+                            <th style={{ padding: '10px 16px' }}>Unidad</th>
+                            <th style={{ padding: '10px 16px', textAlign: 'center' }}>Cantidad en Platillo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventory.map(inv => {
+                            const rIng = (selectedRecipeProduct.recipe || []).find((r: any) => r.inventoryItemId === inv.id);
+                            const qty = rIng ? rIng.quantity : '';
+                            const isPresent = !!rIng;
+                            return (
+                              <tr key={inv.id} style={{ borderBottom: '1px solid #f1f5f9', background: isPresent ? '#f0fdf4' : 'white' }}>
+                                <td style={{ padding: '12px 16px', fontWeight: isPresent ? 'bold' : 'normal', color: isPresent ? '#166534' : '#334155' }}>{inv.name}</td>
+                                <td style={{ padding: '12px 16px', color: '#64748b' }}>{inv.unit}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <input 
+                                    type="number" 
+                                    step="0.1" 
+                                    min="0"
+                                    defaultValue={qty}
+                                    placeholder="0"
+                                    onBlur={(e) => {
+                                      let val = parseFloat(e.target.value);
+                                      const currentRecipe = [...(selectedRecipeProduct.recipe || [])];
+                                      const existingIndex = currentRecipe.findIndex((r: any) => r.inventoryItemId === inv.id);
+                                      let updated = false;
+                                      
+                                      if (!isNaN(val) && val > 0) {
+                                        if (existingIndex >= 0) {
+                                          if (currentRecipe[existingIndex].quantity !== val) {
+                                            currentRecipe[existingIndex].quantity = val;
+                                            updated = true;
+                                          }
+                                        }
+                                        else {
+                                          currentRecipe.push({ inventoryItemId: inv.id, quantity: val });
+                                          updated = true;
+                                        }
+                                      } else if (existingIndex >= 0 || (e.target.value === '' && existingIndex >= 0)) {
+                                        // Remove if empty or 0
+                                        currentRecipe.splice(existingIndex, 1);
+                                        updated = true;
+                                        e.target.value = '';
+                                      }
+
+                                      if (updated) {
+                                        updateProductInFirebase(selectedRecipeProduct.id, { ...selectedRecipeProduct, recipe: currentRecipe }).then(() => {
+                                          setSelectedRecipeProduct({ ...selectedRecipeProduct, recipe: currentRecipe });
+                                        });
+                                      }
+                                    }}
+                                    style={{ width: '80px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'right', fontWeight: 'bold' }} 
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {inventory.length === 0 && (
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No hay insumos registrados en el inventario.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '64px 32px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '12px', color: '#94a3b8' }}>
+                      <IonIcon icon={restaurantOutline} style={{ fontSize: '3rem', marginBottom: '16px', opacity: 0.5 }} />
+                      <p style={{ fontSize: '1rem', fontWeight: '500', margin: 0 }}>Elige un platillo de la lista para editar su receta</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+        </IonContent>
+      </IonPage>
+    );
+  };

@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /cashier_sessions/{document=**} {
+      allow read, write: if true;
+    }
+    match /cashier_sessions_v2/{document=**} {
+      allow read, write: if true;
+    }
+    match /history/{document=**} {
+      allow read, write: if true;
+    }
+    match /purchases/{document=**} {
+      allow read, write: if true;
+    }
+    match /tables/{document=**} {
+      allow read, write: if true;
+    }
+    match /customers/{document=**} {
+      allow read, write: if true;
+    }
+    match /products/{document=**} {
+      allow read, write: if true;
+    }
+    match /suppliers/{document=**} {
+      allow read, write: if true;
+    }
+    match /settings/{document=**} {
+      allow read, write: if true;
+    }
+    match /cash_movements/{document=**} {
+      allow read, write: if true;
+    }
+    match /device_requests/{document=**} {
+      allow read, write: if true;
+    }
+    match /inventory/{document=**} {
+      allow read, write: if true;
+    }
+    match /expenses/{document=**} {
+      allow read, write: if true;
+    }
+    match /inventory_movements/{document=**} {
+      allow read, write: if true;
+    }
+    match /arqueos/{document=**} {
+      allow read, write: if true;
+    }
+    match /users/{document=**} {
+      allow read, write: if true;
+    }
+    match /menu_backups/{document=**} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+

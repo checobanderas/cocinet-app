@@ -1,0 +1,241 @@
+{
+  "entities": {
+    "cashier_session": {
+      "title": "Cashier Session",
+      "description": "Represents an active or closed cashier register session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "status"]
+    },
+    "history": {
+      "title": "History",
+      "description": "Historical log of system activities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "requiresInvoice": { "type": "boolean" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "purchase": {
+      "title": "Purchase",
+      "description": "Supplier purchases history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "table": {
+      "title": "Restaurant Table",
+      "description": "Represents a restaurant table dynamic state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "status": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "label", "status", "tenantId"]
+    },
+    "customer": {
+      "title": "Customer",
+      "description": "Client profile records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "product": {
+      "title": "Product",
+      "description": "Catalogue products details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "name", "price", "tenantId"]
+    },
+    "supplier": {
+      "title": "Supplier",
+      "description": "Supplier contact information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "setting": {
+      "title": "Settings",
+      "description": "Tenant specific configuration settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "cash_movement": {
+      "title": "Cash Movement",
+      "description": "Details of money inflow/outflow sessions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "device_request": {
+      "title": "Device Request",
+      "description": "Tablet pairing and linkage requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "deviceId": { "type": "string" }
+      },
+      "required": ["id", "deviceId"]
+    },
+    "inventory": {
+      "title": "Inventory",
+      "description": "Inventory batches and stock tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "expense": {
+      "title": "Expense",
+      "description": "Store operational expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "inventory_movement": {
+      "title": "Inventory Movement",
+      "description": "Logs of stock ins/outs across tables or sales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "arqueo": {
+      "title": "Cash Count / Arqueo",
+      "description": "Daily/session register cash drawer counting and validation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "user": {
+      "title": "User",
+      "description": "System account operators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["id", "tenantId"]
+    },
+    "tenant": {
+      "title": "Tenant / Branch",
+      "description": "Represents a company sucursal or tenant entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "rfc": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "ownerKey": { "type": "string" },
+        "sucursalDefault": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "name", "ownerEmail", "ownerKey"]
+    }
+  },
+  "firestore": {
+    "cashier_sessions": {
+      "schema": "cashier_session",
+      "description": "Cash registrations"
+    },
+    "history": {
+      "schema": "history",
+      "description": "Activity log logs"
+    },
+    "purchases": {
+      "schema": "purchase",
+      "description": "Supplier purchases"
+    },
+    "tables": {
+      "schema": "table",
+      "description": "Restaurant tables status"
+    },
+    "customers": {
+      "schema": "customer",
+      "description": "Customer list"
+    },
+    "products": {
+      "schema": "product",
+      "description": "Product lists"
+    },
+    "suppliers": {
+      "schema": "supplier",
+      "description": "Supplier catalogue"
+    },
+    "settings": {
+      "schema": "setting",
+      "description": "Branch details"
+    },
+    "tenants": {
+      "schema": "tenant",
+      "description": "Global list of all company branches and tenants"
+    },
+    "cash_movements": {
+      "schema": "cash_movement",
+      "description": "Inflow and outflow transactions"
+    },
+    "device_requests": {
+      "schema": "device_request",
+      "description": "Pair devices"
+    },
+    "inventory": {
+      "schema": "inventory",
+      "description": "Inventory stock"
+    },
+    "expenses": {
+      "schema": "expense",
+      "description": "Operational and general expenses"
+    },
+    "inventory_movements": {
+      "schema": "inventory_movement",
+      "description": "Inventory product movements"
+    },
+    "arqueos": {
+      "schema": "arqueo",
+      "description": "Cash reconciliation drawer counts"
+    },
+    "users": {
+      "schema": "user",
+      "description": "Waiters and Cashiers"
+    }
+  }
+}

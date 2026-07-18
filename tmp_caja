@@ -1,0 +1,19 @@
+2225:      t += "Sin salidas de caja registradas.\n";
+2474:      setMenuToastMessage("Reporte de caja descargado con exito.");
+2484:      setMenuToastMessage("Reiniciando cortes de caja y comandas...");
+9246:                      <option value="true">Pagado (afecta caja)</option>
+9686:                    Estás ajustando los parámetros, inventarios, catálogos del menú, y caja para esta sucursal del grupo de matrices de <strong className="text-white font-bold">Taquerías Sombrerudos</strong>.
+9893:                          Define los datos que se imprimen en los tickets de venta y corte de caja de la sucursal seleccionada.
+10278:                        ? "Estructura para el cierre final de turno de caja. Al imprimir oficial o reiniciar, se limpian las cifras del día."
+10279:                        : "El precorte es informativo y parcial. Te permite revisar el corte de caja actual sin reiniciar ni alterar las cuentas o comandas activas."}
+10379:                       Nómina, retiros, dotaciones, fondos de caja u otros.
+10393:                     No hay movimientos externos de caja hoy.
+10629:                    const confirmClose = window.confirm("¿Está seguro de que desea finalizar el turno actual y realizar el corte oficial de caja?");
+14578:        triggerAppNotification("⚠️ Error de Monto", "El monto de la caja debe ser un número mayor a cero", "warning");
+14590:        finalDescription = `Dotación / Fondo de caja. ${guidedDescription}`.trim();
+14596:        finalDescription = `Blindaje / Retiro parcial de caja. ${guidedDescription}`.trim();
+14635:        triggerAppNotification("⚠️ Error de Monto", "El monto de la caja debe ser un número mayor a cero", "warning");
+14920:                            setGuidedDescription("Ingreso inicial para dotar de cambios a la caja.");
+15033:                            setGuidedDescription("Retiro de seguridad para blindar efectivo de la caja.");
+15655:                    <p className="text-[10px] text-slate-300">Registar egreso de caja con desglose de productos</p>
+17060:                          🤖 captured 0.00. Ingresa las denominaciones recibidas en caja para contrastar con la balanza esperada.

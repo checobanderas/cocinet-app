@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+firebase-key.json
+firebase-key-*.json
+*.db*
+*.xlsx
+*.xls

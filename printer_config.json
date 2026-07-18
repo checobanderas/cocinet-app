@@ -1,0 +1,15 @@
+{
+    "PRINTER_MAP": {
+        "cuentas": "CUENTAS",
+        "cocina": "COCINA",
+        "barra": "BARRA"
+    },
+    "PRINTER_PAPER_SIZES": {
+        "cuentas": "80mm",
+        "cocina": "80mm",
+        "barra": "80mm"
+    },
+    "LOGO_PATH": "C:\\buzon\\logo.jpg",
+    "FONT_NAME": "Arial",
+    "FONT_SIZE_PT": 16.0
+}

@@ -1,0 +1,11 @@
+{
+  "name": "COCINET Pro Cloud",
+  "description": "Sistema de gestión inteligente con sincronización real-time, PWA y base de datos multi-sucursal.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,769 @@
+796-                  background: "rgba(255, 255, 255, 0.08)",
+797-                  border: "1px solid rgba(255,255,255,0.08)",
+798-                  borderRadius: "10px",
+799-                  color: "#94a3b8",
+800-                  padding: "10px 14px",
+801-                  fontSize: "12px",
+802-                  fontWeight: "600",
+803-                  cursor: "pointer",
+804-                }}
+805-              >
+806:                Cerrar
+807-              </button>
+808-            </div>
+809-          </div>
+810-        </div>
+811-      </motion.div>
+812-    </AnimatePresence>
+813-  );
+814-}
+815-
+816-export function getProductInventoryStatus(product: any, inventory: any[]) {
+--
+3379-              title="Cambiar Usuario 👤🔄"
+3380-            >
+3381-              👤🔄
+3382-            </button>
+3383-          </IonText>
+3384-        </div>
+3385-        <IonButton
+3386-          onClick={handleLogout}
+3387-          color="light"
+3388-          fill="clear"
+3389:          title="Cerrar Sesión Completa"
+3390-        >
+3391-          <IonIcon icon={closeOutline} slot="icon-only" />
+3392-        </IonButton>
+3393-      </IonButtons>
+3394-    );
+3395-  };
+3396-
+3397-  const renderLogin = () => {
+3398-    return (
+3399-      <IonPage>
+--
+3412-            "--border-radius": "24px",
+3413-          }}
+3414-        >
+3415-          <IonHeader className="ion-no-border">
+3416-            <IonToolbar style={{ "--background": "#1e293b", "color": "white" }}>
+3417-              <IonTitle style={{ fontSize: "1.05rem", fontWeight: "900" }}>
+3418-                ⚙️ Consola de Red de Sucursales
+3419-              </IonTitle>
+3420-              <IonButtons slot="end">
+3421-                <IonButton onClick={() => setShowManageCompaniesModal(false)} style={{ "--color": "white", "fontWeight": "bold" }}>
+3422:                  Cerrar
+3423-                </IonButton>
+3424-              </IonButtons>
+3425-            </IonToolbar>
+3426-          </IonHeader>
+3427-          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+3428-            <div className="space-y-4">
+3429-              {/* Info Accent Header */}
+3430-              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs font-semibold text-indigo-950 flex flex-col gap-1 select-none text-left">
+3431-                <div className="flex items-center gap-1.5 font-black text-indigo-900">
+3432-                  <span>📶</span> Sincronización Relacional Activa (MySQL + WebSockets)
+--
+8039-            >
+8040-              <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900" }}>
+8041-                Comensal {currentComensal}{" "}
+8042-                {currentUser && ` - ${currentUser.name}`}
+8043-              </IonTitle>
+8044-              <IonButtons slot="end">
+8045-                <IonButton
+8046-                  onClick={() => setShowComensalPreview(false)}
+8047-                  style={{ "--color": "white", fontWeight: "bold" }}
+8048-                >
+8049:                  Cerrar
+8050-                </IonButton>
+8051-              </IonButtons>
+8052-            </IonToolbar>
+8053-            <div
+8054-              style={{
+8055-                padding: "12px",
+8056-                background: "#f8fafc",
+8057-                borderBottom: "1px solid #e2e8f0",
+8058-              }}
+8059-            >
+--
+10699-                                Añadir Propina
+10700-                              </IonText>
+10701-                              <IonText
+10702-                                color="medium"
+10703-                                style={{
+10704-                                  fontSize: "0.65rem",
+10705-                                  fontWeight: "bold",
+10706-                                  textTransform: "uppercase",
+10707-                                }}
+10708-                              >
+10709:                                Cerrar cuenta en:
+10710-                              </IonText>
+10711-                            </div>
+10712-                            <div style={{ display: "flex", gap: "4px" }}>
+10713-                              {[10, 15, 20].map((p) => (
+10714-                                <IonButton
+10715-                                  key={p}
+10716-                                  size="small"
+10717-                                  fill="clear"
+10718-                                  onClick={() => applyTipPercent(p)}
+10719-                                  style={{ fontSize: "0.7rem", height: "24px" }}
+--
+10823-                                Añadir Descuento
+10824-                              </IonText>
+10825-                              <IonText
+10826-                                color="medium"
+10827-                                style={{
+10828-                                  fontSize: "0.65rem",
+10829-                                  fontWeight: "bold",
+10830-                                  textTransform: "uppercase",
+10831-                                }}
+10832-                              >
+10833:                                Cerrar cuenta en:
+10834-                              </IonText>
+10835-                            </div>
+10836-                            <div style={{ display: "flex", gap: "4px" }}>
+10837-                              {[5, 10, 15, 20].map((p) => (
+10838-                                <IonButton
+10839-                                  key={p}
+10840-                                  size="small"
+10841-                                  fill="clear"
+10842-                                  color="danger"
+10843-                                  onClick={() => {
+--
+12061-                : "Panel Administrativo 2026"}
+12062-            </IonTitle>
+12063-            <IonButtons slot="end">
+12064-              <IonButton
+12065-                onClick={() => {
+12066-                  setAppMode("floorplan");
+12067-                  setAdminViewOnlyCorte(false);
+12068-                }}
+12069-                style={{ fontWeight: "600" }}
+12070-              >
+12071:                Cerrar
+12072-              </IonButton>
+12073-            </IonButtons>
+12074-          </IonToolbar>
+12075-        </IonHeader>
+12076-        {!adminViewOnlyCorte && (
+12077-          <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+12078-            <IonSegment
+12079-              value={configActiveTab}
+12080-              onIonChange={(e) => setConfigActiveTab(e.detail.value as any)}
+12081-            >
+--
+13073-                }}
+13074-              >
+13075-                <IonTitle style={{ fontWeight: "bold" }}>
+13076-                  🔐 Arqueo e Impresión de Corte Oficial
+13077-                </IonTitle>
+13078-                <IonButtons slot="end">
+13079-                  <IonButton
+13080-                    onClick={() => setShowCorteModal(false)}
+13081-                    style={{ fontWeight: "bold", color: "white" }}
+13082-                  >
+13083:                    Cerrar
+13084-                  </IonButton>
+13085-                </IonButtons>
+13086-              </IonToolbar>
+13087-            </IonHeader>
+13088-
+13089-            <IonContent
+13090-              className="ion-padding"
+13091-              style={{ "--background": "#f8fafc" }}
+13092-            >
+13093-              <div className="space-y-6">
+--
+13281-                      "¿Está seguro de que desea finalizar el turno actual y realizar el corte oficial de caja?",
+13282-                    );
+13283-                    if (confirmClose) {
+13284-                      await handleResetSales();
+13285-                      setShowCorteModal(false);
+13286-                    }
+13287-                  }}
+13288-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-4 px-6 rounded-2xl transition duration-200 cursor-pointer shadow-lg shadow-red-600/10 text-sm flex items-center justify-center gap-2 mt-4"
+13289-                >
+13290-                  <IonIcon icon={lockClosedOutline} />
+13291:                  Registrar Corte Oficial y Cerrar Turno 💾 🔒
+13292-                </button>
+13293-              </div>
+13294-            </IonContent>
+13295-          </IonModal>
+13296-        </IonContent>
+13297-      </IonPage>
+13298-    );
+13299-  };
+13300-
+13301-  const renderManageMenu = () => {
+--
+16643-            isOpen={isAssigningItemsMode}
+16644-            onDidDismiss={() => setIsAssigningItemsMode(false)}
+16645-            initialBreakpoint={0.8}
+16646-            breakpoints={[0, 0.8, 1]}
+16647-          >
+16648-            <IonHeader className="ion-no-border">
+16649-              <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+16650-                <IonTitle>Asociar Insumos Pactados</IonTitle>
+16651-                <IonButtons slot="end">
+16652-                  <IonButton onClick={() => setIsAssigningItemsMode(false)} style={{ fontWeight: "700" }}>
+16653:                    Cerrar
+16654-                  </IonButton>
+16655-                </IonButtons>
+16656-              </IonToolbar>
+16657-            </IonHeader>
+16658-            <IonContent className="ion-padding" style={{ "--background": "#ffffff" }}>
+16659-              <div className="space-y-4 max-w-lg mx-auto">
+16660-                <div>
+16661-                  <h3 className="font-extrabold text-slate-800 text-sm">
+16662-                    🤝 Asignación de Productos para: {selectedSupplierForPurchase?.name}
+16663-                  </h3>
+--
+16731-            isOpen={showDirectSupplierAddModal}
+16732-            onDidDismiss={() => setShowDirectSupplierAddModal(false)}
+16733-            initialBreakpoint={0.6}
+16734-            breakpoints={[0, 0.6]}
+16735-          >
+16736-            <IonHeader className="ion-no-border">
+16737-              <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+16738-                <IonTitle>Registrar Nuevo Proveedor</IonTitle>
+16739-                <IonButtons slot="end">
+16740-                  <IonButton onClick={() => setShowDirectSupplierAddModal(false)} style={{ fontWeight: "700" }}>
+16741:                    Cerrar
+16742-                  </IonButton>
+16743-                </IonButtons>
+16744-              </IonToolbar>
+16745-            </IonHeader>
+16746-            <IonContent className="ion-padding" style={{ "--background": "#ffffff" }}>
+16747-              <form
+16748-                onSubmit={async (e) => {
+16749-                  e.preventDefault();
+16750-                  const form = e.target as HTMLFormElement;
+16751-                  const name = (form.elements.namedItem("dirName") as HTMLInputElement).value;
+--
+16824-            onDidDismiss={() => setPrintedTicketPurchase(null)}
+16825-            className="flex items-center justify-center p-4 bg-slate-900/60"
+16826-            style={{ "--width": "420px", "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
+16827-          >
+16828-            <div className="bg-slate-800 text-slate-100 h-full flex flex-col justify-between">
+16829-              <IonHeader className="ion-no-border">
+16830-                <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+16831-                  <IonTitle>Vista de Ticket de Compra</IonTitle>
+16832-                  <IonButtons slot="end">
+16833-                    <IonButton onClick={() => setPrintedTicketPurchase(null)}>
+16834:                      Cerrar
+16835-                    </IonButton>
+16836-                  </IonButtons>
+16837-                </IonToolbar>
+16838-              </IonHeader>
+16839-
+16840-              {printedTicketPurchase && (
+16841-                <div className="p-5 flex-1 overflow-y-auto space-y-4">
+16842-                  {/* Paper wrapper */}
+16843-                  <div className="bg-white text-slate-900 p-6 rounded-2xl font-mono text-xs shadow-inner border border-slate-200 relative">
+16844-                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-[radial-gradient(circle,transparent_50%,rgba(0,0,0,0.05)_50%)] bg-[length:10px_10px]" />
+--
+16952-          {/* QUICK REGISTER NEW INSUMO / ITEM MODAL - VUE/PWA STYLE WITH CONTINUOUS SYNC */}
+16953-          <IonModal
+16954-            isOpen={showQuickAddInsumoModal}
+16955-            onDidDismiss={() => setShowQuickAddInsumoModal(false)}
+16956-          >
+16957-            <IonHeader className="ion-no-border">
+16958-              <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+16959-                <IonTitle>Registrar Nuevo Insumo 📦</IonTitle>
+16960-                <IonButtons slot="end">
+16961-                  <IonButton onClick={() => setShowQuickAddInsumoModal(false)} style={{ fontWeight: "750" }}>
+16962:                    Cerrar
+16963-                  </IonButton>
+16964-                </IonButtons>
+16965-              </IonToolbar>
+16966-            </IonHeader>
+16967-            <IonContent className="ion-padding" style={{ "--background": "#ffffff" }}>
+16968-              <div className="space-y-4 max-w-sm mx-auto p-1">
+16969-                <div>
+16970-                  <p className="text-xs text-slate-500 leading-normal mb-1">
+16971-                    Agrega un nuevo insumo al catálogo general del sistema. Se asociará automáticamente al proveedor activo para ser comprado inmediatamente.
+16972-                  </p>
+--
+17059-            breakpoints={[0, 0.65, 0.9]}
+17060-          >
+17061-            <IonHeader className="ion-no-border">
+17062-              <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+17063-                <IonTitle>Registrar Pago / Abono 💸</IonTitle>
+17064-                <IonButtons slot="end">
+17065-                  <IonButton onClick={() => {
+17066-                    setShowPaySupplierModal(false);
+17067-                    setSelectedSupplierForPayment(null);
+17068-                  }} style={{ fontWeight: "750" }}>
+17069:                    Cerrar
+17070-                  </IonButton>
+17071-                </IonButtons>
+17072-              </IonToolbar>
+17073-            </IonHeader>
+17074-            <IonContent className="ion-padding" style={{ "--background": "#ffffff" }}>
+17075-              {selectedSupplierForPayment && (
+17076-                <div className="space-y-4 max-w-sm mx-auto p-1 text-slate-800">
+17077-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col justify-between">
+17078-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Proveedor Beneficiario</span>
+17079-                    <span className="text-sm font-black text-slate-800 mt-0.5">{selectedSupplierForPayment.name}</span>
+--
+17139-            onDidDismiss={() => setPrintedPaymentTicket(null)}
+17140-            className="flex items-center justify-center p-4 bg-slate-900/60"
+17141-            style={{ "--width": "420px", "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
+17142-          >
+17143-            <div className="bg-slate-800 text-slate-100 h-full flex flex-col justify-between">
+17144-              <IonHeader className="ion-no-border">
+17145-                <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+17146-                  <IonTitle>Comprobante de Abono 💸</IonTitle>
+17147-                  <IonButtons slot="end">
+17148-                    <IonButton onClick={() => setPrintedPaymentTicket(null)} style={{ fontWeight: "700" }}>
+17149:                      Cerrar
+17150-                    </IonButton>
+17151-                  </IonButtons>
+17152-                </IonToolbar>
+17153-              </IonHeader>
+17154-
+17155-              {printedPaymentTicket && (
+17156-                <div className="p-5 flex-1 overflow-y-auto space-y-4">
+17157-                  {/* Thermal Paper emulation */}
+17158-                  <div className="bg-white text-slate-900 p-6 rounded-2xl font-mono text-xs shadow-inner border border-slate-200 relative">
+17159-                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-[radial-gradient(circle,transparent_50%,rgba(0,0,0,0.05)_50%)] bg-[length:10px_10px]" />
+--
+17455-                  {supplierModal.supplier
+17456-                    ? "✏️ Editar Proveedor"
+17457-                    : "🤝 Nuevo Proveedor"}
+17458-                </IonTitle>
+17459-                <IonButtons slot="end">
+17460-                  <IonButton
+17461-                    onClick={() =>
+17462-                      setSupplierModal({ isOpen: false, supplier: null })
+17463-                    }
+17464-                  >
+17465:                    Cerrar
+17466-                  </IonButton>
+17467-                </IonButtons>
+17468-              </IonToolbar>
+17469-            </IonHeader>
+17470-            <IonContent className="ion-padding">
+17471-              <form
+17472-                onSubmit={handleSaveSupplier}
+17473-                className="space-y-4 max-w-lg mx-auto py-4"
+17474-              >
+17475-                <div>
+--
+17813-                  {customerModal.customer
+17814-                    ? "✏️ Editar Cliente"
+17815-                    : "👥 Nuevo Cliente"}
+17816-                </IonTitle>
+17817-                <IonButtons slot="end">
+17818-                  <IonButton
+17819-                    onClick={() =>
+17820-                      setCustomerModal({ isOpen: false, customer: null })
+17821-                    }
+17822-                  >
+17823:                    Cerrar
+17824-                  </IonButton>
+17825-                </IonButtons>
+17826-              </IonToolbar>
+17827-            </IonHeader>
+17828-            <IonContent className="ion-padding">
+17829-              <form
+17830-                onSubmit={handleSaveCustomer}
+17831-                className="space-y-4 max-w-lg mx-auto py-4"
+17832-              >
+17833-                <div>
+--
+18544-                <IonTitle>
+18545-                  {selectedExpenseForEdit
+18546-                    ? "📝 Editar Gasto"
+18547-                    : "➕ Registrar Nuevo Gasto"}
+18548-                </IonTitle>
+18549-                <IonButtons slot="end">
+18550-                  <IonButton
+18551-                    onClick={() => setShowExpenseModal(false)}
+18552-                    style={{ fontWeight: "bold", fontSize: "12px" }}
+18553-                  >
+18554:                    Cerrar
+18555-                  </IonButton>
+18556-                </IonButtons>
+18557-              </IonToolbar>
+18558-            </IonHeader>
+18559-
+18560-            <IonContent
+18561-              className="ion-padding"
+18562-              style={{ "--background": "white" }}
+18563-            >
+18564-              <form
+--
+20195-                    🕒 Ver Historial de Movimientos
+20196-                  </button>
+20197-
+20198-                  <button
+20199-                    onClick={() => {
+20200-                      setShowInsumoActionModal(false);
+20201-                      setSelectedInsumoForMov(null);
+20202-                    }}
+20203-                    className="w-full bg-slate-950 hover:bg-slate-900 text-slate-400 font-bold text-xs py-2.5 rounded-2xl tracking-wide uppercase transition active:scale-95 border-none outline-none cursor-pointer text-center"
+20204-                  >
+20205:                    Cerrar
+20206-                  </button>
+20207-                </div>
+20208-              </div>
+20209-            </IonModal>
+20210-
+20211-            {/* POPUP FORM MODAL TO REGISTER MOVEMENT */}
+20212-            <IonModal
+20213-              isOpen={showAddMovModal}
+20214-              onDidDismiss={() => {
+20215-                setShowAddMovModal(false);
+--
+21106-              <button
+21107-                onClick={() => setShowPrintPreviewModal(true)}
+21108-                className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center justify-center gap-1 shadow-sm transition mr-3 cursor-pointer border-none outline-none"
+21109-              >
+21110-                <span>👁️ Vista Ticket</span>
+21111-              </button>
+21112-              <IonButton
+21113-                onClick={() => setAppMode("floorplan")}
+21114-                style={{ fontWeight: "600" }}
+21115-              >
+21116:                Cerrar
+21117-              </IonButton>
+21118-            </IonButtons>
+21119-          </IonToolbar>
+21120-        </IonHeader>
+21121-
+21122-        <IonContent
+21123-          className="ion-padding"
+21124-          style={{ "--background": "#f8fafc" }}
+21125-        >
+21126-          <div className="max-w-7xl mx-auto py-1 space-y-5">
+--
+24658-                }}
+24659-              >
+24660-                <IonTitle>
+24661-                  👁️ Vista Preliminar de Impresión (Corte Express)
+24662-                </IonTitle>
+24663-                <IonButtons slot="end">
+24664-                  <button
+24665-                    onClick={() => setShowReceiptPreviewModal(false)}
+24666-                    className="bg-transparent hover:bg-white/10 text-white font-bold text-xs py-1.5 px-3 rounded-lg border-none outline-none cursor-pointer"
+24667-                  >
+24668:                    Cerrar
+24669-                  </button>
+24670-                </IonButtons>
+24671-              </IonToolbar>
+24672-            </IonHeader>
+24673-
+24674-            <IonContent
+24675-              className="ion-padding"
+24676-              style={{ "--background": "#f1f5f9" }}
+24677-            >
+24678-              <div className="max-w-md mx-auto space-y-4 py-3">
+--
+25020-            <IonHeader className="ion-no-border">
+25021-              <IonToolbar
+25022-                style={{
+25023-                  "--background": "rgb(40, 45, 52)",
+25024-                  "--color": "white",
+25025-                }}
+25026-              >
+25027-                <IonTitle>Agregar Insumo</IonTitle>
+25028-                <IonButtons slot="end">
+25029-                  <IonButton onClick={() => setShowRecipeAddModal(false)}>
+25030:                    Cerrar
+25031-                  </IonButton>
+25032-                </IonButtons>
+25033-              </IonToolbar>
+25034-            </IonHeader>
+25035-            <IonContent className="ion-padding">
+25036-              <div
+25037-                style={{
+25038-                  padding: "16px",
+25039-                  background: "#f8fafc",
+25040-                  borderRadius: "12px",
+--
+25534-            <IonHeader className="ion-no-border">
+25535-              <IonToolbar
+25536-                style={{
+25537-                  "--background": "rgb(40, 45, 52)",
+25538-                  "--color": "white",
+25539-                }}
+25540-              >
+25541-                <IonTitle>Cancelar Producto</IonTitle>
+25542-                <IonButtons slot="end">
+25543-                  <IonButton onClick={() => setItemToCancel(null)}>
+25544:                    Cerrar
+25545-                  </IonButton>
+25546-                </IonButtons>
+25547-              </IonToolbar>
+25548-            </IonHeader>
+25549-            <IonContent className="ion-padding">
+25550-              <IonText color="medium">
+25551-                <p>Indica el motivo de cancelación de este producto:</p>
+25552-              </IonText>
+25553-              <IonList lines="none">
+25554-                {[
+--
+25608-                  {productCrudModal.product
+25609-                    ? "Editar Producto"
+25610-                    : "Nuevo Producto"}
+25611-                </IonTitle>
+25612-                <IonButtons slot="end">
+25613-                  <IonButton
+25614-                    onClick={() =>
+25615-                      setProductCrudModal({ isOpen: false, product: null })
+25616-                    }
+25617-                  >
+25618:                    Cerrar
+25619-                  </IonButton>
+25620-                </IonButtons>
+25621-              </IonToolbar>
+25622-            </IonHeader>
+25623-            <IonContent className="ion-padding">
+25624-              <div
+25625-                style={{
+25626-                  display: "flex",
+25627-                  flexDirection: "column",
+25628-                  gap: "16px",
+--
+25889-              >
+25890-                <IonTitle>
+25891-                  {inventoryCrudModal.item ? "Editar Insumo" : "Nuevo Insumo"}
+25892-                </IonTitle>
+25893-                <IonButtons slot="end">
+25894-                  <IonButton
+25895-                    onClick={() =>
+25896-                      setInventoryCrudModal({ isOpen: false, item: null })
+25897-                    }
+25898-                  >
+25899:                    Cerrar
+25900-                  </IonButton>
+25901-                </IonButtons>
+25902-              </IonToolbar>
+25903-            </IonHeader>
+25904-            <IonContent className="ion-padding">
+25905-              <div
+25906-                style={{
+25907-                  display: "flex",
+25908-                  flexDirection: "column",
+25909-                  gap: "16px",
+--
+26141-            isOpen={movementModal.isOpen}
+26142-            onDidDismiss={() => setMovementModal({ isOpen: false, item: null, type: "IN" })}
+26143-            initialBreakpoint={0.65}
+26144-            breakpoints={[0, 0.65, 0.85]}
+26145-          >
+26146-            <IonHeader className="ion-no-border">
+26147-              <IonToolbar style={{ "--background": movementModal.type === "IN" ? "#0f766e" : "#be123c", "--color": "white" }}>
+26148-                <IonTitle>{movementModal.type === "IN" ? "Registrar Entrada" : "Registrar Salida"} - {movementModal.item?.name}</IonTitle>
+26149-                <IonButtons slot="end">
+26150-                  <IonButton onClick={() => setMovementModal({ isOpen: false, item: null, type: "IN" })}>
+26151:                    Cerrar
+26152-                  </IonButton>
+26153-                </IonButtons>
+26154-              </IonToolbar>
+26155-            </IonHeader>
+26156-            <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+26157-              <div className="max-w-md mx-auto space-y-6">
+26158-                <div>
+26159-                  <label className="block text-sm font-bold text-slate-700 mb-2">Cantidad ({movementModal.item?.unit})</label>
+26160-                  <input
+26161-                    id="mov-qty"
+--
+26235-            <IonHeader className="ion-no-border">
+26236-              <IonToolbar
+26237-                style={{
+26238-                  "--background": "rgb(40, 45, 52)",
+26239-                  "--color": "white",
+26240-                }}
+26241-              >
+26242-                <IonTitle>Cancelar Comanda #{comandaToCancel}</IonTitle>
+26243-                <IonButtons slot="end">
+26244-                  <IonButton onClick={() => setComandaToCancel(null)}>
+26245:                    Cerrar
+26246-                  </IonButton>
+26247-                </IonButtons>
+26248-              </IonToolbar>
+26249-            </IonHeader>
+26250-            <IonContent className="ion-padding">
+26251-              <IonText color="medium">
+26252-                <p>Indica el motivo de cancelación de esta comanda completa:</p>
+26253-              </IonText>
+26254-              <IonList lines="none">
+26255-                {[
+--
+26433-            <IonHeader className="ion-no-border">
+26434-              <IonToolbar
+26435-                style={{
+26436-                  "--background": "rgb(40, 45, 52)",
+26437-                  "--color": "white",
+26438-                }}
+26439-              >
+26440-                <IonTitle>Cancelar Comanda</IonTitle>
+26441-                <IonButtons slot="end">
+26442-                  <IonButton onClick={() => setShowCancellationModal(false)}>
+26443:                    Cerrar
+26444-                  </IonButton>
+26445-                </IonButtons>
+26446-              </IonToolbar>
+26447-            </IonHeader>
+26448-            <IonContent className="ion-padding">
+26449-              <IonText color="medium">
+26450-                <p>Por favor, indica el motivo de la cancelación:</p>
+26451-              </IonText>
+26452-              <IonList lines="none">
+26453-                {[
+--
+26525-            <IonHeader className="ion-no-border">
+26526-              <IonToolbar
+26527-                style={{
+26528-                  "--background": "rgb(40, 45, 52)",
+26529-                  "--color": "white",
+26530-                }}
+26531-              >
+26532-                <IonTitle>Autorización Requerida</IonTitle>
+26533-                <IonButtons slot="end">
+26534-                  <IonButton onClick={() => setShowPasswordInput(false)}>
+26535:                    Cerrar
+26536-                  </IonButton>
+26537-                </IonButtons>
+26538-              </IonToolbar>
+26539-            </IonHeader>
+26540-            <IonContent className="ion-padding">
+26541-              <div style={{ textAlign: "center", marginBottom: "20px" }}>
+26542-                <IonText color="medium">
+26543-                  <p>
+26544-                    Ingrese la clave para{" "}
+26545-                    {passwordTarget === "discount"
+--
+26643-                          <IonText
+26644-                            color="success"
+26645-                            style={{ fontWeight: "bold" }}
+26646-                          >
+26647-                            Propina (+):
+26648-                          </IonText>
+26649-                          <IonText
+26650-                            color="medium"
+26651-                            style={{ fontSize: "0.7rem" }}
+26652-                          >
+26653:                            Cerrar en:
+26654-                          </IonText>
+26655-                        </div>
+26656-                        <div
+26657-                          style={{
+26658-                            display: "flex",
+26659-                            flexDirection: "column",
+26660-                            alignItems: "flex-end",
+26661-                            gap: "4px",
+26662-                          }}
+26663-                        >
+--
+26765-                          <IonText
+26766-                            color="danger"
+26767-                            style={{ fontWeight: "bold" }}
+26768-                          >
+26769-                            Descuento (-):
+26770-                          </IonText>
+26771-                          <IonText
+26772-                            color="medium"
+26773-                            style={{ fontSize: "0.7rem" }}
+26774-                          >
+26775:                            Cerrar en:
+26776-                          </IonText>
+26777-                        </div>
+26778-                        <div
+26779-                          style={{
+26780-                            display: "flex",
+26781-                            flexDirection: "column",
+26782-                            alignItems: "flex-end",
+26783-                            gap: "4px",
+26784-                          }}
+26785-                        >
+--
+27225-            <IonHeader className="ion-no-border">
+27226-              <IonToolbar
+27227-                style={{
+27228-                  "--background": "rgb(40, 45, 52)",
+27229-                  "--color": "white",
+27230-                }}
+27231-              >
+27232-                <IonTitle>Registrar Movimiento</IonTitle>
+27233-                <IonButtons slot="end">
+27234-                  <IonButton onClick={() => setShowCashMovementModal(false)}>
+27235:                    Cerrar
+27236-                  </IonButton>
+27237-                </IonButtons>
+27238-              </IonToolbar>
+27239-            </IonHeader>
+27240-            <IonContent className="ion-padding">
+27241-              <div className="bg-slate-50 p-4 rounded-xl mb-4">
+27242-                <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+27243-                  Tipo de Movimiento
+27244-                </label>
+27245-                <IonSegment
+--
+27347-            <IonHeader className="ion-no-border">
+27348-              <IonToolbar
+27349-                style={{
+27350-                  "--background": "rgb(40, 45, 52)",
+27351-                  "--color": "white",
+27352-                }}
+27353-              >
+27354-                <IonTitle>PIN de Cancelación</IonTitle>
+27355-                <IonButtons slot="end">
+27356-                  <IonButton onClick={() => setShowPinModal(false)}>
+27357:                    Cerrar
+27358-                  </IonButton>
+27359-                </IonButtons>
+27360-              </IonToolbar>
+27361-            </IonHeader>
+27362-            <IonContent className="ion-padding">
+27363-              <div style={{ textAlign: "center", marginBottom: "20px" }}>
+27364-                <IonText color="medium">
+27365-                  <p>Ingrese el PIN para confirmar la cancelación</p>
+27366-                </IonText>
+27367-              </div>
+--
+27408-                  "--background": "rgb(40, 45, 52)",
+27409-                  "--color": "white",
+27410-                }}
+27411-              >
+27412-                <IonTitle>🔔 Notificaciones Cocinet</IonTitle>
+27413-                <IonButtons slot="end">
+27414-                  <IonButton
+27415-                    onClick={() => setShowNotificationModal(false)}
+27416-                    style={{ fontWeight: "bold" }}
+27417-                  >
+27418:                    Cerrar
+27419-                  </IonButton>
+27420-                </IonButtons>
+27421-              </IonToolbar>
+27422-            </IonHeader>
+27423-            <IonContent
+27424-              className="ion-padding"
+27425-              style={{ "--background": "#f8fafc" }}
+27426-            >
+27427-              <div
+27428-                style={{
+--
+27659-                style={{ "--background": "#1e293b", "--color": "white" }}
+27660-              >
+27661-                <IonTitle style={{ fontWeight: "900", fontSize: "1.1rem" }}>
+27662-                  Teclado Numérico 🔢
+27663-                </IonTitle>
+27664-                <IonButtons slot="end">
+27665-                  <IonButton
+27666-                    onClick={() => setShowNumpad(false)}
+27667-                    style={{ fontWeight: "bold", color: "#f87171" }}
+27668-                  >
+27669:                    Cerrar
+27670-                  </IonButton>
+27671-                </IonButtons>
+27672-              </IonToolbar>
+27673-            </IonHeader>
+27674-            <IonContent
+27675-              style={{ "--background": "#f8fafc" }}
+27676-              className="ion-padding"
+27677-            >
+27678-              {/* Dynamic Display of Totals */}
+27679-              <div

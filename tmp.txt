@@ -1,0 +1,6 @@
+5023:    if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+8401:                    cart.length === 0 || isGeneratingOrder || isProcessingVoice
+8457:                  if (cart.length > 0) {
+8476:                  cart.length === 0 &&
+8743:                    cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
+9609:                      {cart.length} Ítems
