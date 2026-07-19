@@ -1681,10 +1681,10 @@ export function subscribeToTenants(callback: (data: any[]) => void) {
 export async function addTenantToFirebase(tenantData: any) {
   const ref = doc(db, "tenants", tenantData.id);
   await runWrite(
-    setDoc(ref, {
+    setDoc(ref, cleanUndefined({
       ...tenantData,
       updatedAt: getMexicoISOString(),
-    }),
+    })),
   );
 }
 

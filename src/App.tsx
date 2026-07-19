@@ -2,7 +2,6 @@ import { DailyReportModal } from "./components/DailyReportModal";
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
-import VerifyMenu from "./components/VerifyMenu";
 import {
   User,
   Product,
@@ -940,8 +939,28 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
+    const checkNetworkConnection = async (): Promise<boolean> => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        
+        await fetch(`https://www.google.com/favicon.ico?t=${Date.now()}`, {
+          method: "GET",
+          mode: "no-cors",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    };
+
+    let lastStatus = navigator.onLine;
+
+    const triggerOnlineNotification = () => {
       const title = "🟢 SISTEMA EN LÍNEA";
       const body = "Se ha recuperado la conexión de red. ¡Sincronizando de manera continua a través de WebSockets! ⚡";
       
@@ -965,8 +984,8 @@ export default function App() {
       setMenuToastMessage(`${title}\n${body}`);
       setShowMenuToast(true);
     };
-    const handleOffline = () => {
-      setIsOnline(false);
+
+    const triggerOfflineNotification = () => {
       const title = "🔴 TRABAJANDO SIN CONEXIÓN";
       const body = "Se ha perdido la conexión a internet. Los datos están 100% seguros en caché local. 📁";
       
@@ -991,10 +1010,43 @@ export default function App() {
       setShowMenuToast(true);
     };
 
+    const checkStatus = async () => {
+      const currentStatus = await checkNetworkConnection();
+      
+      if (currentStatus !== lastStatus) {
+        if (currentStatus) {
+          setIsOnline(true);
+          setShowOfflineBanner(false);
+          setShowOnlineBanner(true);
+          triggerOnlineNotification();
+        } else {
+          setIsOnline(false);
+          setShowOfflineBanner(true);
+          setShowOnlineBanner(false);
+          triggerOfflineNotification();
+        }
+        lastStatus = currentStatus;
+      }
+    };
+
+    // Run check immediately
+    checkStatus();
+
+    // Check every 4 seconds
+    const intervalId = setInterval(checkStatus, 4000);
+
+    const handleOnline = () => {
+      checkStatus();
+    };
+    const handleOffline = () => {
+      checkStatus();
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
@@ -1625,6 +1677,7 @@ export default function App() {
   );
   const [manageMenuTab, setManageMenuTab] = useState<
     | "backup"
+    | "import_tenant"
     | "upload_subgroups"
     | "food"
     | "drinks"
@@ -2259,62 +2312,15 @@ export default function App() {
   });
   const [insumoQuery, setInsumoQuery] = useState("");
 
-  // Insumos B1 recipe states
-  const [insumosB1SelectedProduct, setInsumosB1SelectedProduct] = useState<any | null>(null);
-  const [insumosB1SearchQuery, setInsumosB1SearchQuery] = useState("");
-  const [insumosB1SelectedInsumoId, setInsumosB1SelectedInsumoId] = useState("");
-  const [insumosB1Qty, setInsumosB1Qty] = useState("");
-  const [insumosB1CategoryFilter, setInsumosB1CategoryFilter] = useState<"food" | "drinks" | "desserts">("food");
-  const [insumosB1SelectedSubcategory, setInsumosB1SelectedSubcategory] = useState<string>("");
-  const [insumosB1SelectedSubgroup, setInsumosB1SelectedSubgroup] = useState<string>("Todos");
-  const [insumosB1NewInsumoName, setInsumosB1NewInsumoName] = useState("");
-  const [insumosB1NewInsumoUnit, setInsumosB1NewInsumoUnit] = useState("Pza");
-  const [insumosB1NewInsumoCost, setInsumosB1NewInsumoCost] = useState("");
-  const [insumosB1NewInsumoStock, setInsumosB1NewInsumoStock] = useState("0");
-  const [insumosB1ShowNewForm, setInsumosB1ShowNewForm] = useState(false);
-  const [insumosB1Notification, setInsumosB1Notification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-  
-  // Bulk states
-  const [insumosB1BulkInsumoId, setInsumosB1BulkInsumoId] = useState("");
-  const [insumosB1BulkQty, setInsumosB1BulkQty] = useState("");
-  const [insumosB1ShowBulkConfirm, setInsumosB1ShowBulkConfirm] = useState(false);
-  const [insumosB1ShowBulkSection, setInsumosB1ShowBulkSection] = useState(false);
+  // Import other tenant menu states
+  const [importSelectedTenantId, setImportSelectedTenantId] = useState<string>("");
+  const [isImportingTenantMenu, setIsImportingTenantMenu] = useState<boolean>(false);
+  const [importConfirmStep, setImportConfirmStep] = useState<0 | 1 | 2>(0);
+  const importInProgressRef = useRef<boolean>(false);
 
-  // Modal B1 Add Ingredient states
-  const [insumosB1ShowAddModal, setInsumosB1ShowAddModal] = useState(false);
-  const [insumosB1ModalName, setInsumosB1ModalName] = useState("");
-  const [insumosB1ModalUnit, setInsumosB1ModalUnit] = useState("Pza");
-  const [insumosB1ModalCost, setInsumosB1ModalCost] = useState("");
-  const [insumosB1ModalQty, setInsumosB1ModalQty] = useState("1");
-  const [insumosB1InsumoSearch, setInsumosB1InsumoSearch] = useState("");
-  const [insumosB1AddModalTarget, setInsumosB1AddModalTarget] = useState<"single" | "bulk">("single");
-
-  // Ticket de Prueba Local states
-  const [localPrinterMac, setLocalPrinterMac] = useState(() => {
-    return localStorage.getItem("local_printer_mac") || "00:11:22:33:44:55";
-  });
-  const [localPrinterHost, setLocalPrinterHost] = useState(() => {
-    return localStorage.getItem("local_printer_host") || "http://localhost:8080/imprimir";
-  });
-  const [localPrinterText, setLocalPrinterText] = useState("");
-  const [localPrinterStatus, setLocalPrinterStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [localPrinterResponse, setLocalPrinterResponse] = useState("");
-  const [localPrinterLogs, setLocalPrinterLogs] = useState<string[]>([]);
-
-  // Ticket de Prueba Red states
-  const [netPrinterIp, setNetPrinterIp] = useState(() => {
-    return localStorage.getItem("net_printer_ip") || "192.168.1.100";
-  });
-  const [netPrinterPort, setNetPrinterPort] = useState(() => {
-    return localStorage.getItem("net_printer_port") || "9100";
-  });
-  const [netPrinterBridgeUrl, setNetPrinterBridgeUrl] = useState(() => {
-    return localStorage.getItem("net_printer_bridge_url") || "http://localhost:9101/imprimir";
-  });
-  const [netPrinterText, setNetPrinterText] = useState("");
-  const [netPrinterStatus, setNetPrinterStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [netPrinterResponse, setNetPrinterResponse] = useState("");
-  const [netPrinterLogs, setNetPrinterLogs] = useState<string[]>([]);
+  // Connection banner states
+  const [showOfflineBanner, setShowOfflineBanner] = useState<boolean>(false);
+  const [showOnlineBanner, setShowOnlineBanner] = useState<boolean>(false);
 
   // Inventory and CRUD states
   const [inventory, setInventory] = useState<any[]>(() => {
@@ -4513,16 +4519,41 @@ export default function App() {
                 </div>
               </div>
 
-              {/* If Sucursal, choose Matriz to assign branches/owner key */}
-              {formTenantType === "Sucursal" && (
+              {/* Asociar a Propietario de Red (For both Matriz and Sucursal) */}
+              <div>
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                  Asociar a Propietario de Red Existente 👑
+                </label>
+                <select
+                  value={formTenantOwnerKey}
+                  onChange={(e) => {
+                    const matched = customOwners.find(o => o.key === e.target.value);
+                    if (matched) {
+                      setFormTenantOwnerKey(matched.key);
+                      setFormTenantPropietario(matched.name);
+                      setFormTenantAvatar(matched.avatar || "🏢");
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                >
+                  <option value="">-- Seleccionar Propietario Registrado --</option>
+                  {customOwners.map(o => (
+                    <option key={o.key} value={o.key}>
+                      {o.avatar} {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* If Sucursal, choose Matriz optionally to copy settings */}
+              {formTenantType === "Sucursal" && matrices.length > 0 && (
                 <div>
                   <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                    Asignar / Asociar a Matriz (Propietario de Red)
+                    Asociar / Copiar Configuración de Matriz Existente (Opcional)
                   </label>
                   <select
-                    value={formTenantOwnerKey}
                     onChange={(e) => {
-                      const matched = matrices.find(m => m.ownerKey === e.target.value);
+                      const matched = matrices.find(m => m.id === e.target.value || m.ownerKey === e.target.value);
                       if (matched) {
                         setFormTenantOwnerKey(matched.ownerKey || "");
                         setFormTenantPropietario(matched.propietario || "");
@@ -4533,18 +4564,43 @@ export default function App() {
                     }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
                   >
-                    {matrices.length === 0 ? (
-                      <option value="">No hay matrices registradas</option>
-                    ) : (
-                      matrices.map(m => (
-                        <option key={m.id} value={m.ownerKey}>
-                          {m.avatar} {m.name} ({m.propietario})
-                        </option>
-                      ))
-                    )}
+                    <option value="">-- No asociar/copiar de matriz --</option>
+                    {matrices.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.avatar} {m.name} ({m.propietario})
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
+
+              {/* Propietario ID and Owner Key inputs (For both Matriz and Sucursal) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                    Identificador de Propietario (Grupo)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: JORGE-SORAYA"
+                    value={formTenantPropietario}
+                    onChange={(e) => setFormTenantPropietario(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                    Clave de Red (ownerKey)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 11 (Auto-generado si se deja vacío)"
+                    value={formTenantOwnerKey}
+                    onChange={(e) => setFormTenantOwnerKey(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
 
               {/* Company Name */}
               <div>
@@ -4686,62 +4742,7 @@ export default function App() {
                 />
               </div>
 
-              {/* Propietario ID and Owner Key (Only customizable if Matriz) */}
-              {formTenantType === "Matriz" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                      Asociar a Propietario de Red Existente 👑
-                    </label>
-                    <select
-                      value={formTenantOwnerKey}
-                      onChange={(e) => {
-                        const matched = customOwners.find(o => o.key === e.target.value);
-                        if (matched) {
-                          setFormTenantOwnerKey(matched.key);
-                          setFormTenantPropietario(matched.name);
-                          setFormTenantAvatar(matched.avatar || "🏢");
-                        }
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                    >
-                      <option value="">-- Seleccionar Propietario Registrado --</option>
-                      {customOwners.map(o => (
-                        <option key={o.key} value={o.key}>
-                          {o.avatar} {o.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                        Identificador de Propietario (Grupo)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ej: JORGE-SORAYA"
-                        value={formTenantPropietario}
-                        onChange={(e) => setFormTenantPropietario(e.target.value.toUpperCase())}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all uppercase"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                        Clave de Red (ownerKey)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ej: 11 (Auto-generado si se deja vacío)"
-                        value={formTenantOwnerKey}
-                        onChange={(e) => setFormTenantOwnerKey(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Visual customizations (Avatar and Accent color) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -6938,8 +6939,8 @@ export default function App() {
         <div 
           className={`w-full text-white shadow-lg border-b select-none transition-all duration-500 ${
             isOnline 
-              ? "bg-gradient-to-r from-emerald-600/90 to-teal-700/90 border-emerald-500/20" 
-              : "bg-gradient-to-r from-rose-700/90 to-red-800/90 border-rose-500/20"
+              ? "bg-black border-neutral-900" 
+              : "bg-red-600 border-red-700"
           }`}
           style={{
             fontFamily: "'Space Grotesk', sans-serif",
@@ -17235,738 +17236,6 @@ Instrucciones:
     );
   };
 
-  const renderAdminInventory = () => {
-    return (
-      <IonPage>
-      {renderMaterialHeader({
-        title: "Inventario y Movimientos",
-        subtitle: `Insumos registrados: ${(inventory || []).length}`,
-        showBack: true,
-        onBack: () => setAppMode("admin"),
-      })}
-      <IonHeader className="ion-no-border">
-        <IonToolbar
-          style={{ "--background": "rgb(40, 45, 52)", "--color": "white" }}
-        >
-            <IonSegment
-              value={inventoryTab}
-              onIonChange={(e) => setInventoryTab(e.detail.value as any)}
-              style={{ "--background": "rgba(255,255,255,0.1)" }}
-            >
-              <IonSegmentButton
-                value="stock"
-                style={
-                  inventoryTab === "stock"
-                    ? {
-                        background: "#8b5cf6",
-                        borderRadius: "8px",
-                        margin: "4px",
-                      }
-                    : { margin: "4px" }
-                }
-              >
-                <IonLabel style={{ color: "white", fontWeight: "bold" }}>
-                  📦 Insumos / Inventario
-                </IonLabel>
-              </IonSegmentButton>
-              <IonSegmentButton
-                value="purchases"
-                style={
-                  inventoryTab === "purchases"
-                    ? {
-                        background: "#10b981",
-                        borderRadius: "8px",
-                        margin: "4px",
-                      }
-                    : { margin: "4px" }
-                }
-              >
-                <IonLabel style={{ color: "white", fontWeight: "bold" }}>
-                  🛒 Movimientos (Compras)
-                </IonLabel>
-              </IonSegmentButton>
-            </IonSegment>
-          </IonToolbar>
-        </IonHeader>
-        <IonContent
-          className="ion-padding"
-          style={{ "--background": "#f8fafc" }}
-        >
-          {inventoryTab === "purchases" && (
-            <div style={{ padding: "10px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "16px",
-                }}
-              >
-                <h3
-                  style={{ fontWeight: "bold", margin: "0", color: "#1e293b" }}
-                >
-                  🛒 Compras y Resurtido
-                </h3>
-              </div>
-              <div
-                style={{
-                  background: "#fff",
-                  padding: "16px",
-                  borderRadius: "12px",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <div
-                  style={{
-                    marginBottom: "16px",
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "16px",
-                  }}
-                >
-                  <div>
-                    <label
-                      style={{
-                        display: "block",
-                        fontSize: "0.85rem",
-                        fontWeight: "bold",
-                        color: "#64748b",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      Proveedor
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Nombre del proveedor"
-                      value={purchaseForm.supplier}
-                      onChange={(e) =>
-                        setPurchaseForm({
-                          ...purchaseForm,
-                          supplier: e.target.value,
-                        })
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "10px",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      style={{
-                        display: "block",
-                        fontSize: "0.85rem",
-                        fontWeight: "bold",
-                        color: "#64748b",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      Estado de Pago
-                    </label>
-                    <select
-                      value={purchaseForm.isPaid ? "true" : "false"}
-                      onChange={(e) =>
-                        setPurchaseForm({
-                          ...purchaseForm,
-                          isPaid: e.target.value === "true",
-                        })
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "10px",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                        background: "white",
-                      }}
-                    >
-                      <option value="true">Pagado (afecta caja)</option>
-                      <option value="false">A Crédito (por pagar)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    background: "#f8fafc",
-                    padding: "16px",
-                    borderRadius: "8px",
-                    marginBottom: "16px",
-                  }}
-                >
-                  <h4
-                    style={{
-                      margin: "0 0 12px 0",
-                      fontSize: "0.9rem",
-                      fontWeight: "bold",
-                      color: "#334155",
-                    }}
-                  >
-                    Agregar Ítem
-                  </h4>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <select
-                      id="p-inv"
-                      style={{
-                        flex: 1,
-                        padding: "8px",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                        background: "white",
-                      }}
-                    >
-                      <option value="">Selecciona insumo...</option>
-                      {inventory.map((inv) => (
-                        <option key={inv.id} value={inv.id}>
-                          {inv.name} ({inv.unit})
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      id="p-qty"
-                      type="number"
-                      placeholder="Cant."
-                      style={{
-                        width: "80px",
-                        padding: "8px",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <input
-                      id="p-price"
-                      type="number"
-                      placeholder="Total $"
-                      style={{
-                        width: "100px",
-                        padding: "8px",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        const invId = (
-                          document.getElementById("p-inv") as HTMLSelectElement
-                        ).value;
-                        const qty = parseFloat(
-                          (document.getElementById("p-qty") as HTMLInputElement)
-                            .value,
-                        );
-                        const price = parseFloat(
-                          (
-                            document.getElementById(
-                              "p-price",
-                            ) as HTMLInputElement
-                          ).value,
-                        );
-                        if (!invId || isNaN(qty) || isNaN(price)) return;
-
-                        setPurchaseForm({
-                          ...purchaseForm,
-                          items: [
-                            ...purchaseForm.items,
-                            { inventoryItemId: invId, qty, price },
-                          ],
-                        });
-                        (
-                          document.getElementById("p-inv") as HTMLSelectElement
-                        ).value = "";
-                        (
-                          document.getElementById("p-qty") as HTMLInputElement
-                        ).value = "";
-                        (
-                          document.getElementById("p-price") as HTMLInputElement
-                        ).value = "";
-                      }}
-                      style={{
-                        background: "#3b82f6",
-                        color: "white",
-                        padding: "8px 16px",
-                        borderRadius: "8px",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Agregar
-                    </button>
-                  </div>
-                </div>
-
-                <table
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    borderCollapse: "collapse",
-                    fontSize: "0.85rem",
-                    marginBottom: "16px",
-                  }}
-                >
-                  <thead style={{ background: "#f1f5f9", color: "#64748b" }}>
-                    <tr>
-                      <th style={{ padding: "8px 12px" }}>Insumo</th>
-                      <th style={{ padding: "8px 12px", textAlign: "center" }}>
-                        Cant.
-                      </th>
-                      <th style={{ padding: "8px 12px", textAlign: "right" }}>
-                        Precio $
-                      </th>
-                      <th style={{ padding: "8px 12px", textAlign: "center" }}>
-                        Remover
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purchaseForm.items.map((item, idx) => {
-                      const inv = inventory.find(
-                        (i) => i.id === item.inventoryItemId,
-                      );
-                      return (
-                        <tr
-                          key={idx}
-                          style={{ borderBottom: "1px solid #f1f5f9" }}
-                        >
-                          <td
-                            style={{ padding: "8px 12px", fontWeight: "bold" }}
-                          >
-                            {inv?.name || "Insumo"}
-                          </td>
-                          <td
-                            style={{ padding: "8px 12px", textAlign: "center" }}
-                          >
-                            {item.qty}
-                          </td>
-                          <td
-                            style={{
-                              padding: "8px 12px",
-                              textAlign: "right",
-                              color: "#059669",
-                            }}
-                          >
-                            ${item.price.toFixed(2)}
-                          </td>
-                          <td
-                            style={{ padding: "8px 12px", textAlign: "center" }}
-                          >
-                            <button
-                              onClick={() => {
-                                const newItms = [...purchaseForm.items];
-                                newItms.splice(idx, 1);
-                                setPurchaseForm({
-                                  ...purchaseForm,
-                                  items: newItms,
-                                });
-                              }}
-                              style={{ color: "#ef4444", fontWeight: "bold" }}
-                            >
-                              X
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {purchaseForm.items.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          style={{
-                            textAlign: "center",
-                            padding: "16px",
-                            color: "#94a3b8",
-                          }}
-                        >
-                          No hay ítems agregados
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    alignItems: "center",
-                    gap: "16px",
-                  }}
-                >
-                  <div style={{ fontSize: "1.1rem" }}>
-                    Total:{" "}
-                    <strong style={{ color: "#059669" }}>
-                      $
-                      {purchaseForm.items
-                        .reduce((s, i) => s + i.price, 0)
-                        .toFixed(2)}
-                    </strong>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      if (
-                        !purchaseForm.supplier ||
-                        purchaseForm.items.length === 0
-                      )
-                        return alert("Faltan datos");
-                      await addPurchaseToFirebase({
-                        ...purchaseForm,
-                        total: purchaseForm.items.reduce(
-                          (s, i) => s + i.price,
-                          0,
-                        ),
-                        userId: currentUser?.id,
-                        createdBy: currentUser?.name || "Admin",
-                        sessionId: cashierSessions.find((s) => s.status === "open")?.id || null,
-                      });
-                      setPurchaseForm({
-                        supplier: "",
-                        items: [],
-                        isPaid: true,
-                      });
-                      alert("Compra guardada y stock ajustado");
-                    }}
-                    style={{
-                      background: "#10b981",
-                      color: "white",
-                      padding: "12px 24px",
-                      borderRadius: "8px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Registrar Compra
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ marginTop: "24px" }}>
-                <h3
-                  style={{
-                    fontWeight: "bold",
-                    margin: "0 0 16px 0",
-                    color: "#1e293b",
-                  }}
-                >
-                  Historial de Compras
-                </h3>
-                <div
-                  style={{
-                    background: "#fff",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                  }}
-                >
-                  {purchases.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "12px 16px",
-                        borderBottom: "1px solid #f1f5f9",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: "bold", color: "#334155" }}>
-                          {p.supplier}
-                        </div>
-                        <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
-                          {new Date(p.timestamp).toLocaleString()} •{" "}
-                          {p.items?.length || 0} ítems
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div
-                          style={{
-                            fontWeight: "bold",
-                            color: "#059669",
-                            fontSize: "1.1rem",
-                          }}
-                        >
-                          ${p.total?.toFixed(2)}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: "bold",
-                            color: p.isPaid ? "#3b82f6" : "#f59e0b",
-                          }}
-                        >
-                          {p.isPaid ? "PAGADO" : "POR PAGAR"}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {purchases.length === 0 && (
-                    <div
-                      style={{
-                        padding: "16px",
-                        textAlign: "center",
-                        color: "#94a3b8",
-                      }}
-                    >
-                      No hay compras registradas
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {inventoryTab === "stock" && (
-            <div style={{ padding: "10px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "16px",
-                }}
-              >
-                <h3
-                  style={{ fontWeight: "bold", margin: "0", color: "#1e293b" }}
-                >
-                  📦 Inventario Base
-                </h3>
-                <button
-                  onClick={() =>
-                    setInventoryCrudModal({ isOpen: true, item: null })
-                  }
-                  style={{
-                    fontSize: "0.85rem",
-                    background: "#10b981",
-                    color: "white",
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  + Agregar Insumo
-                </button>
-              </div>
-              <div
-                style={{
-                  overflowX: "auto",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "8px",
-                  background: "#fff",
-                }}
-              >
-                <table
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    borderCollapse: "collapse",
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  <thead
-                    style={{
-                      background: "#f8fafc",
-                      color: "#64748b",
-                      textTransform: "uppercase",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    <tr>
-                      <th style={{ padding: "12px 16px" }}>Insumo</th>
-                      <th style={{ padding: "12px 16px" }}>Categoría</th>
-                      <th style={{ padding: "12px 16px" }}>Unidad</th>
-                      <th style={{ padding: "12px 16px", textAlign: "right" }}>
-                        Min. Alerta
-                      </th>
-                      <th style={{ padding: "12px 16px", textAlign: "right" }}>
-                        Costo Unit.
-                      </th>
-                      <th style={{ padding: "12px 16px", textAlign: "right" }}>
-                        Stock (Inventario)
-                      </th>
-                      <th style={{ padding: "12px 16px", textAlign: "center" }}>
-                        Status
-                      </th>
-                      <th style={{ padding: "12px 16px", textAlign: "center" }}>
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventory.map((inv) => {
-                      const minStock =
-                        inv.minStock !== undefined ? inv.minStock : 5;
-                      const isOutOfStock = inv.stock <= 0;
-                      const isLowStock = inv.stock > 0 && inv.stock <= minStock;
-                      const isNormalStock = inv.stock > minStock;
-
-                      const categoryIcons: Record<string, string> = {
-                        Ingredientes: "🍅",
-                        Bebidas: "🍹",
-                        Abarrotes: "🍝",
-                        Carnes: "🥩",
-                        Desechables: "📦",
-                        Servicios: "⚙️",
-                        Otros: "⚙️",
-                      };
-                      const catEmoji =
-                        categoryIcons[inv.category || "Ingredientes"] || "🍅";
-
-                      return (
-                        <tr
-                          key={inv.id}
-                          style={{ borderBottom: "1px solid #f1f5f9" }}
-                        >
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              fontWeight: "500",
-                              color: "#334155",
-                            }}
-                          >
-                            <span>
-                              {isOutOfStock
-                                ? "🔴 "
-                                : isLowStock
-                                  ? "🟡 "
-                                  : "🟢 "}
-                            </span>
-                            {inv.name}
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              color: "#64748b",
-                              fontSize: "0.80rem",
-                            }}
-                          >
-                            {catEmoji} {inv.category || "Ingredientes"}
-                          </td>
-                          <td
-                            style={{ padding: "12px 16px", color: "#64748b" }}
-                          >
-                            {inv.unit}
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              textAlign: "right",
-                              color: "#64748b",
-                            }}
-                          >
-                            {minStock} {inv.unit}
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              textAlign: "right",
-                              color: "#334155",
-                              fontWeight: "600",
-                            }}
-                          >
-                            ${(inv.cost || 0).toFixed(2)}
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              textAlign: "right",
-                              fontWeight: "bold",
-                              color: isOutOfStock
-                                ? "#f43f5e"
-                                : isLowStock
-                                  ? "#eab308"
-                                  : "#10b981",
-                            }}
-                          >
-                            {inv.stock}
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              textAlign: "center",
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: "inline-block",
-                                padding: "4px 8px",
-                                borderRadius: "6px",
-                                fontSize: "0.75rem",
-                                fontWeight: "bold",
-                                background: isOutOfStock
-                                  ? "#ffe4e6"
-                                  : isLowStock
-                                    ? "#fef9c3"
-                                    : "#dcfce7",
-                                color: isOutOfStock
-                                  ? "#b91c1c"
-                                  : isLowStock
-                                    ? "#854d0e"
-                                    : "#115e59",
-                              }}
-                            >
-                              {isOutOfStock
-                                ? "Agotado ❌"
-                                : isLowStock
-                                  ? "Bajo Stock ⚠️"
-                                  : "Óptimo ✅"}
-                            </span>
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 16px",
-                              textAlign: "center",
-                            }}
-                          >
-                            <button
-                              onClick={() =>
-                                setInventoryCrudModal({
-                                  isOpen: true,
-                                  item: inv,
-                                })
-                              }
-                              style={{
-                                color: "#4f46e5",
-                                marginRight: "16px",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`¿Eliminar ${inv.name}?`))
-                                  deleteInventoryItemFromFirebase(inv.id);
-                              }}
-                              style={{ color: "#e11d48", fontWeight: "bold" }}
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {inventory.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          style={{
-                            textAlign: "center",
-                            padding: "32px",
-                            color: "#94a3b8",
-                          }}
-                        >
-                          No hay insumos en el inventario
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </IonContent>
-      </IonPage>
-    );
-  };
-
   const renderUsersManagementPanel = () => {
     const currentTenantUsers = users;
 
@@ -19953,7 +19222,122 @@ Instrucciones:
     );
   };
 
+  const handleImportTenantMenu = async () => {
+    if (importInProgressRef.current) return;
+    if (!importSelectedTenantId) {
+      triggerAppNotification("Error ⚠️", "Por favor selecciona una sucursal origen.", "warning");
+      return;
+    }
+
+    const sourceTenant = COMPANY_CATALOG.find((c) => c.id === importSelectedTenantId);
+    const sourceTenantName = sourceTenant ? sourceTenant.name : importSelectedTenantId;
+
+    importInProgressRef.current = true;
+    setIsImportingTenantMenu(true);
+    try {
+      // 1. Delete destination products (and automatically back up under menu_backups collection!)
+      const destBranchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
+      await deleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
+
+      // 2. Fetch all products to get source products
+      const allProducts = await getAllProductsFromFirebase();
+      const sourceProductsRaw = allProducts.filter((p: any) => p.tenantId === importSelectedTenantId);
+
+      if (sourceProductsRaw.length === 0) {
+        triggerAppNotification("Advertencia ⚠️", "La sucursal origen seleccionada no contiene productos para importar.", "warning");
+        setIsImportingTenantMenu(false);
+        setImportConfirmStep(0);
+        return;
+      }
+
+      // De-duplicate source products by name and category to clean up any existing database duplicates
+      const seenKeys = new Set<string>();
+      const sourceProducts: any[] = [];
+      sourceProductsRaw.forEach((p: any) => {
+        if (!p.name) return;
+        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          sourceProducts.push(p);
+        }
+      });
+
+      // 3. Map to destination payload
+      const productsToInsert = sourceProducts.map((p: any) => {
+        const { id, uid, tenantId, sucursal, ...rest } = p;
+        const newRawId = `prod_${selectedTenant.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        return {
+          ...rest,
+          id: newRawId,
+          uid: newRawId,
+          tenantId: selectedTenant.id,
+          sucursal: selectedTenant.name || selectedTenant.sucursalDefault || "Sucursal"
+        };
+      });
+
+      // 4. Save to Firebase
+      await bulkAddProductsToFirebase(productsToInsert);
+
+      // 5. Reset selection states and UI
+      setImportSelectedTenantId("");
+      setManageMenuTab(null);
+      setImportConfirmStep(0);
+
+      // Compute exact quantities per category
+      const foodCount = productsToInsert.filter((p: any) => p.category === "food").length;
+      const drinksCount = productsToInsert.filter((p: any) => p.category === "drinks").length;
+      const dessertsCount = productsToInsert.filter((p: any) => p.category === "desserts").length;
+
+      triggerAppNotification(
+        "¡Éxito! 📥",
+        `Se han importado exitosamente ${productsToInsert.length} productos desde "${sourceTenantName}" a la sucursal actual:
+        🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Error al importar menú de otra sucursal:", error);
+      triggerAppNotification("Error ❌", error.message || "Ocurrió un error inesperado durante la importación.", "warning");
+    } finally {
+      setIsImportingTenantMenu(false);
+      importInProgressRef.current = false;
+    }
+  };
+
   const renderManageMenu = () => {
+    const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
+    if (!hasAccess) {
+      return (
+        <IonPage>
+          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center py-12 max-w-md mx-auto">
+              <span style={{ fontSize: "5rem", marginBottom: "16px", display: "block" }}>🔒</span>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">Acceso Restringido</h2>
+              <p className="text-slate-500 text-sm font-semibold leading-relaxed mt-3">
+                Solo el administrador principal (2052) o personal de sistemas tienen autorización para gestionar el menú.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAppMode("admin")}
+                style={{
+                  marginTop: "32px",
+                  padding: "12px 24px",
+                  background: "#4f46e5",
+                  color: "white",
+                  fontWeight: "bold",
+                  borderRadius: "16px",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 6px rgba(79, 70, 229, 0.2)"
+                }}
+              >
+                Volver al Panel
+              </button>
+            </div>
+          </IonContent>
+        </IonPage>
+      );
+    }
+
     return (
       <IonPage>
       {renderMaterialHeader({
@@ -20049,6 +19433,21 @@ Instrucciones:
                       "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#3b82f6",
                     stat: `${backups.length} respaldos`,
+                  },
+                  {
+                    id: "import_tenant" as const,
+                    title: "Importar de otra sucursal",
+                    emoji: "📥",
+                    color: "#8b5cf6",
+                    shortTitle: "Clonar Carta",
+                    description:
+                      "Copia de forma masiva los productos y la estructura de categorías de otra sucursal de la empresa hacia esta sucursal.",
+                    actionExplanation:
+                      "Eliminará los productos de la sucursal actual e importará la carta seleccionada. El sistema realiza un respaldo automático antes de continuar.",
+                    bgGradient:
+                      "linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
+                    borderColorActive: "#8b5cf6",
+                    stat: "Importar Menú",
                   },
                   {
                     id: "upload_subgroups" as const,
@@ -20450,6 +19849,222 @@ Instrucciones:
                 </div>
               );
             })()
+          )}
+          {manageMenuTab === "import_tenant" && (
+            <div style={{ padding: "24px", background: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+              <div style={{ marginBottom: "20px" }}>
+                <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.25rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>📥</span> Importar Menú de Otra Sucursal o Matriz
+                </h3>
+                <p style={{ margin: "6px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                  Clona todo el catálogo de productos de otra sucursal. Esta operación reemplazará la carta de la sucursal actual por la seleccionada.
+                </p>
+              </div>
+
+              {importConfirmStep === 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.82rem", fontWeight: "bold", color: "#475569", display: "block", marginBottom: "8px" }}>
+                      Seleccionar Sucursal / Matriz de Origen
+                    </label>
+                    <select
+                      value={importSelectedTenantId}
+                      onChange={(e) => setImportSelectedTenantId(e.target.value)}
+                      disabled={isImportingTenantMenu}
+                      style={{
+                        width: "100%",
+                        padding: "12px 14px",
+                        fontSize: "0.9rem",
+                        borderRadius: "10px",
+                        border: "1.5px solid #cbd5e1",
+                        background: "#f8fafc",
+                        outline: "none",
+                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer"
+                      }}
+                    >
+                      <option value="">-- Seleccionar Sucursal --</option>
+                      {COMPANY_CATALOG.filter((c) => c.id !== selectedTenant?.id).map((tenant) => (
+                        <option key={tenant.id} value={tenant.id}>
+                          {tenant.name} ({tenant.type || "Sucursal"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "12px", padding: "16px", color: "#92400e" }}>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.88rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
+                      ⚠️ Importante antes de continuar
+                    </h4>
+                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.8rem", lineHeight: "1.4" }}>
+                      <li>Se eliminarán todos los productos de la sucursal actual: <strong>{selectedTenant?.name || ""}</strong>.</li>
+                      <li>Se creará un respaldo automático del menú actual en tu historial de respaldos.</li>
+                      <li>Los productos importados conservarán sus precios, nombres, descripciones y categorías exactas de la sucursal origen.</li>
+                    </ul>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setImportConfirmStep(1)}
+                      disabled={!importSelectedTenantId}
+                      style={{
+                        padding: "12px 24px",
+                        background: !importSelectedTenantId ? "#a78bfa" : "#7c3aed",
+                        color: "white",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "none",
+                        cursor: !importSelectedTenantId ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "0.9rem",
+                        boxShadow: "0 4px 6px rgba(124, 58, 237, 0.15)"
+                      }}
+                    >
+                      <span>📥</span>
+                      Confirmar e Importar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImportSelectedTenantId("");
+                        setManageMenuTab(null);
+                      }}
+                      style={{
+                        padding: "12px 20px",
+                        background: "white",
+                        color: "#64748b",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "1.5px solid #cbd5e1",
+                        cursor: "pointer",
+                        fontSize: "0.9rem"
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importConfirmStep === 1 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                  <div style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "12px", padding: "18px", color: "#991b1b" }}>
+                    <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
+                      ⚠️ ALERTA DE SEGURIDAD (Paso 1 de 2)
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
+                      Estás a punto de <strong>BORRAR COMPLETAMENTE</strong> todos los productos de esta sucursal (<strong>{selectedTenant?.name || ""}</strong>) e importar los productos de la sucursal/matriz <strong>"{COMPANY_CATALOG.find(c => c.id === importSelectedTenantId)?.name || importSelectedTenantId}"</strong>.
+                    </p>
+                    <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
+                      ¿Estás seguro de que deseas continuar? Esta acción no se puede deshacer de forma directa.
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setImportConfirmStep(2)}
+                      style={{
+                        padding: "12px 24px",
+                        background: "#dc2626",
+                        color: "white",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "0.9rem"
+                      }}
+                    >
+                      Sí, deseo continuar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportConfirmStep(0)}
+                      style={{
+                        padding: "12px 20px",
+                        background: "white",
+                        color: "#64748b",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "1.5px solid #cbd5e1",
+                        cursor: "pointer",
+                        fontSize: "0.9rem"
+                      }}
+                    >
+                      Cancelar / Regresar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importConfirmStep === 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                  <div style={{ background: "#fff7ed", border: "1px solid #ffedd5", borderRadius: "12px", padding: "18px", color: "#c2410c" }}>
+                    <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
+                      🛑 RECOMENDACIÓN DE RESPALDO (Paso 2 de 2)
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
+                      Antes de continuar, el sistema generará automáticamente una copia de respaldo del menú actual en tu historial de respaldos.
+                    </p>
+                    <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
+                      ¿Aún así deseas continuar con la importación y la eliminación de la carta actual?
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={handleImportTenantMenu}
+                      disabled={isImportingTenantMenu}
+                      style={{
+                        padding: "12px 24px",
+                        background: isImportingTenantMenu ? "#a78bfa" : "#7c3aed",
+                        color: "white",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "none",
+                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "0.9rem"
+                      }}
+                    >
+                      {isImportingTenantMenu ? (
+                        <>
+                          <span style={{ display: "inline-block" }} className="animate-spin">🔄</span>
+                          Importando...
+                        </>
+                      ) : (
+                        <>
+                          <span>📥</span>
+                          Confirmar e Importar Ahora
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportConfirmStep(0)}
+                      disabled={isImportingTenantMenu}
+                      style={{
+                        padding: "12px 20px",
+                        background: "white",
+                        color: "#64748b",
+                        fontWeight: "bold",
+                        borderRadius: "12px",
+                        border: "1.5px solid #cbd5e1",
+                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                        fontSize: "0.9rem"
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {manageMenuTab === "backup" && (
             <div style={{ padding: "16px", background: "#f8fafc", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
@@ -23885,115 +23500,6 @@ Instrucciones:
     }
   };
 
-  const renderIAInsumos = () => {
-    return (
-      <IonPage>
-      {renderMaterialHeader({
-        title: "Asistente de Insumos (IA)",
-        subtitle: "Predicciones y Gestión Inteligente",
-        showBack: true,
-        onBack: () => setAppMode("admin"),
-      })}
-        <IonContent
-          className="ion-padding"
-          style={{ "--background": "#f8fafc" }}
-        >
-          <div className="max-w-2xl mx-auto py-6">
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/60 shadow-sm text-center mb-6">
-              <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4 text-purple-600">
-                <IonIcon
-                  icon={hardwareChipOutline}
-                  style={{ fontSize: "32px" }}
-                />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">
-                Construir Inventario Inteligente
-              </h2>
-              <p className="text-slate-500 mb-6 text-sm leading-relaxed max-w-lg mx-auto">
-                Basado en tu carta actual ({products.length} platillos), nuestra
-                IA puede generar una lista de ingredientes (insumos) sugeridos
-                para preparar tu menú.
-              </p>
-
-              {iaInsumosError && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 text-left border border-red-200">
-                  {iaInsumosError}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-3 justify-center max-w-sm mx-auto">
-                <button
-                  disabled={iaInsumosLoading}
-                  onClick={handleGenerateInsumosWithIA}
-                  className={
-                    "w-full font-bold text-sm px-6 py-3.5 rounded-2xl text-white transition " +
-                    (iaInsumosLoading
-                      ? "bg-slate-400 cursor-not-allowed"
-                      : "bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-600/30")
-                  }
-                >
-                  {iaInsumosLoading
-                    ? "Analizando Menú..."
-                    : "🧠 Auto-Generar Insumos con IA"}
-                </button>
-
-                <button
-                  disabled={inventory.length === 0}
-                  onClick={handleWipeInsumos}
-                  className="w-full font-bold text-sm px-6 py-3.5 rounded-2xl text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition"
-                >
-                  🗑️ Borrar Insumos Actuales ({inventory.length})
-                </button>
-              </div>
-            </div>
-
-            {iaInsumosResult.length > 0 && (
-              <div className="bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-800">
-                    Sugerencias ({iaInsumosResult.length})
-                  </h3>
-                  <button
-                    onClick={handleSaveInsumosIa}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition"
-                  >
-                    Guardar Todo 💾
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {iaInsumosResult.map((inv, i) => (
-                    <div
-                      key={i}
-                      className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-xl"
-                    >
-                      <div>
-                        <p className="font-bold text-sm text-slate-800">
-                          {inv.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Unidad: {inv.unit} · Categoría: {inv.category}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-medium text-slate-600">
-                          Stock Min: {inv.minStock}
-                        </p>
-                        <p className="text-xs font-medium text-slate-600">
-                          Costo Ref: ${inv.cost}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
-
   const renderSidebar = () => {
     return (
       <AnimatePresence>
@@ -24266,40 +23772,25 @@ Instrucciones:
                   >
                     {currentUser?.role !== "mesero" && (
                       <>
-                        <button
-                          onClick={() => {
-                            setAppMode("manage-menu");
-                            setManageMenuTab(null);
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "manage-menu"
-                              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
-                            🏷️
-                          </span>
-                          <span>Productos</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setAppMode("verify-menu");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "verify-menu"
-                              ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/10 text-base">
-                            ✅
-                          </span>
-                          <span>Verificar Menú</span>
-                        </button>
+                        {(isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas")) && (
+                          <button
+                            onClick={() => {
+                              setAppMode("manage-menu");
+                              setManageMenuTab(null);
+                              setShowSidebar(false);
+                            }}
+                            className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                              appMode === "manage-menu"
+                                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]"
+                                : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                            }`}
+                          >
+                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
+                              🏷️
+                            </span>
+                            <span>Productos</span>
+                          </button>
+                        )}
 
                         <button
                           onClick={() => {
@@ -24382,23 +23873,6 @@ Instrucciones:
 
                         <button
                           onClick={() => {
-                            setAppMode("insumos-b1");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "insumos-b1"
-                              ? "bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
-                            🍲
-                          </span>
-                          <span>Insumos B1</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
                             setAppMode("expenses");
                             setShowSidebar(false);
                           }}
@@ -24412,57 +23886,6 @@ Instrucciones:
                             💸
                           </span>
                           <span>Gastos (Egresos)</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setAppMode("purchase-supplier");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "purchase-supplier"
-                              ? "bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md shadow-teal-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-teal-500/10 text-base">
-                            🛒
-                          </span>
-                          <span>Compra a Proveedores</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setAppMode("ticket-local");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "ticket-local"
-                              ? "bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/10 text-base">
-                            🖨️
-                          </span>
-                          <span>Ticket de Prueba Local</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setAppMode("ticket-red");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "ticket-red"
-                              ? "bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md shadow-teal-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-teal-500/10 text-base">
-                            🌐
-                          </span>
-                          <span>Imprimir Prueba Local Red</span>
                         </button>
                       </>
                     )}
@@ -24483,44 +23906,6 @@ Instrucciones:
                       </span>
                       <span>Mapa de Mesas</span>
                     </button>
-
-                    {currentUser?.role !== "mesero" && (
-                      <button
-                        onClick={() => {
-                          setAppMode("ops-inventarios");
-                          setShowSidebar(false);
-                        }}
-                        className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                          appMode === "ops-inventarios"
-                            ? "bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-md scale-[1.02]"
-                            : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                        }`}
-                      >
-                        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
-                          📦
-                        </span>
-                        <span>Control de Inventarios</span>
-                      </button>
-                    )}
-
-                    {currentUser?.role !== "mesero" && (
-                      <button
-                        onClick={() => {
-                          setAppMode("inventario-v2");
-                          setShowSidebar(false);
-                        }}
-                        className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                          appMode === "inventario-v2"
-                            ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md scale-[1.02]"
-                            : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                        }`}
-                      >
-                        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/10 text-base">
-                          📋
-                        </span>
-                        <span>Inventario Formulario 2</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
@@ -24741,1781 +24126,6 @@ Instrucciones:
           </>
         )}
       </AnimatePresence>
-    );
-  };
-
-  const renderPurchaseSupplier = () => {
-    // Determine items assigned to the active supplier (ensuring uniqueness by ID)
-    let assignedItemsUnsorted: any[] = [];
-    if (
-      selectedSupplierForPurchase &&
-      selectedSupplierForPurchase.assignedItems
-    ) {
-      const uniqueSelectedIds = Array.from(
-        new Set(selectedSupplierForPurchase.assignedItems),
-      );
-      // Map through unique IDs to get distinct inventory items
-      const map = new globalThis.Map();
-      inventory.forEach((i: any) => {
-        if (uniqueSelectedIds.includes(i.id)) {
-          map.set(i.id, i);
-        }
-      });
-      assignedItemsUnsorted = Array.from(map.values());
-    }
-
-    // Order alphabetically by name in Spanish (Spanish locale)
-    const assignedItemsSorted = [...assignedItemsUnsorted].sort((a, b) =>
-      a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
-    );
-
-    // Live reactive computation of cart items
-    const activeDraftItems = selectedSupplierForPurchase
-      ? assignedItemsSorted
-          .map((item: any) => {
-            const qtyStr =
-              purchaseQuantities[item.id] !== undefined
-                ? purchaseQuantities[item.id]
-                : "";
-            const qtyNum = parseFloat(qtyStr) || 0;
-
-            const priceStr =
-              purchasePrices[item.id] !== undefined
-                ? purchasePrices[item.id]
-                : String(item.cost !== undefined ? item.cost : "0");
-            const priceNum = parseFloat(priceStr) || 0;
-
-            return {
-              id: `draft_${item.id}`,
-              inventoryItemId: item.id,
-              name: item.name,
-              qty: qtyNum,
-              price: priceNum,
-              unit: item.unit || "pza",
-            };
-          })
-          .filter((it) => it.qty > 0)
-      : [];
-
-    // Calculated total for current purchase draft
-    const purchaseTotal = activeDraftItems.reduce(
-      (acc, item) => acc + item.qty * item.price,
-      0,
-    );
-
-    const handleQtyChange = (itemId: string, val: string) => {
-      setPurchaseQuantities((prev) => ({
-        ...prev,
-        [itemId]: val,
-      }));
-    };
-
-    const handlePriceChange = (itemId: string, val: string) => {
-      setPurchasePrices((prev) => ({
-        ...prev,
-        [itemId]: val,
-      }));
-    };
-
-    const handleAssociateItems = async (itemIds: string[]) => {
-      if (!selectedSupplierForPurchase) return;
-      try {
-        const updatedAssigned = [...itemIds];
-        await updateSupplierInFirebase(selectedSupplierForPurchase.id, {
-          assignedItems: updatedAssigned,
-          updatedAt: getMexicoISOString(),
-        });
-
-        // Update local object structure so the UI updates
-        setSelectedSupplierForPurchase({
-          ...selectedSupplierForPurchase,
-          assignedItems: updatedAssigned,
-        });
-
-        triggerAppNotification(
-          "📦 Insumos Asociados",
-          `Se han asignado ${updatedAssigned.length} insumos al proveedor ${selectedSupplierForPurchase.name} con éxito.`,
-          "success",
-        );
-        setIsAssigningItemsMode(false);
-      } catch (err) {
-        console.error("Error al asociar insumos", err);
-        triggerAppNotification(
-          "❌ Error",
-          "No se pudieron asociar los insumos.",
-          "warning",
-        );
-      }
-    };
-
-    const handleSaveCompletePurchase = async (payDirectly: boolean) => {
-      if (!selectedSupplierForPurchase || activeDraftItems.length === 0) {
-        triggerAppNotification(
-          "⚠️ Carrito Vacío",
-          "Por favor ingresa cantidades mayores a cero en la tabla.",
-          "warning",
-        );
-        return;
-      }
-
-      try {
-        const newPurchaseId = `pur_${Date.now()}`;
-        const itemsToSave = activeDraftItems.map((item) => ({
-          inventoryItemId: item.inventoryItemId,
-          qty: item.qty,
-          price: item.price,
-        }));
-
-        const purchaseData = {
-          id: newPurchaseId,
-          supplier: selectedSupplierForPurchase.name,
-          supplierId: selectedSupplierForPurchase.id,
-          items: itemsToSave,
-          isPaid: payDirectly,
-          total: purchaseTotal,
-          invoiceReference: purchaseInvoiceInput || "",
-          notes: purchaseNotesInput || "",
-          userId: currentUser?.id,
-          createdBy: currentUser?.name || "Admin",
-          timestamp: getMexicoISOString(),
-          sessionId: cashierSessions.find((s) => s.status === "open")?.id || null,
-        };
-
-        // 1. Add to Firestore (this also increments the inventory stocks automatically!)
-        await addPurchaseToFirebase(purchaseData);
-
-        // 2. Persist the chosen Unit Price to the Inventory product history record
-        for (const item of activeDraftItems) {
-          await updateInventoryItemInFirebase(item.inventoryItemId, {
-            cost: item.price,
-            updatedAt: getMexicoISOString(),
-          });
-        }
-
-        // 3. Update local state inventory items to have this new cost reference
-        setInventory((prev) =>
-          prev.map((inv) => {
-            const matched = activeDraftItems.find(
-              (x) => x.inventoryItemId === inv.id,
-            );
-            if (matched) {
-              return { ...inv, cost: matched.price };
-            }
-            return inv;
-          }),
-        );
-
-        // 4. Update supplier balance if it's credit
-        if (!payDirectly) {
-          const currentBalance =
-            parseFloat(selectedSupplierForPurchase.balance) || 0;
-          const newBalance = currentBalance + purchaseTotal;
-          await updateSupplierInFirebase(selectedSupplierForPurchase.id, {
-            balance: newBalance,
-            updatedAt: getMexicoISOString(),
-          });
-
-          // Update local suppliers list
-          setSuppliers((prev) =>
-            prev.map((s) =>
-              s.id === selectedSupplierForPurchase.id
-                ? { ...s, balance: newBalance }
-                : s,
-            ),
-          );
-
-          triggerAppNotification(
-            "💳 Compra a Crédito",
-            `Se han cargado $${purchaseTotal.toFixed(2)} al saldo de ${selectedSupplierForPurchase.name}. Saldo total: $${newBalance.toFixed(2)}`,
-            "warning",
-          );
-        } else {
-          // It was paid in cash/card on spot. We keep balance same and register a cash movement
-          triggerAppNotification(
-            "💰 Compra de Contado",
-            `Compra de $${purchaseTotal.toFixed(2)} pagada y liquidada al proveedor ${selectedSupplierForPurchase.name}.`,
-            "success",
-          );
-
-          // Let's add an automated Cash Movement (Egreso) for better box cash audit! 💸
-          const autoConcept = `Pago automático Compra Proveedor: ${selectedSupplierForPurchase.name} (Folio Compra: ${newPurchaseId.substring(4, 10)})`;
-          await addCashMovementToFirebase({
-            id: `mov_${Date.now()}`,
-            amount: purchaseTotal,
-            type: "OUT",
-            concept: autoConcept,
-            user: currentUser?.name || "Admin",
-            userId: currentUser?.id,
-            timestamp: getMexicoISOString(),
-            sessionId: cashierSessions.find((s) => s.status === "open")?.id || null,
-          });
-        }
-
-        // Live Websocket Simulation log update 🔌🤖
-        const syncLogId = "ws-purchase-" + Date.now();
-        const syncLogUid =
-          "uuid-" +
-          Math.random().toString(36).substring(2, 11) +
-          "-4bc1-9dbe-" +
-          Math.random().toString(36).substring(2, 11);
-        setWebsocketSyncLog((prev) => [
-          {
-            id: syncLogId,
-            uid: syncLogUid,
-            event: "INSERT_PURCHASE_MYSQL",
-            topic: "sync:purchases",
-            timestamp: getMexicoISOString(),
-            details: `📦 Compra síncrona registrada del proveedor ${selectedSupplierForPurchase.name} (${activeDraftItems.length} tipos de insumos, Total: $${purchaseTotal.toFixed(2)}). Precios históricos de adquisición salvados.`,
-          },
-          ...prev,
-        ]);
-
-        // Clean up table inputs & reference parameters
-        setPurchaseQuantities({});
-        setPurchasePrices({});
-        setPurchaseInvoiceInput("");
-        setPurchaseNotesInput("");
-        setPrintedTicketPurchase(null);
-        setSelectedSupplierForPurchase(null);
-      } catch (err) {
-        console.error("Error al registrar la compra", err);
-        triggerAppNotification(
-          "❌ Error",
-          "Ocurrió un error al guardar la compra en Firebase.",
-          "warning",
-        );
-      }
-    };
-
-    // Handler to register a new supplier directly 🤝
-    const handleDirectAddSupplier = async (
-      name: string,
-      category: string,
-      phone: string,
-      email: string,
-    ) => {
-      try {
-        const id =
-          "sup_" +
-          Math.random().toString(36).substring(2, 11) +
-          "_" +
-          Date.now();
-        const timestampIso = getMexicoISOString();
-        const payload = {
-          id,
-          uid: id,
-          name: name.trim(),
-          category,
-          phone: phone.trim(),
-          email: email.trim(),
-          address: "",
-          notes: "Creado de adquisición rápida",
-          frequency: "semanal" as any,
-          balance: 0,
-          assignedItems: [],
-          createdAt: timestampIso,
-          updatedAt: timestampIso,
-        };
-        await addSupplierToFirebase(payload);
-        setSuppliers((prev) => [...prev, payload]);
-
-        // Auto-select provider for purchase sequence!
-        setSelectedSupplierForPurchase(payload);
-
-        triggerAppNotification(
-          "🤝 Proveedor Registrado",
-          `El proveedor "${name.trim()}" ha sido guardado y seleccionado.`,
-          "success",
-        );
-      } catch (err) {
-        console.error("Error durring quick supplier creation", err);
-        triggerAppNotification(
-          "❌ Error",
-          "No se pudo registrar el proveedor.",
-          "warning",
-        );
-      }
-    };
-
-    // Handler to register a newly created input directly and automatically associate it with the active supplier
-    const handleQuickAddInsumo = async () => {
-      if (!quickInsumoName.trim()) {
-        triggerAppNotification(
-          "⚠️ Nombre Requerido",
-          "Por favor ingresa el nombre del nuevo insumo.",
-          "warning",
-        );
-        return;
-      }
-      if (!selectedSupplierForPurchase) return;
-
-      const costNum = parseFloat(quickInsumoCost) || 0;
-      const stockNum = parseFloat(quickInsumoInitialStock) || 0;
-
-      // unique UUID standard & Timestamp values specified in the guidelines
-      const itemUuid =
-        "inv-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-      const timestampIso = getMexicoISOString();
-
-      try {
-        const newItem = {
-          id: itemUuid,
-          uid: itemUuid,
-          name: quickInsumoName.trim(),
-          category: quickInsumoCategory,
-          unit: quickInsumoUnit,
-          cost: costNum,
-          stock: stockNum,
-          minStock: 5,
-          createdAt: timestampIso,
-          updatedAt: timestampIso,
-        };
-
-        // 1. Add to general Firebase inventory database
-        await addInventoryItemToFirebase(newItem);
-
-        // 2. Associate ID with the active supplier
-        const updatedAssigned = selectedSupplierForPurchase.assignedItems
-          ? [...selectedSupplierForPurchase.assignedItems, itemUuid]
-          : [itemUuid];
-
-        await updateSupplierInFirebase(selectedSupplierForPurchase.id, {
-          assignedItems: updatedAssigned,
-          updatedAt: timestampIso,
-        });
-
-        // 3. Update local States immediately for real-time reactivity
-        setSuppliers((prev) =>
-          prev.map((s) =>
-            s.id === selectedSupplierForPurchase.id
-              ? { ...s, assignedItems: updatedAssigned }
-              : s,
-          ),
-        );
-        setSelectedSupplierForPurchase({
-          ...selectedSupplierForPurchase,
-          assignedItems: updatedAssigned,
-        });
-
-        // Add to main local state inventory (checking to avoid duplications)
-        setInventory((prev) => {
-          if (prev.some((item) => item.id === newItem.id)) return prev;
-          return [...prev, newItem];
-        });
-
-        // 4. Prepopulate selection parameters for instant receipt insertion inside our spreadsheet table!
-        setPurchaseQuantities((prev) => ({ ...prev, [itemUuid]: "1" }));
-        setPurchasePrices((prev) => ({ ...prev, [itemUuid]: String(costNum) }));
-
-        triggerAppNotification(
-          "📦 Insumo Sincronizado",
-          `Se registró "${quickInsumoName.trim()}" y se incorporó al pedido.`,
-          "success",
-        );
-
-        // Continuous Synchronous Log Simulation 🔌📡
-        const syncLogId = "ws-insumo-" + Date.now();
-        const syncLogUid = `uuid-${Math.random().toString(36).substring(2, 11)}-db-sync-${Math.random().toString(36).substring(2, 11)}`;
-        setWebsocketSyncLog((prev) => [
-          {
-            id: syncLogId,
-            uid: syncLogUid,
-            event: "INSERT_INVENTORY_SQL",
-            topic: "sync:inventory",
-            timestamp: timestampIso,
-            details: `📦 Insumo express creado: "${quickInsumoName.trim()}" con UUID ${itemUuid} auto-asociado y pre-cargado en el carrito del proveedor ${selectedSupplierForPurchase.name}.`,
-          },
-          ...prev,
-        ]);
-
-        // Clean & close quick adder
-        setQuickInsumoName("");
-        setQuickInsumoCost("0");
-        setQuickInsumoInitialStock("0");
-        setShowQuickAddInsumoModal(false);
-      } catch (err) {
-        console.error("Error al registrar insumo exprés", err);
-        triggerAppNotification(
-          "❌ Error",
-          "No se pudo crear ni asociar el insumo.",
-          "warning",
-        );
-      }
-    };
-
-    // Handler to register a financial payment to a supplier, subtracting from their active debt/balance
-    const handleRegisterSupplierPayment = async () => {
-      if (!selectedSupplierForPayment) return;
-      const amount = parseFloat(paySupplierAmount);
-      if (isNaN(amount) || amount <= 0) {
-        triggerAppNotification(
-          "⚠️ Importe Inválido",
-          "Por favor ingresa un importe mayor a cero.",
-          "warning",
-        );
-        return;
-      }
-
-      const currentBalance =
-        parseFloat(selectedSupplierForPayment.balance) || 0;
-      const newBalance = currentBalance - amount;
-      const timestampIso = getMexicoISOString();
-      const paymentUuid =
-        "pay-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-
-      try {
-        // 1. Update supplier balance in database
-        await updateSupplierInFirebase(selectedSupplierForPayment.id, {
-          balance: newBalance,
-          updatedAt: timestampIso,
-        });
-
-        // 2. Add as box cashier outflow to track balance audits 💸
-        const outflowConcept = `Abono a Proveedor: ${selectedSupplierForPayment.name} (${paySupplierMethod}) - Ref: ${paySupplierReference || "S/R"}`;
-        await addCashMovementToFirebase({
-          id: `mov_${Date.now()}`,
-          amount: amount,
-          type: "OUT",
-          concept: outflowConcept,
-          user: currentUser?.name || "Admin",
-          userId: currentUser?.id,
-          timestamp: timestampIso,
-          sessionId: cashierSessions.find((s) => s.status === "open")?.id || null,
-        });
-
-        // 3. Update locally
-        setSuppliers((prev) =>
-          prev.map((s) =>
-            s.id === selectedSupplierForPayment.id
-              ? { ...s, balance: newBalance }
-              : s,
-          ),
-        );
-
-        triggerAppNotification(
-          "💸 Pago Registrado",
-          `Abono de $${amount.toFixed(2)} registrado para ${selectedSupplierForPayment.name}. Saldo restante: $${newBalance.toFixed(2)}`,
-          "success",
-        );
-
-        // Websocket state update logger 🌐⚡
-        const syncLogId = "ws-payment-" + Date.now();
-        const syncLogUid = `uuid-${Math.random().toString(36).substring(2, 11)}-paid-sync-${Math.random().toString(36).substring(2, 11)}`;
-        setWebsocketSyncLog((prev) => [
-          {
-            id: syncLogId,
-            uid: syncLogUid,
-            event: "UPDATE_SUPPLIER_BALANCE_MYSQL",
-            topic: "sync:suppliers",
-            timestamp: timestampIso,
-            details: `💸 Pago de $${amount.toFixed(2)} a proveedor "${selectedSupplierForPayment.name}" registrado mediante ${paySupplierMethod}. Sincronizado vía websocket.`,
-          },
-          ...prev,
-        ]);
-
-        // 4. Load Comprobante Thermal Ticket variables for preview
-        setPrintedPaymentTicket({
-          id: paymentUuid,
-          supplier: selectedSupplierForPayment,
-          amountPaid: amount,
-          method: paySupplierMethod,
-          reference: paySupplierReference || "S/Ref",
-          previousBalance: currentBalance,
-          remainingBalance: newBalance,
-          timestamp: timestampIso,
-        });
-
-        // Close and clean
-        setPaySupplierAmount("");
-        setPaySupplierReference("");
-        setShowPaySupplierModal(false);
-      } catch (err) {
-        console.error("Error durring payment operation", err);
-        triggerAppNotification(
-          "❌ Error de Guardado",
-          "No se pudo registrar el pago en Firebase.",
-          "warning",
-        );
-      }
-    };
-
-    return (
-      <IonPage>
-      {renderMaterialHeader({
-        title: "Adquisiciones y Compras 🛒",
-        subtitle: selectedSupplierForPurchase ? `Proveedor: ${selectedSupplierForPurchase.name}` : "Surtido de Inventario",
-        showBack: true,
-        onBack: () => setAppMode("floorplan"),
-        actions: selectedSupplierForPurchase ? (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "¿Seguro que deseas cancelar esta compra y salir? El borrador se perderá.",
-                )
-              ) {
-                setSelectedSupplierForPurchase(null);
-                setPurchaseDraftItems([]);
-              }
-            }}
-            className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-full text-white font-bold text-[10px] uppercase tracking-wider transition cursor-pointer border-none shadow-sm mr-2"
-          >
-            ↩️ Cambiar Proveedor
-          </motion.button>
-        ) : null
-      })}
-
-        <IonContent
-          className="ion-padding"
-          style={{ "--background": "#f1f5f9" }}
-        >
-          <div className="max-w-6xl mx-auto py-2">
-            {/* STEP 1: SELECT SUPPLIER */}
-            {!selectedSupplierForPurchase ? (
-              <div className="space-y-6">
-                <div className="bg-gradient-to-r from-teal-500 to-indigo-600 rounded-3xl p-6 text-white shadow-md">
-                  <h2 className="text-2xl font-black mb-1 flex items-center gap-2">
-                    🛒 Compra a Proveedores Directo
-                  </h2>
-                  <p className="text-teal-50 text-sm max-w-2xl leading-relaxed">
-                    Satisface los requerimientos de tu inventario. Selecciona un
-                    proveedor registrado o crea uno nuevo para iniciar la
-                    asignación de insumos, precios pactados, folios y programar
-                    el pago correspondiente (Crédito o Contado).
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-800">
-                        🤝 Selecciona un Proveedor
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Puedes buscar por su nombre o categoría de insumos que
-                        te distribuye.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => setShowDirectSupplierAddModal(true)}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold uppercase tracking-widest py-2.5 px-4 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
-                    >
-                      <IonIcon icon={addOutline} style={{ fontSize: "16px" }} />
-                      Nuevo Proveedor 🤝
-                    </button>
-                  </div>
-
-                  {suppliers.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">
-                      <p className="text-slate-500 font-medium mb-3">
-                        No hay proveedores registrados aún.
-                      </p>
-                      <button
-                        onClick={() => setShowDirectSupplierAddModal(true)}
-                        className="bg-indigo-600 text-white text-sm font-semibold py-2 px-6 rounded-xl transition cursor-pointer"
-                      >
-                        Crear Primer Proveedor ➕
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {suppliers.map((s: any) => {
-                        const countAssigned = s.assignedItems?.length || 0;
-                        const balance = parseFloat(s.balance) || 0;
-                        return (
-                          <div
-                            key={s.id}
-                            className="group border border-slate-200/80 hover:border-teal-400 hover:shadow-md rounded-3xl p-5 bg-white transition-all duration-300 flex flex-col justify-between"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between gap-1 mb-2">
-                                <span className="text-[10px] uppercase font-black tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                                  🏷️ {s.category || "Insumos"}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-400">
-                                  {countAssigned} insumos
-                                </span>
-                              </div>
-                              <h4 className="text-base font-extrabold text-slate-800 transition truncate">
-                                {s.name}
-                              </h4>
-                              <p className="text-xs text-slate-500 mt-1 truncate">
-                                {s.phone
-                                  ? `📞 ${s.phone}`
-                                  : "Sin teléfono registrado"}
-                              </p>
-                              <div className="mt-2 text-[11px] text-slate-400 font-medium italic">
-                                Surtido: 📅{" "}
-                                {s.frequency === "diario"
-                                  ? "Diario"
-                                  : s.frequency === "semanal"
-                                    ? "Semanal"
-                                    : "Ocasional"}
-                              </div>
-                            </div>
-
-                            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-3">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="text-[9px] uppercase font-black text-slate-400">
-                                    Saldo Pendiente (Deuda)
-                                  </div>
-                                  <div
-                                    className={`text-base font-black ${balance > 0 ? "text-rose-600" : "text-slate-500"}`}
-                                  >
-                                    ${balance.toFixed(2)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 pt-1">
-                                <button
-                                  onClick={() =>
-                                    setSelectedSupplierForPurchase(s)
-                                  }
-                                  className="w-full bg-teal-600 hover:bg-teal-700 text-white text-[10px] uppercase font-black tracking-wider py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 shadow-sm"
-                                >
-                                  🛒 Compra
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSelectedSupplierForPayment(s);
-                                    setPaySupplierAmount(
-                                      balance > 0 ? String(balance) : "0",
-                                    );
-                                    setPaySupplierReference("");
-                                    setPaySupplierMethod("Efectivo");
-                                    setShowPaySupplierModal(true);
-                                  }}
-                                  className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] uppercase font-black tracking-wider py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 border border-indigo-100"
-                                >
-                                  💸 Pagar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              /* STEP 2: MULTI-ITEM SHOPPING CART SPREADSHEET (SAVES CLICK-CLICK-CLICK FRICTION) */
-              <div className="space-y-6">
-                {/* Supplier Detail Header Card */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] uppercase font-black bg-indigo-150 bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full inline-block">
-                        🤝 PROVEEDOR{" "}
-                        {selectedSupplierForPurchase.category || "General"}
-                      </span>
-                      <span className="text-[9px] uppercase font-black bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full inline-block">
-                        📅 SURTIDO{" "}
-                        {selectedSupplierForPurchase.frequency === "diario"
-                          ? "Diario"
-                          : "Semanal"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xl font-black text-slate-800">
-                        🛒 Carrito Directo: {selectedSupplierForPurchase.name}
-                      </h3>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Contacto:{" "}
-                      {selectedSupplierForPurchase.phone || "Sin teléfono"} •
-                      Dirección:{" "}
-                      {selectedSupplierForPurchase.address || "General"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => setIsAssigningItemsMode(true)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-750 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer border border-slate-200"
-                    >
-                      🔌 Asociar Insumos
-                    </button>
-                    <button
-                      onClick={() => {
-                        setQuickInsumoName("");
-                        setQuickInsumoCategory("Ingredientes");
-                        setQuickInsumoUnit("pza");
-                        setQuickInsumoCost("0");
-                        setQuickInsumoInitialStock("0");
-                        setShowQuickAddInsumoModal(true);
-                      }}
-                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer border border-indigo-105 border-indigo-105"
-                    >
-                      ➕ Registrar Express
-                    </button>
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-1.5 text-right">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">
-                        Saldo Comercial
-                      </span>
-                      <span className="text-sm font-black text-rose-600 block leading-none">
-                        $
-                        {(
-                          parseFloat(selectedSupplierForPurchase.balance) || 0
-                        ).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* SPREADSHEET CARD */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div>
-                      <h4 className="text-base font-extrabold text-slate-800">
-                        👇 Tabla Comercial de Abasto
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                        Escribe precios de adquisición y cantidades. Se
-                        guardarán de historial de respaldo.
-                      </p>
-                    </div>
-                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full">
-                      🔤 Productos Ordenados Alfabéticamente
-                    </span>
-                  </div>
-
-                  {assignedItemsSorted.length === 0 ? (
-                    <div className="py-12 text-center rounded-2xl bg-amber-50 border border-amber-100 max-w-xl mx-auto space-y-4">
-                      <p className="text-sm text-amber-800 font-bold leading-relaxed px-4">
-                        ⚠️ Este proveedor no tiene insumos asignados en el
-                        catálogo actualmente. Para poder comprarle, asocia
-                        insumos o registra un insumo express.
-                      </p>
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => setIsAssigningItemsMode(true)}
-                          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black py-2 px-5 rounded-xl transition cursor-pointer"
-                        >
-                          Asociar del Catálogo 🔌
-                        </button>
-                        <button
-                          onClick={() => {
-                            setQuickInsumoName("");
-                            setQuickInsumoCategory("Ingredientes");
-                            setQuickInsumoUnit("pza");
-                            setQuickInsumoCost("0");
-                            setQuickInsumoInitialStock("0");
-                            setShowQuickAddInsumoModal(true);
-                          }}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-2 px-5 rounded-xl transition cursor-pointer"
-                        >
-                          Crear Nuevo Express ➕
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto border border-slate-100 rounded-3xl">
-                      <table className="w-full border-collapse text-left text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-150">
-                            <th className="p-4 font-bold text-slate-600">
-                              Insumo
-                            </th>
-                            <th className="p-4 font-bold text-slate-600 text-center">
-                              Unidad
-                            </th>
-                            <th className="p-4 font-bold text-slate-600 text-right">
-                              Referencia Costo Histórico
-                            </th>
-                            <th className="p-4 font-bold text-slate-600 text-right">
-                              Precio Unitario ($)
-                            </th>
-                            <th className="p-4 font-bold text-slate-600 text-center">
-                              Cantidad a Comprar
-                            </th>
-                            <th className="p-4 font-bold text-slate-600 text-right text-indigo-700">
-                              Importe ($)
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {assignedItemsSorted.map((item) => {
-                            const qtyStr =
-                              purchaseQuantities[item.id] !== undefined
-                                ? purchaseQuantities[item.id]
-                                : "";
-                            const hasQty = parseFloat(qtyStr) > 0;
-
-                            const priceStr =
-                              purchasePrices[item.id] !== undefined
-                                ? purchasePrices[item.id]
-                                : String(
-                                    item.cost !== undefined ? item.cost : "0",
-                                  );
-
-                            const qtyNum = parseFloat(qtyStr) || 0;
-                            const priceNum = parseFloat(priceStr) || 0;
-                            const subtotalVal = qtyNum * priceNum;
-
-                            return (
-                              <tr
-                                key={item.id}
-                                className={`transition-all duration-200 ${hasQty ? "bg-emerald-50/40 hover:bg-emerald-100/40" : "hover:bg-slate-50/40"}`}
-                              >
-                                <td className="p-4 font-semibold text-slate-800">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-base text-teal-605 text-teal-600">
-                                      📦
-                                    </span>
-                                    <div>
-                                      <span className="font-bold text-slate-800">
-                                        {item.name}
-                                      </span>
-                                      <span className="text-[9px] px-1.5 py-0.5 ml-2 uppercase font-extrabold bg-slate-100 text-slate-505 rounded-md">
-                                        {item.category || "General"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="p-4 text-center">
-                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-extrabold uppercase border border-slate-200">
-                                    {item.unit || "pza"}
-                                  </span>
-                                </td>
-                                <td className="p-4 text-right">
-                                  <span className="font-mono font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">
-                                    ${(parseFloat(item.cost) || 0).toFixed(2)}
-                                  </span>
-                                </td>
-                                <td className="p-4 text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <span className="text-slate-400 font-bold">
-                                      $
-                                    </span>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="any"
-                                      value={priceStr}
-                                      placeholder="0.00"
-                                      onChange={(e) =>
-                                        handlePriceChange(
-                                          item.id,
-                                          e.target.value,
-                                        )
-                                      }
-                                      className="w-24 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 rounded-xl px-2.5 py-1.5 text-xs text-right font-black bg-white text-slate-800"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="p-4 text-center">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="any"
-                                    value={qtyStr}
-                                    placeholder="Cant"
-                                    onChange={(e) =>
-                                      handleQtyChange(item.id, e.target.value)
-                                    }
-                                    className="w-24 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-2.5 py-1.5 text-xs text-center font-black bg-white text-slate-800"
-                                  />
-                                </td>
-                                <td className="p-4 text-right text-indigo-900 font-black text-sm">
-                                  ${subtotalVal.toFixed(2)}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* BOTTOM CHECKOUT DETAILS */}
-                  {assignedItemsSorted.length > 0 && (
-                    <div className="border-t border-slate-100 pt-6 space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                              Referencia / Folio / Factura de Proveedor 🧾
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Ej. FAC-90210, Folio 102"
-                              value={purchaseInvoiceInput}
-                              onChange={(e) =>
-                                setPurchaseInvoiceInput(e.target.value)
-                              }
-                              className="w-full bg-slate-50 border border-slate-202 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                              Observaciones de Surtido ✍️
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Observaciones de entrega, descuentos, mermas..."
-                              value={purchaseNotesInput}
-                              onChange={(e) =>
-                                setPurchaseNotesInput(e.target.value)
-                              }
-                              className="w-full bg-slate-50 border border-slate-202 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 flex flex-col justify-between space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="text-[10px] font-black uppercase text-slate-400">
-                                Total Neto Adquisición
-                              </span>
-                              <div className="text-[10px] text-teal-605 text-teal-600 font-bold mt-0.5">
-                                Realtime Auto-calculado
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold mr-2 inline-block">
-                                {activeDraftItems.length} insumos en carro
-                              </span>
-                              <span className="text-2xl font-black text-slate-800">
-                                ${purchaseTotal.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    "¿Deseas reiniciar todas las cantidades de la tabla?",
-                                  )
-                                ) {
-                                  setPurchaseQuantities({});
-                                }
-                              }}
-                              disabled={activeDraftItems.length === 0}
-                              className="bg-slate-202 text-slate-700 text-xs font-extrabold uppercase py-3 px-4 rounded-xl transition cursor-pointer disabled:opacity-40"
-                            >
-                              🗑/Reset
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (activeDraftItems.length === 0) {
-                                  triggerAppNotification(
-                                    "⚠️ Incorpore Cantidades",
-                                    "Escribe una cantidad mayor a cero en alguno de los productos de la tabla.",
-                                    "warning",
-                                  );
-                                  return;
-                                }
-
-                                setPrintedTicketPurchase({
-                                  supplier: selectedSupplierForPurchase,
-                                  items: activeDraftItems,
-                                  subtotal: purchaseTotal,
-                                  total: purchaseTotal,
-                                  invoice: purchaseInvoiceInput || "S/F",
-                                  notes:
-                                    purchaseNotesInput || "Sin observaciones",
-                                  timestamp: getMexicoISOString(),
-                                });
-                              }}
-                              disabled={activeDraftItems.length === 0}
-                              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl transition cursor-pointer shadow-md disabled:opacity-40 flex items-center justify-center gap-1.5"
-                            >
-                              🧾 Generar Comprobante de Compra
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* INTERNAL MODAL: ASSOCIATE INSUMOS SELECTOR */}
-          <IonModal
-            isOpen={isAssigningItemsMode}
-            onDidDismiss={() => setIsAssigningItemsMode(false)}
-            initialBreakpoint={0.8}
-            breakpoints={[0, 0.8, 1]}
-          >
-            <IonHeader className="ion-no-border">
-              <IonToolbar
-                style={{ "--background": "#1e293b", "--color": "white" }}
-              >
-                <IonTitle>Asociar Insumos Pactados</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton
-                    onClick={() => setIsAssigningItemsMode(false)}
-                    style={{ fontWeight: "700" }}
-                  >
-                    Cerrar
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
-            <IonContent
-              className="ion-padding"
-              style={{ "--background": "#ffffff" }}
-            >
-              <div className="space-y-4 max-w-lg mx-auto">
-                <div>
-                  <h3 className="font-extrabold text-slate-800 text-sm">
-                    🤝 Asignación de Productos para:{" "}
-                    {selectedSupplierForPurchase?.name}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Marca con checkbox todos los insumos de tu catálogo de
-                    inventarios que este proveedor tiene contratados pactados o
-                    que te surte regularmente.
-                  </p>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="🔍 Filtrar por nombre del insumo..."
-                    value={itemSearchForAssign}
-                    onChange={(e) => setItemSearchForAssign(e.target.value)}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700"
-                  />
-                </div>
-
-                {/* Checklist Container */}
-                <div className="border border-slate-100 rounded-2xl max-h-96 overflow-y-auto p-2 divide-y divide-slate-100">
-                  {inventory
-                    .filter((item) =>
-                      item.name
-                        .toLowerCase()
-                        .includes(itemSearchForAssign.toLowerCase()),
-                    )
-                    .map((item) => {
-                      const isAssigned =
-                        selectedSupplierForPurchase?.assignedItems?.includes(
-                          item.id,
-                        );
-                      return (
-                        <label
-                          key={item.id}
-                          className="flex items-center gap-3 py-3 px-2 hover:bg-slate-50 rounded-lg cursor-pointer transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isAssigned}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              let newAssignedList =
-                                selectedSupplierForPurchase?.assignedItems
-                                  ? [
-                                      ...selectedSupplierForPurchase.assignedItems,
-                                    ]
-                                  : [];
-                              if (checked) {
-                                if (!newAssignedList.includes(item.id))
-                                  newAssignedList.push(item.id);
-                              } else {
-                                newAssignedList = newAssignedList.filter(
-                                  (id) => id !== item.id,
-                                );
-                              }
-                              setSelectedSupplierForPurchase({
-                                ...selectedSupplierForPurchase,
-                                assignedItems: newAssignedList,
-                              });
-                            }}
-                            className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded"
-                          />
-                          <div>
-                            <div className="text-xs font-extrabold text-slate-800">
-                              {item.name}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-bold uppercase">
-                              {item.category} • {item.unit || "pza"}
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  {inventory.filter((item) =>
-                    item.name
-                      .toLowerCase()
-                      .includes(itemSearchForAssign.toLowerCase()),
-                  ).length === 0 && (
-                    <div className="text-center py-6 text-slate-450 font-bold text-xs">
-                      No se encontraron insumos coincidiendo con el filtro.
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() =>
-                    handleAssociateItems(
-                      selectedSupplierForPurchase?.assignedItems || [],
-                    )
-                  }
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black text-xs uppercase tracking-widest py-3 px-4 rounded-xl transition cursor-pointer"
-                >
-                  💾 Confirmar Asociación de Insumos
-                </button>
-              </div>
-            </IonContent>
-          </IonModal>
-
-          {/* INTERNAL DIRECT ADD SUPPLIER MODAL */}
-          <IonModal
-            isOpen={showDirectSupplierAddModal}
-            onDidDismiss={() => setShowDirectSupplierAddModal(false)}
-            initialBreakpoint={0.6}
-            breakpoints={[0, 0.6]}
-          >
-            <IonHeader className="ion-no-border">
-              <IonToolbar
-                style={{ "--background": "#1e293b", "--color": "white" }}
-              >
-                <IonTitle>Registrar Nuevo Proveedor</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton
-                    onClick={() => setShowDirectSupplierAddModal(false)}
-                    style={{ fontWeight: "700" }}
-                  >
-                    Cerrar
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
-            <IonContent
-              className="ion-padding"
-              style={{ "--background": "#ffffff" }}
-            >
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const name = (
-                    form.elements.namedItem("dirName") as HTMLInputElement
-                  ).value;
-                  const category = (
-                    form.elements.namedItem("dirCategory") as HTMLSelectElement
-                  ).value;
-                  const phone = (
-                    form.elements.namedItem("dirPhone") as HTMLInputElement
-                  ).value;
-                  const email = (
-                    form.elements.namedItem("dirEmail") as HTMLInputElement
-                  ).value;
-
-                  if (!name.trim()) {
-                    alert("El nombre del proveedor es un campo requerido.");
-                    return;
-                  }
-
-                  await handleDirectAddSupplier(name, category, phone, email);
-                  setShowDirectSupplierAddModal(false);
-                }}
-                className="space-y-4 max-w-sm mx-auto"
-              >
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                    Nombre Comercial *
-                  </label>
-                  <input
-                    type="text"
-                    name="dirName"
-                    required
-                    placeholder="Ej. Abarrotes del Centro"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                    Categoría General
-                  </label>
-                  <select
-                    name="dirCategory"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Abarrotes">Abarrotes 🥫</option>
-                    <option value="Bebidas">Bebidas 🥤</option>
-                    <option value="Carnes">Carnes 🥩</option>
-                    <option value="Lácteos">Lácteos 🥛</option>
-                    <option value="Vegetales">Verduras y Frutas 🥦</option>
-                    <option value="Otros">Insumos Varios ⚙️</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Teléfono
-                    </label>
-                    <input
-                      type="tel"
-                      name="dirPhone"
-                      placeholder="Ej. 555-1234"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      name="dirEmail"
-                      placeholder="proveedor@mail.com"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-widest py-3 px-4 rounded-xl transition cursor-pointer"
-                >
-                  💾 Registrar y Guardar Proveedor
-                </button>
-              </form>
-            </IonContent>
-          </IonModal>
-
-          {/* BEAUTIFUL THERMAL PRINT PREVIEW MODAL */}
-          <IonModal
-            isOpen={!!printedTicketPurchase}
-            onDidDismiss={() => setPrintedTicketPurchase(null)}
-            className="flex items-center justify-center p-4 bg-slate-900/60"
-            style={{
-              "--width": "420px",
-              "--height": "auto",
-              "--max-height": "90vh",
-              "--border-radius": "24px",
-            }}
-          >
-            <div className="bg-slate-800 text-slate-100 h-full flex flex-col justify-between">
-              <IonHeader className="ion-no-border">
-                <IonToolbar
-                  style={{ "--background": "#1e293b", "--color": "white" }}
-                >
-                  <IonTitle>Vista de Ticket de Compra</IonTitle>
-                  <IonButtons slot="end">
-                    <IonButton onClick={() => setPrintedTicketPurchase(null)}>
-                      Cerrar
-                    </IonButton>
-                  </IonButtons>
-                </IonToolbar>
-              </IonHeader>
-
-              {printedTicketPurchase && (
-                <div className="p-5 flex-1 overflow-y-auto space-y-4">
-                  {/* Paper wrapper */}
-                  <div className="bg-white text-slate-900 p-6 rounded-2xl font-mono text-xs shadow-inner border border-slate-200 relative">
-                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-[radial-gradient(circle,transparent_50%,rgba(0,0,0,0.05)_50%)] bg-[length:10px_10px]" />
-
-                    {/* Ticket Header */}
-                    <div className="text-center space-y-1 mb-4">
-                      <div className="text-sm font-black uppercase tracking-widest">
-                        🏪 RESTAURANTE POS EXPRESS
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-bold">
-                        SUCURSAL MATRIZ • MÉXICO
-                      </div>
-                      <div className="text-[9px] text-slate-400">
-                        UUID:{" "}
-                        {printedTicketPurchase.supplier?.uid?.substring(0, 8) ||
-                          "MYSQL-UUID"}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    {/* Meta labels */}
-                    <div className="space-y-1 text-[10px] text-slate-700 mb-4">
-                      <div>
-                        <b>PROVEEDOR:</b> {printedTicketPurchase.supplier?.name}
-                      </div>
-                      <div>
-                        <b>GIRO:</b>{" "}
-                        {printedTicketPurchase.supplier?.category || "General"}
-                      </div>
-                      <div>
-                        <b>FOLIO REF:</b> {printedTicketPurchase.invoice}
-                      </div>
-                      <div>
-                        <b>HRA REGISTRO/TS:</b>{" "}
-                        {new Date(
-                          printedTicketPurchase.timestamp,
-                        ).toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    {/* Table List of Products */}
-                    <div className="space-y-2 py-2">
-                      <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                        <span>DETALLE / INSUMO</span>
-                        <span>SUBTOT</span>
-                      </div>
-
-                      {printedTicketPurchase.items.map((it: any) => (
-                        <div
-                          key={it.id}
-                          className="flex justify-between items-start text-[10px]"
-                        >
-                          <div>
-                            <span className="font-bold">
-                              {it.qty} {it.unit}
-                            </span>{" "}
-                            x {it.name}
-                            <div className="text-[9px] text-slate-400">
-                              P. Unit: ${it.price.toFixed(2)}
-                            </div>
-                          </div>
-                          <span className="font-bold text-slate-800">
-                            ${(it.qty * it.price).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    {/* Calculations */}
-                    <div className="space-y-1 pt-2">
-                      <div className="flex justify-between text-base font-black">
-                        <span>TOTAL COMPRA:</span>
-                        <span>${printedTicketPurchase.total.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    {/* Financial supplier balances - credit state previews */}
-                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-[10px] space-y-1">
-                      <div className="font-bold text-slate-500 uppercase tracking-wider text-[9px]">
-                        Análisis contable del Proveedor
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Saldo Pendiente Anterior:</span>
-                        <span>
-                          $
-                          {(
-                            parseFloat(
-                              printedTicketPurchase.supplier?.balance,
-                            ) || 0
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between font-extrabold text-indigo-700">
-                        <span>Importe de esta compra:</span>
-                        <span>+${printedTicketPurchase.total.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-black text-slate-800 border-t border-slate-200/50 pt-1 mt-0.5">
-                        <span>Saldo Total Proyectado si es Crédito:</span>
-                        <span>
-                          $
-                          {(
-                            (parseFloat(
-                              printedTicketPurchase.supplier?.balance,
-                            ) || 0) + printedTicketPurchase.total
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-3" />
-
-                    <div className="text-center text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                      📝 ADQUISICIONES DE INVENTARIOS EN TIEMPO REAL
-                    </div>
-                  </div>
-
-                  {/* Actions prompts: Credit or cash immediately */}
-                  <div className="bg-slate-700/80 border border-slate-600/40 p-4 rounded-2xl text-center space-y-3">
-                    <div className="text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5">
-                      💳 ¿Liquidar de Contado o Adquirir a Crédito?
-                    </div>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      Selecciona la opción de pago que corresponda para esta
-                      adquisición. Si pagas de contado, no aumentará la deuda
-                      con el proveedor y se registrará un egreso de caja.
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        onClick={async () => {
-                          await handleSaveCompletePurchase(true); // Is paid (contado)
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider py-2.5 px-2 rounded-xl transition cursor-pointer"
-                      >
-                        💵 Contado (PAGAR)
-                      </button>
-                      <button
-                        onClick={async () => {
-                          await handleSaveCompletePurchase(false); // Is credit
-                        }}
-                        className="bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] uppercase tracking-wider py-2.5 px-2 rounded-xl transition cursor-pointer"
-                      >
-                        📊 Crédito (DEBER)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </IonModal>
-
-          {/* QUICK REGISTER NEW INSUMO / ITEM MODAL - VUE/PWA STYLE WITH CONTINUOUS SYNC */}
-          <IonModal
-            isOpen={showQuickAddInsumoModal}
-            onDidDismiss={() => setShowQuickAddInsumoModal(false)}
-          >
-            <IonHeader className="ion-no-border">
-              <IonToolbar
-                style={{ "--background": "#1e293b", "--color": "white" }}
-              >
-                <IonTitle>Registrar Nuevo Insumo 📦</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton
-                    onClick={() => setShowQuickAddInsumoModal(false)}
-                    style={{ fontWeight: "750" }}
-                  >
-                    Cerrar
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
-            <IonContent
-              className="ion-padding"
-              style={{ "--background": "#ffffff" }}
-            >
-              <div className="space-y-4 max-w-sm mx-auto p-1">
-                <div>
-                  <p className="text-xs text-slate-500 leading-normal mb-1">
-                    Agrega un nuevo insumo al catálogo general del sistema. Se
-                    asociará automáticamente al proveedor activo para ser
-                    comprado inmediatamente.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                    Nombre Comercial de Insumo *
-                  </label>
-                  <input
-                    type="text"
-                    value={quickInsumoName}
-                    onChange={(e) => setQuickInsumoName(e.target.value)}
-                    placeholder="Ej. Aceite de Oliva 2 Litros, Harina de Maíz"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Categoría
-                    </label>
-                    <select
-                      value={quickInsumoCategory}
-                      onChange={(e) => setQuickInsumoCategory(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-805"
-                    >
-                      <option value="Ingredientes">Ingredientes 🥦</option>
-                      <option value="Bebidas">Bebidas 🥤</option>
-                      <option value="Desechables">Desechables 🥤</option>
-                      <option value="Lácteos">Lácteos 🥛</option>
-                      <option value="Carnes">Carnes 🥩</option>
-                      <option value="Otros">Varios ⚙️</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Unidad de Medida
-                    </label>
-                    <select
-                      value={quickInsumoUnit}
-                      onChange={(e) => setQuickInsumoUnit(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-805"
-                    >
-                      <option value="pza">Pieza (pza)</option>
-                      <option value="kg">Kilogramo (kg)</option>
-                      <option value="gr">Gramo (gr)</option>
-                      <option value="L">Litro (L)</option>
-                      <option value="ml">Mililitro (ml)</option>
-                      <option value="caja">Caja</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Precio Compra Pactado ($)
-                    </label>
-                    <input
-                      type="number"
-                      value={quickInsumoCost}
-                      onChange={(e) => setQuickInsumoCost(e.target.value)}
-                      min="0"
-                      step="any"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Stock Inicial de Almacén
-                    </label>
-                    <input
-                      type="number"
-                      value={quickInsumoInitialStock}
-                      onChange={(e) =>
-                        setQuickInsumoInitialStock(e.target.value)
-                      }
-                      min="0"
-                      step="any"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleQuickAddInsumo}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs uppercase tracking-widest py-3 px-4 rounded-xl transition cursor-pointer mt-3 shadow-md"
-                >
-                  💾 Guardar e Incorporar Al Pedido
-                </button>
-              </div>
-            </IonContent>
-          </IonModal>
-
-          {/* REGISTER SUPPLIER PAYMENT / LIQUIDATION / ABONO MODAL */}
-          <IonModal
-            isOpen={showPaySupplierModal}
-            onDidDismiss={() => {
-              setShowPaySupplierModal(false);
-              setSelectedSupplierForPayment(null);
-            }}
-            initialBreakpoint={0.65}
-            breakpoints={[0, 0.65, 0.9]}
-          >
-            <IonHeader className="ion-no-border">
-              <IonToolbar
-                style={{ "--background": "#1e293b", "--color": "white" }}
-              >
-                <IonTitle>Registrar Pago / Abono 💸</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton
-                    onClick={() => {
-                      setShowPaySupplierModal(false);
-                      setSelectedSupplierForPayment(null);
-                    }}
-                    style={{ fontWeight: "750" }}
-                  >
-                    Cerrar
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
-            <IonContent
-              className="ion-padding"
-              style={{ "--background": "#ffffff" }}
-            >
-              {selectedSupplierForPayment && (
-                <div className="space-y-4 max-w-sm mx-auto p-1 text-slate-800">
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col justify-between">
-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">
-                      Proveedor Beneficiario
-                    </span>
-                    <span className="text-sm font-black text-slate-800 mt-0.5">
-                      {selectedSupplierForPayment.name}
-                    </span>
-                    <div className="mt-2 pt-2 border-t border-slate-200/55 flex justify-between items-center">
-                      <span className="text-[10px] text-slate-450 font-extrabold uppercase">
-                        Deuda de Balance actual:
-                      </span>
-                      <span className="text-base font-black text-rose-600">
-                        $
-                        {(
-                          parseFloat(selectedSupplierForPayment.balance) || 0
-                        ).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                      Monto a Liquidar / Abonar ($) *
-                    </label>
-                    <input
-                      type="number"
-                      value={paySupplierAmount}
-                      onChange={(e) => setPaySupplierAmount(e.target.value)}
-                      placeholder="Monto monetario de abono"
-                      step="any"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                        Método de Fluidos
-                      </label>
-                      <select
-                        value={paySupplierMethod}
-                        onChange={(e) => setPaySupplierMethod(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-700"
-                      >
-                        <option value="Efectivo">💵 Efectivo (Caja)</option>
-                        <option value="Tarjeta">💳 Tarjeta Bancaria</option>
-                        <option value="Transferencia">📲 Transferencia</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                        Referencia / Glosa
-                      </label>
-                      <input
-                        type="text"
-                        value={paySupplierReference}
-                        onChange={(e) =>
-                          setPaySupplierReference(e.target.value)
-                        }
-                        placeholder="Cheque, Folio, Transf-id"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-505"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleRegisterSupplierPayment}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 px-4 rounded-xl transition cursor-pointer mt-3 shadow-md"
-                  >
-                    💸 Registrar Pago e Imprimir Comprobante
-                  </button>
-                </div>
-              )}
-            </IonContent>
-          </IonModal>
-
-          {/* THERMAL PAYMENT RECEIPT TICKET COMPROBANTE - PWA REALTIME COMPLIANT */}
-          <IonModal
-            isOpen={!!printedPaymentTicket}
-            onDidDismiss={() => setPrintedPaymentTicket(null)}
-            className="flex items-center justify-center p-4 bg-slate-900/60"
-            style={{
-              "--width": "420px",
-              "--height": "auto",
-              "--max-height": "90vh",
-              "--border-radius": "24px",
-            }}
-          >
-            <div className="bg-slate-800 text-slate-100 h-full flex flex-col justify-between">
-              <IonHeader className="ion-no-border">
-                <IonToolbar
-                  style={{ "--background": "#1e293b", "--color": "white" }}
-                >
-                  <IonTitle>Comprobante de Abono 💸</IonTitle>
-                  <IonButtons slot="end">
-                    <IonButton
-                      onClick={() => setPrintedPaymentTicket(null)}
-                      style={{ fontWeight: "700" }}
-                    >
-                      Cerrar
-                    </IonButton>
-                  </IonButtons>
-                </IonToolbar>
-              </IonHeader>
-
-              {printedPaymentTicket && (
-                <div className="p-5 flex-1 overflow-y-auto space-y-4">
-                  {/* Thermal Paper emulation */}
-                  <div className="bg-white text-slate-900 p-6 rounded-2xl font-mono text-xs shadow-inner border border-slate-200 relative">
-                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-[radial-gradient(circle,transparent_50%,rgba(0,0,0,0.05)_50%)] bg-[length:10px_10px]" />
-
-                    <div className="text-center space-y-1 mb-4">
-                      <div className="text-sm font-black uppercase tracking-widest">
-                        🏪 RESTAURANTE POS EXPRESS
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-bold">
-                        COMPROBANTE DE ABONO A PROVEEDOR
-                      </div>
-                      <div className="text-[8px] text-slate-400">
-                        PAGO UUID: {printedPaymentTicket.id}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    <div className="space-y-1 text-[10px] text-slate-700 mb-4">
-                      <div>
-                        <b>PROVEEDOR:</b> {printedPaymentTicket.supplier?.name}
-                      </div>
-                      <div>
-                        <b>MÉTODO PAGO:</b> {printedPaymentTicket.method}
-                      </div>
-                      <div>
-                        <b>REFERENCIA:</b> {printedPaymentTicket.reference}
-                      </div>
-                      <div>
-                        <b>GIRO COMERCIO:</b>{" "}
-                        {printedPaymentTicket.supplier?.category || "General"}
-                      </div>
-                      <div>
-                        <b>HORA REGISTRO:</b>{" "}
-                        {new Date(
-                          printedPaymentTicket.timestamp,
-                        ).toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-2" />
-
-                    {/* Core computations */}
-                    <div className="space-y-1.5 py-1 text-[11px]">
-                      <div className="flex justify-between">
-                        <span>SALDO ANTERIOR DEUDA:</span>
-                        <span className="font-bold text-slate-700">
-                          ${printedPaymentTicket.previousBalance.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-emerald-600 font-bold text-xs">
-                        <span>MONTO PAGADO / ABONADO:</span>
-                        <span>
-                          -${printedPaymentTicket.amountPaid.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="border-t border-dotted border-slate-200 my-1" />
-                      <div className="flex justify-between font-black text-sm text-indigo-700">
-                        <span>NUEVO SALDO DEUDOR:</span>
-                        <span>
-                          ${printedPaymentTicket.remainingBalance.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-slate-300 my-3" />
-
-                    <div className="text-center text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                      ✅ Sincronizado continuamente por websockets
-                    </div>
-                  </div>
-
-                  <div className="text-center text-xs text-indigo-200 bg-indigo-950/40 p-3 rounded-xl border border-indigo-800/20">
-                    📠 Comprobante registrado. El saldo comercial ha sido
-                    actualizado en tiempo real.
-                  </div>
-                </div>
-              )}
-            </div>
-          </IonModal>
-        </IonContent>
-      </IonPage>
     );
   };
 
@@ -28843,1892 +26453,6 @@ Instrucciones:
       );
       setShowMenuToast(true);
     }
-  };
-
-  const renderOpsInventarios = () => {
-    const filteredInsumos = inventory.filter((item) =>
-      (item.name || "").toLowerCase().includes(opsSearch.toLowerCase()),
-    );
-
-    const filteredMovements = opsInsumoFilter
-      ? inventoryMovements.filter(
-          (mov) => mov.inventoryItemId === opsInsumoFilter,
-        )
-      : inventoryMovements;
-
-    const selectedInsumoItem = inventory.find((i) => i.id === opsInsumoFilter);
-
-    return (
-      <IonPage style={{ background: "#0f172a" }}>
-        <IonHeader>
-          <IonToolbar
-            style={{ "--background": "rgb(30, 41, 59)", "--color": "white" }}
-          >
-            <IonButtons slot="start">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowSidebar(true)}
-                style={{
-                  marginLeft: "8px",
-                  marginRight: "4px",
-                  background: "rgba(255,255,255,0.1)",
-                  border: "none",
-                  borderRadius: "10px",
-                  width: "38px",
-                  height: "38px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "white",
-                }}
-              >
-                <IonIcon icon={menuOutline} style={{ fontSize: "22px" }} />
-              </motion.button>
-              <IonButton onClick={() => setAppMode("floorplan")}>
-                <IonIcon icon={arrowBackOutline} slot="icon-only" />
-              </IonButton>
-            </IonButtons>
-            <IonTitle>Operación de Inventarios 📦</IonTitle>
-          </IonToolbar>
-        </IonHeader>
-
-        <IonContent
-          className="ion-padding"
-          style={{ "--background": "#f8fafc" }}
-        >
-          <div className="w-full space-y-6">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
-                  <span>Inventarios y Logísticas 🔄</span>
-                </h1>
-                <p className="text-blue-100 text-sm mt-1">
-                  Controla de manera precisa las existencias de materia prima y
-                  da seguimiento a los consumos automáticos por venta en tiempo
-                  real.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setOpsInsumoFilter("");
-                    setOpsSearch("");
-                  }}
-                  className="bg-white/10 hover:bg-white/20 text-white font-black px-4 py-2 rounded-2xl text-xs transition flex items-center gap-1.5 border border-white/10 cursor-pointer"
-                >
-                  <IonIcon
-                    icon={refreshCircleOutline}
-                    style={{ fontSize: "16px" }}
-                  />
-                  Restablecer Filtros
-                </button>
-              </div>
-            </div>
-
-            {/* TABS SELECTOR */}
-            <div className="bg-slate-200/60 p-1.5 rounded-2xl flex gap-1 shadow-sm max-w-lg mx-auto border border-slate-100">
-              <button
-                type="button"
-                onClick={() => setActiveInvTab("existencias")}
-                className={`flex-1 py-3 px-4 rounded-xl text-xs font-black tracking-tight uppercase transition flex items-center justify-center gap-1.5 cursor-pointer outline-none border-none ${
-                  activeInvTab === "existencias"
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                    : "bg-transparent text-slate-600 hover:bg-slate-300/40"
-                }`}
-              >
-                📋 Insumos y Existencias
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveInvTab("movimientos")}
-                className={`flex-1 py-3 px-4 rounded-xl text-xs font-black tracking-tight uppercase transition flex items-center justify-center gap-1.5 cursor-pointer outline-none border-none ${
-                  activeInvTab === "movimientos"
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/10"
-                    : "bg-transparent text-slate-600 hover:bg-slate-300/40"
-                }`}
-              >
-                📊 Detalle de Movimientos
-              </button>
-            </div>
-
-            {/* TAB CONTENT */}
-            {activeInvTab === "existencias" ? (
-              <div className="p-0 sm:p-6 bg-transparent sm:bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl shadow-none sm:shadow-sm w-full space-y-4">
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-slate-100 pb-4 px-4 sm:px-0">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight m-0">
-                      <span>Inventario Actual de Insumos</span>
-                      <span className="text-xs px-2.5 py-1 bg-slate-100 rounded-full text-slate-500 font-black">
-                        {inventory.length} Insumos
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400 font-semibold m-0">
-                      📊 Visualización y administración directa del inventario
-                      sincronizado en tiempo real.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-                    {/* Search Field */}
-                    <div className="relative flex-1 sm:w-64">
-                      <input
-                        type="text"
-                        value={opsSearch}
-                        onChange={(e) => setOpsSearch(e.target.value)}
-                        placeholder="🔎 Buscar insumo por nombre..."
-                        className="w-full px-3.5 py-2.5 border border-slate-250 rounded-2xl bg-white text-slate-800 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition shadow-sm"
-                      />
-                    </div>
-
-                    {/* View Mode Toggle Button */}
-                    <div className="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => setOpsViewMode("cards")}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer outline-none border-none uppercase ${
-                          opsViewMode === "cards"
-                            ? "bg-white text-slate-800 shadow"
-                            : "bg-transparent text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        🗂️ Tarjetas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOpsViewMode("table")}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer outline-none border-none uppercase ${
-                          opsViewMode === "table"
-                            ? "bg-white text-slate-800 shadow"
-                            : "bg-transparent text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        📋 Tabla
-                      </button>
-                    </div>
-
-                    {/* Direct Create Button (CRUD feature) */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setInventoryCrudModal({ isOpen: true, item: null })
-                      }
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-2xl shadow transition cursor-pointer border-none uppercase tracking-wide flex items-center justify-center gap-1.5 whitespace-nowrap active:scale-95"
-                    >
-                      ➕ Nuevo Insumo
-                    </button>
-                  </div>
-                </div>
-
-                <div className="w-full px-4 sm:px-0">
-                  {filteredInsumos.length === 0 ? (
-                    <div className="text-center py-16 text-slate-400 text-sm bg-white sm:bg-slate-50/50 border border-slate-200 rounded-3xl">
-                      No se encontraron insumos con ese nombre.
-                    </div>
-                  ) : opsViewMode === "cards" ? (
-                    /* CARDS GRID DISPLAY */
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {filteredInsumos.map((item) => {
-                        const isLow =
-                          item.stock <=
-                          (item.minStock !== undefined ? item.minStock : 5);
-
-                        const startOfTodayForStats = new Date();
-                        startOfTodayForStats.setHours(0, 0, 0, 0);
-
-                        const itemMovsToday = inventoryMovements.filter(
-                          (mov) => {
-                            if (!mov.timestamp) return false;
-                            return (
-                              new Date(mov.timestamp) >= startOfTodayForStats &&
-                              mov.inventoryItemId === item.id
-                            );
-                          },
-                        );
-
-                        const entradas = itemMovsToday
-                          .filter(
-                            (m) => Number(m.qty) > 0 && m.type !== "compra",
-                          )
-                          .reduce((s, m) => s + Number(m.qty), 0);
-                        const compras = itemMovsToday
-                          .filter((m) => m.type === "compra")
-                          .reduce((s, m) => s + Number(m.qty), 0);
-                        const salidas = Math.abs(
-                          itemMovsToday
-                            .filter(
-                              (m) => Number(m.qty) < 0 && m.type !== "venta",
-                            )
-                            .reduce((s, m) => s + Number(m.qty), 0),
-                        );
-                        const ventas = Math.abs(
-                          itemMovsToday
-                            .filter((m) => m.type === "venta")
-                            .reduce((s, m) => s + Number(m.qty), 0),
-                        );
-
-                        const totalEntradas = entradas + compras;
-                        const totalSalidas = salidas + ventas;
-
-                        const stockFinal = Number(item.stock);
-                        const stockInicial =
-                          stockFinal - totalEntradas + totalSalidas;
-
-                        return (
-                          <div
-                            key={item.id}
-                            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="space-y-0.5">
-                                <h4 className="font-black text-slate-800 text-sm leading-snug m-0">
-                                  {item.name}
-                                </h4>
-                                <span className="text-[10px] text-slate-400 font-extrabold uppercase bg-slate-100 px-2 py-0.5 rounded-md">
-                                  {item.category || "Insumo"}
-                                </span>
-                              </div>
-                              <span
-                                className={`px-2 py-1 rounded-xl text-[11px] font-black whitespace-nowrap border ${
-                                  stockFinal < 0
-                                    ? "bg-rose-100 text-rose-700 border-rose-200"
-                                    : isLow
-                                      ? "bg-amber-100 text-amber-700 border-amber-200 animate-pulse"
-                                      : "bg-emerald-150 text-emerald-700 border-emerald-200"
-                                }`}
-                              >
-                                {stockFinal.toFixed(2)} {item.unit}
-                              </span>
-                            </div>
-
-                            {/* Daily breakdown list */}
-                            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-150">
-                              <div className="flex flex-col">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">
-                                  Inv. Inicial
-                                </span>
-                                <span className="text-xs font-black text-slate-600">
-                                  {stockInicial.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="flex flex-col text-right">
-                                <span className="text-[9px] font-bold text-slate-405 uppercase tracking-tight">
-                                  Entradas (+)
-                                </span>
-                                <span className="text-xs font-black text-emerald-600">
-                                  +{totalEntradas.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[9px] font-bold text-slate-405 uppercase tracking-tight">
-                                  Salidas (-)
-                                </span>
-                                <span className="text-xs font-black text-rose-600">
-                                  -{totalSalidas.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="flex flex-col text-right">
-                                <span className="text-[9px] font-bold text-slate-405 uppercase tracking-tight">
-                                  Bal. Final
-                                </span>
-                                <span className="text-xs font-black text-slate-800">
-                                  {stockFinal.toFixed(2)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Interactive CRUD & Quick Actions */}
-                            <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                              {/* Quick Adjustment row */}
-                              <div className="grid grid-cols-2 gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    setSelectedInsumoForMov(item);
-                                    setOpsInsumoId(item.id);
-                                    setOpsMovType("entrada");
-                                    setOpsQty("");
-                                    setOpsConcept("");
-                                    setShowAddMovModal(true);
-                                  }}
-                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-black py-2 rounded-xl transition flex items-center justify-center gap-1 border border-emerald-250 cursor-pointer outline-none"
-                                  title="Registrar entrada/Compra"
-                                >
-                                  📈 Entrada
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSelectedInsumoForMov(item);
-                                    setOpsInsumoId(item.id);
-                                    setOpsMovType("salida");
-                                    setOpsQty("");
-                                    setOpsConcept("");
-                                    setShowAddMovModal(true);
-                                  }}
-                                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-black py-2 rounded-xl transition flex items-center justify-center gap-1 border border-rose-250 cursor-pointer outline-none"
-                                  title="Registrar merma o desperdicio"
-                                >
-                                  📉 Mermar
-                                </button>
-                              </div>
-
-                              {/* CRUD row */}
-                              <div className="grid grid-cols-3 gap-1 pt-1">
-                                <button
-                                  onClick={() => {
-                                    setInventoryCrudModal({
-                                      isOpen: true,
-                                      item: item,
-                                    });
-                                  }}
-                                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9.5px] font-black py-1.5 rounded-lg border border-slate-200 cursor-pointer outline-none"
-                                >
-                                  ✏️ Editar
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setOpsInsumoFilter(item.id);
-                                    setActiveInvTab("movimientos");
-                                  }}
-                                  className="bg-blue-50/55 hover:bg-blue-100 text-blue-700 text-[9.5px] font-black py-1.5 rounded-lg border border-blue-100 cursor-pointer outline-none"
-                                >
-                                  🕒 Hist.
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    if (
-                                      confirm(
-                                        `¿Estás seguro de eliminar el insumo "${item.name}" definitivamente?`,
-                                      )
-                                    ) {
-                                      await deleteInventoryItemFromFirebase(
-                                        item.id,
-                                      );
-                                      triggerAppNotification(
-                                        "🗑️ Insumo Eliminado",
-                                        `Se ha eliminado ${item.name} del stock.`,
-                                        "warning",
-                                      );
-                                    }
-                                  }}
-                                  className="bg-red-50 hover:bg-red-100 text-red-600 text-[9.5px] font-black py-1.5 rounded-lg border border-red-200 cursor-pointer outline-none"
-                                >
-                                  🗑️ Borrar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    /* TABLES COMPACT LAYOUT VIEW */
-                    <div className="overflow-x-auto border border-slate-200 bg-white rounded-2xl shadow-sm">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10.5px] font-black uppercase tracking-wider">
-                            <th className="px-4 py-3.5">Materia Prima</th>
-                            <th className="px-4 py-3.5">Categoría</th>
-                            <th className="px-4 py-3.5 text-center">Inicial</th>
-                            <th className="px-4 py-3.5 text-center">
-                              Entradas
-                            </th>
-                            <th className="px-4 py-3.5 text-center">Salidas</th>
-                            <th className="px-4 py-3.5 text-center">
-                              Existencia Final
-                            </th>
-                            <th className="px-4 py-3.5 text-right pr-6">
-                              Acciones CRUD
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 text-slate-705 text-xs font-semibold">
-                          {filteredInsumos.map((item) => {
-                            const isLow =
-                              item.stock <=
-                              (item.minStock !== undefined ? item.minStock : 5);
-
-                            const startOfTodayForStats = new Date();
-                            startOfTodayForStats.setHours(0, 0, 0, 0);
-
-                            const itemMovsToday = inventoryMovements.filter(
-                              (mov) => {
-                                if (!mov.timestamp) return false;
-                                return (
-                                  new Date(mov.timestamp) >=
-                                    startOfTodayForStats &&
-                                  mov.inventoryItemId === item.id
-                                );
-                              },
-                            );
-
-                            const entradas = itemMovsToday
-                              .filter(
-                                (m) => Number(m.qty) > 0 && m.type !== "compra",
-                              )
-                              .reduce((s, m) => s + Number(m.qty), 0);
-                            const compras = itemMovsToday
-                              .filter((m) => m.type === "compra")
-                              .reduce((s, m) => s + Number(m.qty), 0);
-                            const salidas = Math.abs(
-                              itemMovsToday
-                                .filter(
-                                  (m) =>
-                                    Number(m.qty) < 0 && m.type !== "venta",
-                                )
-                                .reduce((s, m) => s + Number(m.qty), 0),
-                            );
-                            const ventas = Math.abs(
-                              itemMovsToday
-                                .filter((m) => m.type === "venta")
-                                .reduce((s, m) => s + Number(m.qty), 0),
-                            );
-
-                            const totalEntradas = entradas + compras;
-                            const totalSalidas = salidas + ventas;
-
-                            const stockFinal = Number(item.stock);
-                            const stockInicial =
-                              stockFinal - totalEntradas + totalSalidas;
-
-                            return (
-                              <tr
-                                key={item.id}
-                                className="hover:bg-slate-50 transition"
-                              >
-                                <td className="px-4 py-3 font-black text-slate-800">
-                                  {item.name}
-                                </td>
-                                <td className="px-4 py-3 text-slate-400 font-extrabold uppercase text-[10px]">
-                                  {item.category || "Insumo"}
-                                </td>
-                                <td className="px-4 py-3 text-center text-slate-600 font-bold">
-                                  {stockInicial.toFixed(2)} {item.unit}
-                                </td>
-                                <td className="px-4 py-3 text-center text-emerald-600 font-extrabold">
-                                  +{totalEntradas.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-3 text-center text-rose-600 font-extrabold">
-                                  -{totalSalidas.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span
-                                    className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
-                                      stockFinal < 0
-                                        ? "bg-rose-100 text-rose-700 border-rose-200"
-                                        : isLow
-                                          ? "bg-amber-100 text-amber-700 border-amber-200"
-                                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                                    }`}
-                                  >
-                                    {stockFinal.toFixed(2)} {item.unit}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 pr-6">
-                                  <div className="flex gap-2 justify-end">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedInsumoForMov(item);
-                                        setOpsInsumoId(item.id);
-                                        setOpsMovType("entrada");
-                                        setOpsQty("");
-                                        setOpsConcept("");
-                                        setShowAddMovModal(true);
-                                      }}
-                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[10px] py-1.5 px-2.5 rounded-xl border border-emerald-200 cursor-pointer"
-                                    >
-                                      📈 +
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setSelectedInsumoForMov(item);
-                                        setOpsInsumoId(item.id);
-                                        setOpsMovType("salida");
-                                        setOpsQty("");
-                                        setOpsConcept("");
-                                        setShowAddMovModal(true);
-                                      }}
-                                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-[10px] py-1.5 px-2.5 rounded-xl border border-rose-200 cursor-pointer"
-                                    >
-                                      📉 -
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        setInventoryCrudModal({
-                                          isOpen: true,
-                                          item: item,
-                                        })
-                                      }
-                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] py-1.5 px-2 rounded-xl border border-slate-200 cursor-pointer"
-                                      title="Editar Insumo"
-                                    >
-                                      ✏️
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpsInsumoFilter(item.id);
-                                        setActiveInvTab("movimientos");
-                                      }}
-                                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[10px] py-1.5 px-2 rounded-xl border border-blue-150 cursor-pointer"
-                                      title="Ver movimientos"
-                                    >
-                                      🕒
-                                    </button>
-                                    <button
-                                      onClick={async () => {
-                                        if (
-                                          confirm(
-                                            `¿Estás seguro de eliminar definitivamente el insumo "${item.name}"?`,
-                                          )
-                                        ) {
-                                          await deleteInventoryItemFromFirebase(
-                                            item.id,
-                                          );
-                                          triggerAppNotification(
-                                            "🗑️ Insumo Eliminado",
-                                            `Se ha eliminado ${item.name} del stock.`,
-                                            "warning",
-                                          );
-                                        }
-                                      }}
-                                      className="bg-red-50 hover:bg-red-100 text-red-650 font-black text-[10px] py-1.5 px-2 rounded-xl border border-red-150 cursor-pointer"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-sm w-full space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
-                  <div>
-                    <h3 className="text-base font-black text-slate-800 flex items-center gap-1.5 uppercase tracking-tight">
-                      <span>Últimos Movimientos Desglosados</span>
-                      <span className="text-xs px-2.5 py-1 bg-slate-100 rounded-full text-slate-500 font-bold">
-                        {filteredMovements.length} Registros
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400 font-bold">
-                      Historial completo de entradas, mermas y salidas
-                      automáticas por venta sincronizado por WebSockets 📶.
-                    </p>
-                  </div>
-
-                  {opsInsumoFilter && (
-                    <button
-                      onClick={() => setOpsInsumoFilter("")}
-                      className="bg-red-50 hover:bg-red-100 hover:text-red-700 text-red-600 font-black px-3.5 py-2 rounded-2xl text-[10.5px] uppercase tracking-wider transition border-none cursor-pointer"
-                    >
-                      Mostrar Todo 🔄
-                    </button>
-                  )}
-                </div>
-
-                {opsInsumoFilter && selectedInsumoItem && (
-                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl flex justify-between items-center text-xs text-blue-800">
-                    <span className="font-bold">
-                      📍 Filtrado para el insumo:{" "}
-                      <strong className="font-black text-blue-900">
-                        "{selectedInsumoItem?.name}"
-                      </strong>{" "}
-                      ({selectedInsumoItem?.unit}).
-                    </span>
-                    <button
-                      onClick={() => setOpsInsumoFilter("")}
-                      className="font-black underline hover:text-blue-900 text-xs"
-                    >
-                      Limpiar Filtro
-                    </button>
-                  </div>
-                )}
-
-                {filteredMovements.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 text-sm border-2 border-dashed border-slate-100 rounded-2xl">
-                    <span className="block text-2xl mb-2">🗓️</span>
-                    No hay registros de movimientos en esta sección. Las ventas
-                    o ajustes manuales registrarán movimientos automáticamente.
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                    {filteredMovements.map((mov) => {
-                      const relatedInsumo = inventory.find(
-                        (i) => i.id === mov.inventoryItemId,
-                      );
-                      const isPlus = mov.qty > 0;
-                      const formattedDate = mov.timestamp
-                        ? new Date(mov.timestamp).toLocaleString("es-MX", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })
-                        : "Reciente";
-
-                      return (
-                        <div
-                          key={mov.id}
-                          className="bg-slate-50 hover:bg-slate-100/70 border border-slate-100 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-slate-850 text-sm font-sans">
-                                {relatedInsumo?.name || "Insumo Desconocido"}
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                  mov.type === "venta"
-                                    ? "bg-purple-100 text-purple-700"
-                                    : isPlus
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : "bg-rose-100 text-rose-700"
-                                }`}
-                              >
-                                {mov.type === "venta"
-                                  ? "🛒 VENTA (AUTO)"
-                                  : isPlus
-                                    ? "📈 AJUSTE ENTRADA"
-                                    : "📉 AJUSTE SALIDA"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 font-semibold leading-relaxed">
-                              {mov.concept}
-                            </p>
-                            <div className="flex items-center gap-4 text-[10px] text-slate-400 font-bold">
-                              <span>
-                                👤 Registró: {mov.executedBy || "Sistema"}
-                              </span>
-                              <span>🗓️ {formattedDate}</span>
-                            </div>
-                          </div>
-                          <div className="text-right whitespace-nowrap">
-                            <span
-                              className={`text-sm font-black tracking-tight ${
-                                isPlus ? "text-emerald-600" : "text-rose-600"
-                              }`}
-                            >
-                              {isPlus
-                                ? `+${Number(mov.qty).toFixed(2)}`
-                                : `${Number(mov.qty).toFixed(2)}`}{" "}
-                              {relatedInsumo?.unit || "pza"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* INTERACTIVE INSUMO DIALOG / PROMPT MODAL */}
-            <IonModal
-              isOpen={showInsumoActionModal}
-              onDidDismiss={() => {
-                setShowInsumoActionModal(false);
-                setSelectedInsumoForMov(null);
-              }}
-              style={{
-                "--border-radius": "24px",
-                "--height": "auto",
-                "--max-height": "400px",
-              }}
-              className="rounded-3xl"
-            >
-              <div className="bg-slate-900 text-white p-6 space-y-6 flex flex-col justify-center">
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-blue-500/10 text-blue-400 rounded-full flex items-center justify-center text-3xl mx-auto border border-blue-500/20">
-                    📦
-                  </div>
-                  <h3 className="text-md font-black tracking-tight text-white uppercase m-0 p-0">
-                    {selectedInsumoForMov?.name}
-                  </h3>
-                  <p className="text-xs text-slate-400 font-black uppercase m-0 p-0">
-                    Existencia en Caja:{" "}
-                    <span className="text-emerald-400 font-extrabold">
-                      {selectedInsumoForMov?.stock?.toFixed(2)}{" "}
-                      {selectedInsumoForMov?.unit}
-                    </span>
-                  </p>
-                  <div className="text-slate-300 text-xs py-2 px-3 bg-slate-800 rounded-2xl font-bold">
-                    ¿Deseas agregar un movimiento a este insumo?
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <button
-                    onClick={() => {
-                      if (selectedInsumoForMov) {
-                        setOpsInsumoId(selectedInsumoForMov.id);
-                        setOpsMovType("entrada");
-                        setOpsQty("");
-                        setOpsConcept("");
-                      }
-                      setShowInsumoActionModal(false);
-                      setShowAddMovModal(true);
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-550 text-white font-black text-xs py-3.5 rounded-2xl tracking-wide uppercase transition active:scale-95 border-none outline-none cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    ➕ Registrar Movimiento / Ajuste
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (selectedInsumoForMov) {
-                        setOpsInsumoFilter(selectedInsumoForMov.id);
-                      }
-                      setActiveInvTab("movimientos");
-                      setShowInsumoActionModal(false);
-                    }}
-                    className="w-full bg-slate-800 hover:bg-slate-755 text-slate-100 border border-slate-700/60 font-black text-xs py-3.5 rounded-2xl tracking-wide uppercase transition active:scale-95 outline-none cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    🕒 Ver Historial de Movimientos
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowInsumoActionModal(false);
-                      setSelectedInsumoForMov(null);
-                    }}
-                    className="w-full bg-slate-950 hover:bg-slate-900 text-slate-400 font-bold text-xs py-2.5 rounded-2xl tracking-wide uppercase transition active:scale-95 border-none outline-none cursor-pointer text-center"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </div>
-            </IonModal>
-
-            {/* POPUP FORM MODAL TO REGISTER MOVEMENT */}
-            <IonModal
-              isOpen={showAddMovModal}
-              onDidDismiss={() => {
-                setShowAddMovModal(false);
-                setSelectedInsumoForMov(null);
-              }}
-              style={{ "--border-radius": "24px" }}
-              className="rounded-3xl"
-            >
-              <div className="flex flex-col bg-slate-900 text-white h-full overflow-y-auto">
-                <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-850 bg-slate-900 w-full">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">📈</span>
-                    <div>
-                      <h3 className="text-sm font-black text-blue-400 tracking-tight uppercase m-0 p-0">
-                        Ajuste de Insumo
-                      </h3>
-                      <p className="text-[10px] text-slate-300 font-bold m-0 p-0 mt-0.5">
-                        Suma entradas de stock o resta mermas/desperdicios
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMovModal(false)}
-                    className="bg-white/10 hover:bg-white/20 text-white rounded-full p-1.5 cursor-pointer outline-none border-none transition"
-                  >
-                    <IonIcon icon={closeOutline} style={{ fontSize: "18px" }} />
-                  </button>
-                </div>
-
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    await handleSaveMovement(e);
-                    setShowAddMovModal(false);
-                  }}
-                  className="p-5 space-y-4 flex-1 flex flex-col justify-between"
-                >
-                  <div className="space-y-4">
-                    {/* Selected Insumo Display */}
-                    <div className="bg-slate-850 border border-slate-750 rounded-2xl p-4 text-center">
-                      <span className="text-xs font-bold text-slate-550 block uppercase mb-1">
-                        Insumo Seleccionado
-                      </span>
-                      <span className="text-lg font-extrabold text-white uppercase block">
-                        {selectedInsumoForMov?.name ||
-                          inventory.find((i) => i.id === opsInsumoId)?.name}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-bold block mt-1">
-                        Unidad de medida:{" "}
-                        <span className="text-indigo-400 font-black">
-                          {selectedInsumoForMov?.unit ||
-                            inventory.find((i) => i.id === opsInsumoId)?.unit}
-                        </span>
-                      </span>
-                    </div>
-
-                    {/* Live Stats Preview as requested */}
-                    {(() => {
-                      const activeItem =
-                        selectedInsumoForMov ||
-                        inventory.find((i) => i.id === opsInsumoId);
-                      if (!activeItem) return null;
-
-                      const startOfTodayForStats = new Date();
-                      startOfTodayForStats.setHours(0, 0, 0, 0);
-
-                      const itemMovsToday = inventoryMovements.filter((mov) => {
-                        if (!mov.timestamp) return false;
-                        return (
-                          new Date(mov.timestamp) >= startOfTodayForStats &&
-                          mov.inventoryItemId === activeItem.id
-                        );
-                      });
-
-                      const entradas = itemMovsToday
-                        .filter((m) => Number(m.qty) > 0 && m.type !== "compra")
-                        .reduce((s, m) => s + Number(m.qty), 0);
-                      const compras = itemMovsToday
-                        .filter((m) => m.type === "compra")
-                        .reduce((s, m) => s + Number(m.qty), 0);
-                      const salidas = Math.abs(
-                        itemMovsToday
-                          .filter(
-                            (m) => Number(m.qty) < 0 && m.type !== "venta",
-                          )
-                          .reduce((s, m) => s + Number(m.qty), 0),
-                      );
-                      const ventas = Math.abs(
-                        itemMovsToday
-                          .filter((m) => m.type === "venta")
-                          .reduce((s, m) => s + Number(m.qty), 0),
-                      );
-
-                      const totalEntradas = entradas + compras;
-                      const totalSalidas = salidas + ventas;
-
-                      const stockFinal = Number(activeItem.stock);
-                      const stockInicial =
-                        stockFinal - totalEntradas + totalSalidas;
-
-                      // Live projected balance
-                      const inputQty = parseFloat(opsQty) || 0;
-                      const isAddition = opsMovType === "entrada";
-                      const projectedStock = isAddition
-                        ? stockFinal + inputQty
-                        : stockFinal - inputQty;
-
-                      return (
-                        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-left">
-                          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block border-b border-slate-800 pb-1.5 mb-1">
-                            📊 Resumen de Saldos (Hoy)
-                          </span>
-                          <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-semibold text-slate-300">
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">Inicial:</span>
-                              <span className="text-white font-bold">
-                                {stockInicial.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">
-                                Entradas (+):
-                              </span>
-                              <span className="text-emerald-400 font-bold">
-                                +{totalEntradas.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">
-                                Salidas (-):
-                              </span>
-                              <span className="text-rose-400 font-bold">
-                                -{totalSalidas.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">
-                                Balance Final:
-                              </span>
-                              <span className="text-indigo-400 font-extrabold">
-                                {stockFinal.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {inputQty > 0 && (
-                            <div className="bg-indigo-950/40 border border-indigo-500/20 p-2.5 rounded-xl text-[11px] text-indigo-300 font-bold flex justify-between items-center mt-1">
-                              <span>🔮 Balance Proyectado:</span>
-                              <span className="font-extrabold text-white">
-                                {stockFinal.toFixed(2)} ➡️{" "}
-                                {projectedStock.toFixed(2)} {activeItem.unit}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Action Type Group Buttons */}
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">
-                        Selecciona Tipo de Movimiento:
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setOpsMovType("entrada")}
-                          className={`py-3 px-4 rounded-2xl text-xs font-black tracking-tight border transition flex items-center justify-center gap-1.5 cursor-pointer outline-none ${
-                            opsMovType === "entrada"
-                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50 ring-2 ring-emerald-500/10"
-                              : "bg-slate-950 text-slate-450 border-slate-800 hover:text-white"
-                          }`}
-                        >
-                          📈 Entrada (Suma)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOpsMovType("salida")}
-                          className={`py-3 px-4 rounded-2xl text-xs font-black tracking-tight border transition flex items-center justify-center gap-1.5 cursor-pointer outline-none ${
-                            opsMovType === "salida"
-                              ? "bg-rose-500/20 text-rose-400 border-rose-500/50 ring-2 ring-rose-500/10"
-                              : "bg-slate-950 text-slate-450 border-slate-800 hover:text-white"
-                          }`}
-                        >
-                          📉 Salida / Merma (Resta)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Quantity to adjust */}
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 block">
-                        Ingresa Cantidad Física *
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="any"
-                          value={opsQty}
-                          onChange={(e) => setOpsQty(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-5 pr-14 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-                          required
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-405 uppercase bg-slate-800 px-2 py-0.5 rounded-lg">
-                          {selectedInsumoForMov?.unit ||
-                            inventory.find((i) => i.id === opsInsumoId)?.unit ||
-                            "pza"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Concept text note */}
-                    <div>
-                      <label className="text-[10px] font-black text-slate-455 uppercase tracking-wider mb-1 block">
-                        Concepto del Ajuste (Notas)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={opsConcept}
-                        onChange={(e) => setOpsConcept(e.target.value)}
-                        placeholder="Ej: Compra local extra, desperdicio de cocina, merma de turno..."
-                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition resize-none font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 px-4 rounded-2xl transition duration-200 shadow-md cursor-pointer text-xs uppercase tracking-wide border-none outline-none text-center"
-                    >
-                      Confirmar y Guardar Ajuste ✓
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </IonModal>
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
-
-  const renderInventarioV2 = () => {
-    // 1. Calculations & Filters
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    // Compute dynamic categories present in the inventory items
-    const rawCategories = inventory.map((item) => item.category).filter(Boolean);
-    const uniqueCategories = ["Todos", ...Array.from(new Set(rawCategories))];
-
-    // Filter items based on Category tab and Search query
-    const filteredInsumos = inventory.filter((item) => {
-      const matchesCategory =
-        v2CategoryFilter === "Todos" ||
-        item.category?.toLowerCase() === v2CategoryFilter.toLowerCase();
-      const matchesSearch =
-        !v2Search ||
-        item.name?.toLowerCase().includes(v2Search.toLowerCase()) ||
-        item.category?.toLowerCase().includes(v2Search.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    const handleOpenDetails = (item: any, type: "entrada" | "salida") => {
-      setV2DetailModal({
-        isOpen: true,
-        item,
-        type,
-      });
-      setV2DetailPeriod("hoy"); // Default to today
-    };
-
-    // Calculate sum of movements today to show at the top overview cards!
-    const todayMovements = inventoryMovements.filter((m) => {
-      if (!m.timestamp) return false;
-      return new Date(m.timestamp) >= startOfToday;
-    });
-
-    const totalTodayEntradasCount = todayMovements
-      .filter((m) => Number(m.qty) > 0)
-      .reduce((sum, m) => sum + Number(m.qty), 0);
-
-    const totalTodaySalidasCount = todayMovements
-      .filter((m) => Number(m.qty) < 0)
-      .reduce((sum, m) => sum + Math.abs(Number(m.qty)), 0);
-
-    return (
-      <IonPage>
-        <IonHeader className="ion-no-border">
-          <IonToolbar
-            style={{
-              "--background": "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-              "--color": "white",
-              padding: "8px 4px",
-            }}
-          >
-            <IonButtons slot="start">
-              <IonButton onClick={() => setShowSidebar(true)}>
-                <IonIcon icon={menuOutline} style={{ fontSize: "24px" }} />
-              </IonButton>
-              <IonButton onClick={() => setAppMode("floorplan")}>
-                <IonIcon icon={arrowBackOutline} style={{ fontSize: "20px" }} />
-                <span className="hidden sm:inline ml-1 font-bold text-sm">Menú</span>
-              </IonButton>
-            </IonButtons>
-            <IonTitle className="text-center font-black text-base sm:text-lg tracking-tight">
-              📋 Inventario Formulario 2
-            </IonTitle>
-            <IonButtons slot="end" className="pr-2">
-              <button
-                onClick={() => {
-                  // Trigger a sync or refresh
-                  setInventory([...inventory]);
-                  setInventoryMovements([...inventoryMovements]);
-                }}
-                className="bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs py-1.5 px-3 rounded-full transition active:scale-95 flex items-center gap-1 cursor-pointer border-none"
-              >
-                <IonIcon icon={refreshCircleOutline} style={{ fontSize: "16px" }} />
-                <span className="hidden md:inline">Actualizar</span>
-              </button>
-            </IonButtons>
-          </IonToolbar>
-        </IonHeader>
-
-        <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-          <div className="max-w-7xl mx-auto space-y-6 pb-20">
-            {/* Page Subheader */}
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-3xl p-6 border border-indigo-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h2 className="text-xl font-black text-indigo-950">Formulario Control de Inventario v2</h2>
-                <p className="text-xs text-indigo-700/80 mt-1 max-w-xl font-medium">
-                  Vista optimizada para dispositivos móviles con filas expandibles y desglose detallado de movimientos. Haz clic en las cantidades de Entrada o Salida para ver su procedencia (compras, gastos, mermas o ventas).
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  // Open the add new inventory item modal
-                  setInventoryCrudModal({ isOpen: true, item: null });
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs py-3 px-5 rounded-2xl transition shadow-md hover:shadow-lg active:scale-95 flex items-center gap-1.5 cursor-pointer border-none"
-              >
-                <span className="text-base">+</span>
-                <span>Nuevo Insumo / Materia Prima</span>
-              </button>
-            </div>
-
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl">
-                  📦
-                </div>
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Insumos</span>
-                  <span className="text-lg font-black text-slate-800">{inventory.length} items</span>
-                </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold text-xl">
-                  📈
-                </div>
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Entradas Hoy</span>
-                  <span className="text-lg font-black text-emerald-600">+{totalTodayEntradasCount.toFixed(2)}</span>
-                </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center font-bold text-xl">
-                  📉
-                </div>
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Salidas / Mermas Hoy</span>
-                  <span className="text-lg font-black text-rose-600">-{totalTodaySalidasCount.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Search and Filters Section */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-4">
-              <div className="flex flex-col md:flex-row gap-4 items-center">
-                {/* Search Bar */}
-                <div className="relative w-full md:flex-1">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                    🔍
-                  </span>
-                  <input
-                    type="text"
-                    value={v2Search}
-                    onChange={(e) => setV2Search(e.target.value)}
-                    placeholder="Buscar insumos por nombre o categoría..."
-                    className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition font-bold"
-                  />
-                  {v2Search && (
-                    <button
-                      onClick={() => setV2Search("")}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer border-none bg-transparent"
-                    >
-                      Limpiar
-                    </button>
-                  )}
-                </div>
-
-                {/* Quick Info Badge */}
-                <div className="text-slate-500 text-xs font-bold bg-slate-50 border border-slate-100 rounded-2xl px-4 py-2.5 w-full md:w-auto text-center md:text-left">
-                  Mostrando <span className="text-indigo-600 font-extrabold">{filteredInsumos.length}</span> de <span className="font-extrabold">{inventory.length}</span> insumos
-                </div>
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
-                {uniqueCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setV2CategoryFilter(cat)}
-                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition cursor-pointer border-none ${
-                      v2CategoryFilter === cat
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Empty State */}
-            {filteredInsumos.length === 0 && (
-              <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center shadow-sm">
-                <span className="text-5xl block mb-4">📦</span>
-                <h3 className="text-lg font-black text-slate-800">No se encontraron insumos</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-2 font-medium">
-                  Prueba cambiando el filtro de categoría o buscando un término diferente. Si el insumo no existe, puedes crearlo presionando el botón "Nuevo Insumo".
-                </p>
-                <button
-                  onClick={() => {
-                    setV2Search("");
-                    setV2CategoryFilter("Todos");
-                  }}
-                  className="mt-6 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs py-2.5 px-6 rounded-xl transition cursor-pointer border-none"
-                >
-                  Restaurar filtros
-                </button>
-              </div>
-            )}
-
-            {/* Desktop Table View */}
-            {filteredInsumos.length > 0 && (
-              <div className="hidden md:block overflow-hidden border border-slate-200 bg-white rounded-3xl shadow-sm">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10.5px] font-black uppercase tracking-wider font-sans">
-                      <th className="px-6 py-4">Materia Prima / Insumo</th>
-                      <th className="px-6 py-4">Categoría</th>
-                      <th className="px-6 py-4 text-center">Inicial</th>
-                      <th className="px-6 py-4 text-center">Entradas (+)</th>
-                      <th className="px-6 py-4 text-center">Salidas (-)</th>
-                      <th className="px-6 py-4 text-center">Actual / Final</th>
-                      <th className="px-6 py-4 text-right pr-8">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
-                    {filteredInsumos.map((item) => {
-                      const itemMovsToday = inventoryMovements.filter((mov) => {
-                        if (!mov.timestamp) return false;
-                        return (
-                          new Date(mov.timestamp) >= startOfToday &&
-                          mov.inventoryItemId === item.id
-                        );
-                      });
-
-                      const totalEntradas = itemMovsToday
-                        .filter((mov) => Number(mov.qty) > 0)
-                        .reduce((sum, mov) => sum + Number(mov.qty), 0);
-
-                      const totalSalidas = itemMovsToday
-                        .filter((mov) => Number(mov.qty) < 0)
-                        .reduce((sum, mov) => sum + Math.abs(Number(mov.qty)), 0);
-
-                      const stockFinal = Number(item.stock);
-                      const stockInicial = stockFinal - totalEntradas + totalSalidas;
-                      const isLow = stockFinal <= Number(item.minAlert || 0);
-
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                          <td className="px-6 py-4">
-                            <div className="font-black text-slate-800 text-sm">{item.name}</div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">Mínimo: {item.minAlert || 0} {item.unit}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-slate-550 font-extrabold uppercase text-[9px] bg-slate-50 border border-slate-150 rounded-md px-2.5 py-1">
-                              {item.category || "Insumo"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center text-slate-600 font-bold">
-                            {stockInicial.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {totalEntradas > 0 ? (
-                              <button
-                                onClick={() => handleOpenDetails(item, "entrada")}
-                                className="px-3 py-1.5 text-xs font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 cursor-pointer transition active:scale-95 shadow-xs inline-flex items-center gap-1"
-                              >
-                                📈 +{totalEntradas.toFixed(2)}
-                              </button>
-                            ) : (
-                              <span className="text-slate-350 font-bold">0.00</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {totalSalidas > 0 ? (
-                              <button
-                                onClick={() => handleOpenDetails(item, "salida")}
-                                className="px-3 py-1.5 text-xs font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 cursor-pointer transition active:scale-95 shadow-xs inline-flex items-center gap-1"
-                              >
-                                📉 -{totalSalidas.toFixed(2)}
-                              </button>
-                            ) : (
-                              <span className="text-slate-350 font-bold">0.00</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black border ${
-                              stockFinal < 0
-                                ? "bg-rose-100 text-rose-700 border-rose-200"
-                                : isLow
-                                ? "bg-amber-100 text-amber-700 border-amber-200"
-                                : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                            }`}>
-                              {stockFinal.toFixed(2)} {item.unit}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 pr-8">
-                            <div className="flex gap-1.5 justify-end">
-                              <button
-                                onClick={() => {
-                                  setSelectedInsumoForMov(item);
-                                  setOpsInsumoId(item.id);
-                                  setOpsMovType("entrada");
-                                  setOpsQty("");
-                                  setOpsConcept("");
-                                  setShowAddMovModal(true);
-                                }}
-                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[10px] py-1.5 px-2.5 rounded-xl border border-emerald-200 cursor-pointer"
-                                title="Entrada manual"
-                              >
-                                + Entrada
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedInsumoForMov(item);
-                                  setOpsInsumoId(item.id);
-                                  setOpsMovType("salida");
-                                  setOpsQty("");
-                                  setOpsConcept("");
-                                  setShowAddMovModal(true);
-                                }}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-[10px] py-1.5 px-2.5 rounded-xl border border-rose-200 cursor-pointer"
-                                title="Merma manual"
-                              >
-                                - Merma
-                              </button>
-                              <button
-                                onClick={() => setInventoryCrudModal({ isOpen: true, item })}
-                                className="bg-slate-50 hover:bg-slate-100 text-slate-600 font-black text-[10px] py-1.5 px-2 rounded-xl border border-slate-200 cursor-pointer"
-                                title="Editar"
-                              >
-                                ✏️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Mobile Stacked Table View */}
-            {filteredInsumos.length > 0 && (
-              <div className="block md:hidden space-y-4">
-                {filteredInsumos.map((item) => {
-                  const itemMovsToday = inventoryMovements.filter((mov) => {
-                    if (!mov.timestamp) return false;
-                    return (
-                      new Date(mov.timestamp) >= startOfToday &&
-                      mov.inventoryItemId === item.id
-                    );
-                  });
-
-                  const totalEntradas = itemMovsToday
-                    .filter((mov) => Number(mov.qty) > 0)
-                    .reduce((sum, mov) => sum + Number(mov.qty), 0);
-
-                  const totalSalidas = itemMovsToday
-                    .filter((mov) => Number(mov.qty) < 0)
-                    .reduce((sum, mov) => sum + Math.abs(Number(mov.qty)), 0);
-
-                  const stockFinal = Number(item.stock);
-                  const stockInicial = stockFinal - totalEntradas + totalSalidas;
-                  const isLow = stockFinal <= Number(item.minAlert || 0);
-
-                  return (
-                    <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm hover:shadow-md transition duration-200">
-                      {/* Name Row (Spans full width as requested) */}
-                      <div className="flex justify-between items-start pb-2.5 mb-2.5 border-b border-slate-100">
-                        <div>
-                          <h4 className="text-sm font-black text-slate-800 leading-tight">{item.name}</h4>
-                          <span className="inline-block text-[9px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md font-bold uppercase mt-1">
-                            {item.category || "Insumo"}
-                          </span>
-                        </div>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-extrabold whitespace-nowrap">
-                          {item.unit}
-                        </span>
-                      </div>
-
-                      {/* Responsive Grid with Inicial, Entradas, Salidas, Final/Actual */}
-                      <div className="grid grid-cols-4 gap-2 text-center bg-slate-50 p-2.5 rounded-2xl border border-slate-100/80 mb-3">
-                        <div className="flex flex-col items-center justify-center">
-                          <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider">Inicial</span>
-                          <span className="text-xs font-bold text-slate-700 mt-1">{stockInicial.toFixed(2)}</span>
-                        </div>
-                        <div className="flex flex-col items-center justify-center">
-                          <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider">Entradas</span>
-                          {totalEntradas > 0 ? (
-                            <button
-                              onClick={() => handleOpenDetails(item, "entrada")}
-                              className="mt-1 px-2 py-0.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 cursor-pointer transition active:scale-95 shadow-xs"
-                            >
-                              +{totalEntradas.toFixed(2)}
-                            </button>
-                          ) : (
-                            <span className="mt-1 text-xs font-bold text-slate-350">0.00</span>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-center justify-center">
-                          <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider">Salidas</span>
-                          {totalSalidas > 0 ? (
-                            <button
-                              onClick={() => handleOpenDetails(item, "salida")}
-                              className="mt-1 px-2 py-0.5 text-[10px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 cursor-pointer transition active:scale-95 shadow-xs"
-                            >
-                              -{totalSalidas.toFixed(2)}
-                            </button>
-                          ) : (
-                            <span className="mt-1 text-xs font-bold text-slate-350">0.00</span>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-center justify-center">
-                          <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider">Actual</span>
-                          <span className={`mt-1 text-xs font-black px-1.5 py-0.5 rounded-md ${
-                            stockFinal < 0
-                              ? "bg-rose-100 text-rose-700"
-                              : isLow
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}>
-                            {stockFinal.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Quick Actions at Bottom of Card */}
-                      <div className="flex justify-end gap-1.5 pt-2.5 border-t border-slate-100/50">
-                        <button
-                          onClick={() => {
-                            setSelectedInsumoForMov(item);
-                            setOpsInsumoId(item.id);
-                            setOpsMovType("entrada");
-                            setOpsQty("");
-                            setOpsConcept("");
-                            setShowAddMovModal(true);
-                          }}
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] py-1.5 px-3 rounded-xl border border-emerald-100 cursor-pointer"
-                        >
-                          📈 + Entrada
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedInsumoForMov(item);
-                            setOpsInsumoId(item.id);
-                            setOpsMovType("salida");
-                            setOpsQty("");
-                            setOpsConcept("");
-                            setShowAddMovModal(true);
-                          }}
-                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] py-1.5 px-3 rounded-xl border border-rose-150 cursor-pointer"
-                        >
-                          📉 - Salida
-                        </button>
-                        <button
-                          onClick={() => setInventoryCrudModal({ isOpen: true, item })}
-                          className="bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-[10px] py-1.5 px-2.5 rounded-xl border border-slate-200 cursor-pointer"
-                        >
-                          ✏️
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* V2 Movements Detail Modal overlay */}
-          {v2DetailModal.isOpen && v2DetailModal.item && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-              <div className="bg-white w-full max-w-lg rounded-3xl shadow-xl overflow-hidden flex flex-col max-h-[85vh] border border-slate-100 animate-slideUp">
-                {/* Modal Header */}
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-5 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-base font-black">Detalles de Movimiento</h3>
-                    <p className="text-xs text-white/80 font-medium mt-0.5">
-                      {v2DetailModal.item.name} ({v2DetailModal.item.unit})
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setV2DetailModal({ isOpen: false, item: null, type: null })}
-                    className="text-white hover:text-slate-200 p-1.5 rounded-full hover:bg-white/10 transition cursor-pointer border-none bg-transparent"
-                  >
-                    <IonIcon icon={closeOutline} style={{ fontSize: "24px" }} />
-                  </button>
-                </div>
-
-                {/* Modal Body */}
-                <div className="p-5 flex-1 overflow-y-auto space-y-4">
-                  {/* Period Filter Toggle */}
-                  <div className="flex bg-slate-100 p-1 rounded-2xl">
-                    <button
-                      onClick={() => setV2DetailPeriod("hoy")}
-                      className={`flex-1 py-2 px-3 text-xs font-black rounded-xl uppercase transition cursor-pointer border-none ${
-                        v2DetailPeriod === "hoy"
-                          ? "bg-white text-indigo-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-750"
-                      }`}
-                    >
-                      Hoy 📅
-                    </button>
-                    <button
-                      onClick={() => setV2DetailPeriod("historico")}
-                      className={`flex-1 py-2 px-3 text-xs font-black rounded-xl uppercase transition cursor-pointer border-none ${
-                        v2DetailPeriod === "historico"
-                          ? "bg-white text-indigo-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-750"
-                      }`}
-                    >
-                      Historial Completo 🕒
-                    </button>
-                  </div>
-
-                  {/* Filter Movements List */}
-                  {(() => {
-                    let movs = inventoryMovements.filter(
-                      (m) => m.inventoryItemId === v2DetailModal.item?.id
-                    );
-
-                    if (v2DetailPeriod === "hoy") {
-                      movs = movs.filter((m) => {
-                        if (!m.timestamp) return false;
-                        return new Date(m.timestamp) >= startOfToday;
-                      });
-                    }
-
-                    if (v2DetailModal.type === "entrada") {
-                      movs = movs.filter((m) => Number(m.qty) > 0);
-                    } else if (v2DetailModal.type === "salida") {
-                      movs = movs.filter((m) => Number(m.qty) < 0);
-                    }
-
-                    // Sort newest first
-                    movs.sort((a, b) => {
-                      const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-                      const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-                      return tB - tA;
-                    });
-
-                    if (movs.length === 0) {
-                      return (
-                        <div className="py-12 text-center text-slate-400">
-                          <span className="text-4xl block mb-2">📋</span>
-                          <p className="text-xs font-bold">Sin movimientos de {v2DetailModal.type === "entrada" ? "entrada" : "salida"} registrados {v2DetailPeriod === "hoy" ? "hoy" : "en el historial"}.</p>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                          Mostrando {movs.length} movimientos ({v2DetailModal.type === "entrada" ? "entradas" : "salidas"}):
-                        </div>
-                        <div className="space-y-2.5">
-                          {movs.map((mov) => {
-                            const qtyNum = Number(mov.qty);
-                            const isPositive = qtyNum > 0;
-                            const formattedDate = mov.timestamp
-                              ? new Date(mov.timestamp).toLocaleDateString("es-MX", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "Fecha desconocida";
-
-                            // Decide emoji and color based on concept or type
-                            let iconEmoji = "📈";
-                            let cardColor = "border-emerald-105 bg-emerald-50/20";
-                            let badgeColor = "bg-emerald-100 text-emerald-800";
-
-                            const conceptLower = (mov.concept || "").toLowerCase();
-                            const typeLower = (mov.type || "").toLowerCase();
-
-                            if (typeLower === "compra" || conceptLower.includes("compra")) {
-                              iconEmoji = "🛒";
-                              cardColor = "border-teal-105 bg-teal-50/20";
-                              badgeColor = "bg-teal-100 text-teal-800";
-                            } else if (conceptLower.includes("gasto")) {
-                              iconEmoji = "💸";
-                              cardColor = "border-amber-105 bg-amber-50/20";
-                              badgeColor = "bg-amber-100 text-amber-800";
-                            } else if (typeLower === "venta" || conceptLower.includes("descuento") || conceptLower.includes("platillo")) {
-                              iconEmoji = "🍽️";
-                              cardColor = "border-slate-105 bg-slate-50/40";
-                              badgeColor = "bg-slate-100 text-slate-700";
-                            } else if (conceptLower.includes("merma") || conceptLower.includes("desperdicio") || conceptLower.includes("dañado")) {
-                              iconEmoji = "🗑️";
-                              cardColor = "border-rose-105 bg-rose-50/20";
-                              badgeColor = "bg-rose-100 text-rose-800";
-                            } else if (!isPositive) {
-                              iconEmoji = "📉";
-                              cardColor = "border-rose-105 bg-rose-50/10";
-                              badgeColor = "bg-rose-50 text-rose-700";
-                            }
-
-                            return (
-                              <div key={mov.id} className={`p-3.5 border rounded-2xl flex items-start gap-3 transition ${cardColor}`}>
-                                <div className="text-xl p-1.5 bg-white rounded-xl shadow-xs">
-                                  {iconEmoji}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start gap-2">
-                                    <span className="text-[10px] text-slate-400 font-bold block">
-                                      {formattedDate}
-                                    </span>
-                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg whitespace-nowrap ${badgeColor}`}>
-                                      {isPositive ? "+" : ""}{qtyNum.toFixed(2)} {v2DetailModal.item.unit}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs font-black text-slate-700 mt-1 break-words">
-                                    {mov.concept || "Ajuste manual de inventario"}
-                                  </p>
-                                  {mov.executedBy && (
-                                    <span className="text-[9.5px] text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded-md font-bold inline-block mt-1.5">
-                                      👤 {mov.executedBy}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Modal Footer */}
-                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-                  <button
-                    onClick={() => setV2DetailModal({ isOpen: false, item: null, type: null })}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs py-3 px-6 rounded-2xl transition cursor-pointer border-none"
-                  >
-                    Entendido ✓
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* POPUP FORM MODAL TO REGISTER MOVEMENT */}
-          {showAddMovModal && (
-            <IonModal
-              isOpen={showAddMovModal}
-              onDidDismiss={() => {
-                setShowAddMovModal(false);
-                setSelectedInsumoForMov(null);
-              }}
-              style={{ "--border-radius": "24px" }}
-              className="rounded-3xl animate-fadeIn"
-            >
-              <div className="flex flex-col bg-slate-900 text-white h-full overflow-y-auto">
-                <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 w-full">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">📈</span>
-                    <div>
-                      <h3 className="text-sm font-black text-indigo-400 tracking-tight uppercase m-0 p-0">
-                        Ajuste de Insumo
-                      </h3>
-                      <p className="text-[10px] text-slate-300 font-bold m-0 p-0 mt-0.5">
-                        Suma entradas de stock o resta mermas/desperdicios
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMovModal(false)}
-                    className="bg-white/10 hover:bg-white/20 text-white rounded-full p-1.5 cursor-pointer outline-none border-none transition"
-                  >
-                    <IonIcon icon={closeOutline} style={{ fontSize: "18px" }} />
-                  </button>
-                </div>
-
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    await handleSaveMovement(e);
-                    setShowAddMovModal(false);
-                  }}
-                  className="p-5 space-y-4 flex-1 flex flex-col justify-between"
-                >
-                  <div className="space-y-4">
-                    {/* Selected Insumo Display */}
-                    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-                      <span className="text-xs font-bold text-slate-400 block uppercase mb-1">
-                        Insumo Seleccionado
-                      </span>
-                      <span className="text-lg font-extrabold text-white uppercase block">
-                        {selectedInsumoForMov?.name ||
-                          inventory.find((i) => i.id === opsInsumoId)?.name}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-bold block mt-1">
-                        Unidad de medida:{" "}
-                        <span className="text-indigo-400 font-black">
-                          {selectedInsumoForMov?.unit ||
-                            inventory.find((i) => i.id === opsInsumoId)?.unit}
-                        </span>
-                      </span>
-                    </div>
-
-                    {/* Live Stats Preview */}
-                    {(() => {
-                      const activeItem =
-                        selectedInsumoForMov ||
-                        inventory.find((i) => i.id === opsInsumoId);
-                      if (!activeItem) return null;
-
-                      const startOfTodayForStats = new Date();
-                      startOfTodayForStats.setHours(0, 0, 0, 0);
-
-                      const itemMovsToday = inventoryMovements.filter((mov) => {
-                        if (!mov.timestamp) return false;
-                        return (
-                          new Date(mov.timestamp) >= startOfTodayForStats &&
-                          mov.inventoryItemId === activeItem.id
-                        );
-                      });
-
-                      const entradas = itemMovsToday
-                        .filter((m) => Number(m.qty) > 0 && m.type !== "compra")
-                        .reduce((s, m) => s + Number(m.qty), 0);
-                      const compras = itemMovsToday
-                        .filter((m) => m.type === "compra")
-                        .reduce((s, m) => s + Number(m.qty), 0);
-                      const salidas = Math.abs(
-                        itemMovsToday
-                          .filter(
-                            (m) => Number(m.qty) < 0 && m.type !== "venta",
-                          )
-                          .reduce((s, m) => s + Number(m.qty), 0),
-                      );
-                      const ventas = Math.abs(
-                        itemMovsToday
-                          .filter((m) => m.type === "venta")
-                          .reduce((s, m) => s + Number(m.qty), 0),
-                      );
-
-                      const totalEntradas = entradas + compras;
-                      const totalSalidas = salidas + ventas;
-
-                      const stockFinal = Number(activeItem.stock);
-                      const stockInicial =
-                        stockFinal - totalEntradas + totalSalidas;
-
-                      // Live projected balance
-                      const inputQty = parseFloat(opsQty) || 0;
-                      const isAddition = opsMovType === "entrada";
-                      const projectedStock = isAddition
-                        ? stockFinal + inputQty
-                        : stockFinal - inputQty;
-
-                      return (
-                        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-left">
-                          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block border-b border-slate-800 pb-1.5 mb-1">
-                            Resumen de Saldos (Hoy)
-                          </span>
-                          <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-semibold text-slate-300">
-                            <div className="flex justify-between">
-                              <span className="text-slate-550">Inicial:</span>
-                              <span className="text-white font-bold">
-                                {stockInicial.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-550">
-                                Entradas (+):
-                              </span>
-                              <span className="text-emerald-400 font-bold">
-                                +{totalEntradas.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-550">
-                                Salidas (-):
-                              </span>
-                              <span className="text-rose-400 font-bold">
-                                -{totalSalidas.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-550">
-                                Balance Final:
-                              </span>
-                              <span className="text-indigo-400 font-extrabold">
-                                {stockFinal.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {inputQty > 0 && (
-                            <div className="bg-indigo-950/40 border border-indigo-500/20 p-2.5 rounded-xl text-[11px] text-indigo-350 font-bold flex justify-between items-center mt-1">
-                              <span>🔮 Balance Proyectado:</span>
-                              <span className="font-extrabold text-white">
-                                {stockFinal.toFixed(2)} ➡️{" "}
-                                {projectedStock.toFixed(2)} {activeItem.unit}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Movement Type Selector */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setOpsMovType("entrada")}
-                        className={`py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition cursor-pointer border-none flex items-center justify-center gap-1.5 ${
-                          opsMovType === "entrada"
-                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/25"
-                            : "bg-slate-800 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        📈 Entrada (+)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOpsMovType("salida")}
-                        className={`py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition cursor-pointer border-none flex items-center justify-center gap-1.5 ${
-                          opsMovType === "salida"
-                            ? "bg-rose-600 text-white shadow-md shadow-rose-500/25"
-                            : "bg-slate-800 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        📉 Salida (-)
-                      </button>
-                    </div>
-
-                    {/* Quantity Input */}
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 block">
-                        Cantidad a Registrar
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="any"
-                          value={opsQty}
-                          onChange={(e) => setOpsQty(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-5 pr-14 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-white font-black text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition"
-                          required
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase bg-slate-800 px-2 py-0.5 rounded-lg">
-                          {selectedInsumoForMov?.unit ||
-                            inventory.find((i) => i.id === opsInsumoId)?.unit ||
-                            "pza"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Concept text note */}
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 block">
-                        Concepto del Ajuste (Notas)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={opsConcept}
-                        onChange={(e) => setOpsConcept(e.target.value)}
-                        placeholder="Ej: Compra local extra, desperdicio de cocina, merma de turno..."
-                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition resize-none font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 px-4 rounded-2xl transition duration-200 shadow-md cursor-pointer text-xs uppercase tracking-wide border-none outline-none text-center"
-                    >
-                      Confirmar y Guardar Ajuste ✓
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </IonModal>
-          )}
-        </IonContent>
-      </IonPage>
-    );
   };
 
   const renderDashboard = () => {
@@ -36942,2292 +32666,7 @@ Instrucciones:
     );
   };
 
-  const renderInsumosB1 = () => {
-    if (currentUser?.role === "mesero") {
-      return (
-        <IonPage>
-          {renderMaterialHeader({
-            title: "Acceso Restringido 🔒",
-            subtitle: "Sección de recetas e insumos restringida",
-            showBack: true,
-            onBack: () => setAppMode("floorplan"),
-          })}
-          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-            <div className="max-w-md mx-auto my-12 text-center bg-white p-8 rounded-3xl border border-slate-100 shadow-xl flex flex-col items-center gap-4">
-              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-3xl shadow-inner mb-2">
-                🔒
-              </div>
-              <h2 className="text-xl font-extrabold text-slate-800">Acceso Restringido</h2>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Tu usuario cuenta con el rol de <strong>Mesero</strong>. Los meseros únicamente tienen autorización para tomar comandas y pedidos, y no pueden realizar modificaciones a las recetas ni a los insumos.
-              </p>
-              <button
-                onClick={() => setAppMode("floorplan")}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl transition shadow border-none cursor-pointer mt-4"
-              >
-                Ir al Mapa de Mesas 🍽️
-              </button>
-            </div>
-          </IonContent>
-        </IonPage>
-      );
-    }
 
-    const showNotification = (message: string, type: "success" | "error" | "info") => {
-      setInsumosB1Notification({ message, type });
-      setTimeout(() => setInsumosB1Notification(null), 4000);
-    };
-
-    // Derived subcategories for the active category filter
-    const availableSubcategories = Array.from(
-      new Set(
-        products
-          .filter((p) => p.category === insumosB1CategoryFilter)
-          .map((p) => p.subcategory as string)
-      )
-    )
-      .filter(Boolean)
-      .sort() as string[];
-
-    // Derived active subcategory (falls back to first available if empty/out of bounds)
-    const activeSubcat =
-      insumosB1SelectedSubcategory && availableSubcategories.includes(insumosB1SelectedSubcategory)
-        ? insumosB1SelectedSubcategory
-        : (availableSubcategories[0] || "");
-
-    // Available subgroups for the active subcategory
-    const filteredBySubcat = products.filter(
-      (p) =>
-        p.category === insumosB1CategoryFilter &&
-        p.subcategory === activeSubcat
-    );
-
-    const availableSubgroups = Array.from(
-      new Set(
-        filteredBySubcat
-          .map((p) => (p.subgroup || "") as string)
-          .filter((sg) => sg.trim() !== "")
-      )
-    ).sort() as string[];
-
-    // Filter products
-    const filteredProducts = products.filter((p) => {
-      const matchSearch = p.name.toLowerCase().includes(insumosB1SearchQuery.toLowerCase());
-      const matchCat = p.category === insumosB1CategoryFilter;
-      const matchSubcat = !activeSubcat || p.subcategory === activeSubcat;
-      const matchSubgroup =
-        insumosB1SelectedSubgroup === "Todos" ||
-        p.subgroup === insumosB1SelectedSubgroup;
-      return matchSearch && matchCat && matchSubcat && matchSubgroup;
-    });
-
-    const activeRecipe = insumosB1SelectedProduct?.recipe || [];
-
-    // Check matches for quick 1-to-1 linkage
-    let matchingInsumo: any = null;
-    if (insumosB1SelectedProduct) {
-      const nameNorm = insumosB1SelectedProduct.name.toLowerCase().trim();
-      matchingInsumo = inventory.find((it) => {
-        const itName = (it.name || "").toLowerCase().trim();
-        return itName === nameNorm || itName.includes(nameNorm) || nameNorm.includes(itName);
-      });
-    }
-
-    // Handlers
-    const handleLinkExistingOneToOne = async (item: any) => {
-      if (!insumosB1SelectedProduct) return;
-      const updatedRecipe = [{ inventoryItemId: item.id, quantity: 1 }];
-      const updatedProduct = { ...insumosB1SelectedProduct, recipe: updatedRecipe };
-      try {
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        showNotification(`Vinculado exitosamente con '${item.name}' 1-a-1`, "success");
-      } catch (err) {
-        showNotification("Error al vincular insumo.", "error");
-      }
-    };
-
-    const handleCreateAndLinkOneToOne = async () => {
-      if (!insumosB1SelectedProduct) return;
-      const itemUuid = "inv-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-      const timestampIso = getMexicoISOString();
-      const newItem = {
-        id: itemUuid,
-        uid: itemUuid,
-        name: insumosB1SelectedProduct.name,
-        category: insumosB1SelectedProduct.category === "drinks" ? "Bebidas" : "Ingredientes",
-        unit: "Pza",
-        cost: 0,
-        stock: 0,
-        minStock: 5,
-        createdAt: timestampIso,
-        updatedAt: timestampIso,
-      };
-
-      try {
-        await addInventoryItemToFirebase(newItem);
-        setInventory((prev) => [...prev, newItem]);
-
-        const updatedRecipe = [{ inventoryItemId: itemUuid, quantity: 1 }];
-        const updatedProduct = { ...insumosB1SelectedProduct, recipe: updatedRecipe };
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-        
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        showNotification("Insumo creado y vinculado 1-a-1 automáticamente.", "success");
-      } catch (err) {
-        showNotification("Error al automatizar receta.", "error");
-      }
-    };
-
-    const handleApplyTacoTemplate = async () => {
-      if (!insumosB1SelectedProduct) return;
-      const timestampIso = getMexicoISOString();
-      
-      // Let's check or create Carne de Pastor, Tortilla de Maíz, Cebolla y Cilantro
-      const findOrCreateInsumo = async (name: string, unit: string, cost: number) => {
-        const found = inventory.find(
-          (it) => (it.name || "").toLowerCase().trim() === name.toLowerCase().trim()
-        );
-        if (found) return found.id;
-
-        const itemUuid = "inv-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-        const newItem = {
-          id: itemUuid,
-          uid: itemUuid,
-          name: name,
-          category: "Ingredientes",
-          unit: unit,
-          cost: cost,
-          stock: 0,
-          minStock: 5,
-          createdAt: timestampIso,
-          updatedAt: timestampIso,
-        };
-
-        await addInventoryItemToFirebase(newItem);
-        setInventory((prev) => [...prev, newItem]);
-        return itemUuid;
-      };
-
-      try {
-        const carneId = await findOrCreateInsumo("Carne de Pastor", "Kg", 120);
-        const tortillaId = await findOrCreateInsumo("Tortilla de Maíz", "Pza", 0.3);
-        const verduraId = await findOrCreateInsumo("Cebolla y Cilantro", "g", 0.05);
-
-        const updatedRecipe = [
-          { inventoryItemId: carneId, quantity: 0.05 },
-          { inventoryItemId: tortillaId, quantity: 1.0 },
-          { inventoryItemId: verduraId, quantity: 5.0 },
-        ];
-
-        const updatedProduct = { ...insumosB1SelectedProduct, recipe: updatedRecipe };
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        showNotification("Plantilla de taco aplicada con éxito.", "success");
-      } catch (err) {
-        showNotification("Error al aplicar la plantilla de taco.", "error");
-      }
-    };
-
-    const handleUpdateQuantity = async (index: number, val: number) => {
-      if (!insumosB1SelectedProduct) return;
-      const currentRecipe = [...(insumosB1SelectedProduct.recipe || [])];
-      if (!isNaN(val) && val > 0) {
-        currentRecipe[index] = { ...currentRecipe[index], quantity: val };
-      } else {
-        currentRecipe.splice(index, 1);
-      }
-
-      const updatedProduct = { ...insumosB1SelectedProduct, recipe: currentRecipe };
-      try {
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        showNotification("Cantidad de insumo actualizada.", "success");
-      } catch (err) {
-        showNotification("Error al actualizar la cantidad.", "error");
-      }
-    };
-
-    const handleRemoveIngredient = async (index: number) => {
-      if (!insumosB1SelectedProduct) return;
-      const currentRecipe = [...(insumosB1SelectedProduct.recipe || [])];
-      currentRecipe.splice(index, 1);
-
-      const updatedProduct = { ...insumosB1SelectedProduct, recipe: currentRecipe };
-      try {
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        showNotification("Insumo removido de la receta.", "success");
-      } catch (err) {
-        showNotification("Error al remover insumo.", "error");
-      }
-    };
-
-    const handleAddIngredient = async () => {
-      if (!insumosB1SelectedProduct || !insumosB1SelectedInsumoId) return;
-      const qty = parseFloat(insumosB1Qty);
-      if (isNaN(qty) || qty <= 0) {
-        showNotification("Por favor ingresa una cantidad válida mayor a 0.", "error");
-        return;
-      }
-
-      const currentRecipe = [...(insumosB1SelectedProduct.recipe || [])];
-      const existingIdx = currentRecipe.findIndex(
-        (r) => r.inventoryItemId === insumosB1SelectedInsumoId
-      );
-
-      if (existingIdx >= 0) {
-        currentRecipe[existingIdx] = {
-          ...currentRecipe[existingIdx],
-          quantity: qty,
-        };
-      } else {
-        currentRecipe.push({
-          inventoryItemId: insumosB1SelectedInsumoId,
-          quantity: qty,
-        });
-      }
-
-      const updatedProduct = { ...insumosB1SelectedProduct, recipe: currentRecipe };
-      try {
-        await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-        );
-        setInsumosB1SelectedProduct(updatedProduct);
-        setInsumosB1SelectedInsumoId("");
-        setInsumosB1Qty("");
-        showNotification("Insumo agregado a la receta.", "success");
-      } catch (err) {
-        showNotification("Error al agregar el insumo.", "error");
-      }
-    };
-
-    const handleCreateInlineCustomInsumo = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!insumosB1NewInsumoName.trim()) {
-        showNotification("Ingresa un nombre válido para el insumo.", "error");
-        return;
-      }
-
-      const itemUuid = "inv-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-      const timestampIso = getMexicoISOString();
-      const costNum = parseFloat(insumosB1NewInsumoCost) || 0;
-      const stockNum = parseFloat(insumosB1NewInsumoStock) || 0;
-
-      const newItem = {
-        id: itemUuid,
-        uid: itemUuid,
-        name: insumosB1NewInsumoName.trim(),
-        category: "Ingredientes",
-        unit: insumosB1NewInsumoUnit,
-        cost: costNum,
-        stock: stockNum,
-        minStock: 5,
-        createdAt: timestampIso,
-        updatedAt: timestampIso,
-      };
-
-      try {
-        await addInventoryItemToFirebase(newItem);
-        setInventory((prev) => [...prev, newItem]);
-        
-        // Auto-select this newly created item in the ingredient dropdown!
-        setInsumosB1SelectedInsumoId(itemUuid);
-        
-        // Clear form
-        setInsumosB1NewInsumoName("");
-        setInsumosB1NewInsumoUnit("Pza");
-        setInsumosB1NewInsumoCost("");
-        setInsumosB1NewInsumoStock("0");
-        setInsumosB1ShowNewForm(false);
-        
-        showNotification(`Insumo '${newItem.name}' creado con éxito. Ahora agrégalo a tu receta abajo.`, "success");
-      } catch (err) {
-        showNotification("Error al crear el insumo personalizado.", "error");
-      }
-    };
-
-    const handleCreateAndAddModalInsumo = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!insumosB1ModalName.trim()) {
-        showNotification("Por favor ingresa un nombre para el insumo.", "error");
-        return;
-      }
-      const qtyNum = parseFloat(insumosB1ModalQty);
-      if (isNaN(qtyNum) || qtyNum <= 0) {
-        showNotification("Por favor ingresa una cantidad válida mayor a 0.", "error");
-        return;
-      }
-
-      const itemUuid = "inv-" + Math.random().toString(36).substring(2, 11) + "-" + Date.now();
-      const timestampIso = getMexicoISOString();
-      const costNum = parseFloat(insumosB1ModalCost) || 0;
-
-      const newItem = {
-        id: itemUuid,
-        uid: itemUuid,
-        name: insumosB1ModalName.trim(),
-        category: "Ingredientes",
-        unit: insumosB1ModalUnit,
-        cost: costNum,
-        stock: 0,
-        minStock: 5,
-        createdAt: timestampIso,
-        updatedAt: timestampIso,
-      };
-
-      try {
-        // 1. Add item to inventory
-        await addInventoryItemToFirebase(newItem);
-        setInventory((prev) => [...prev, newItem]);
-
-        if (insumosB1AddModalTarget === "bulk" || !insumosB1SelectedProduct) {
-          // If it is from the bulk select dropdown or no product is selected
-          setInsumosB1BulkInsumoId(itemUuid);
-          setInsumosB1BulkQty(insumosB1ModalQty);
-          showNotification(`Insumo '${newItem.name}' creado y seleccionado para la actualización masiva.`, "success");
-        } else {
-          // 2. Add directly to selected product recipe
-          const currentRecipe = [...(insumosB1SelectedProduct.recipe || [])];
-          const existingIdx = currentRecipe.findIndex(
-            (r) => r.inventoryItemId === itemUuid
-          );
-
-          if (existingIdx >= 0) {
-            currentRecipe[existingIdx] = {
-              ...currentRecipe[existingIdx],
-              quantity: qtyNum,
-            };
-          } else {
-            currentRecipe.push({
-              inventoryItemId: itemUuid,
-              quantity: qtyNum,
-            });
-          }
-
-          const updatedProduct = { ...insumosB1SelectedProduct, recipe: currentRecipe };
-          await updateProductInFirebase(insumosB1SelectedProduct.id, updatedProduct);
-          setProducts((prev) =>
-            prev.map((p) => (p.id === insumosB1SelectedProduct.id ? updatedProduct : p))
-          );
-          setInsumosB1SelectedProduct(updatedProduct);
-
-          showNotification(`Insumo '${newItem.name}' creado y agregado a la receta con éxito.`, "success");
-        }
-
-        // 3. Clear modal state and close
-        setInsumosB1ModalName("");
-        setInsumosB1ModalUnit("Pza");
-        setInsumosB1ModalCost("");
-        setInsumosB1ModalQty("1");
-        setInsumosB1ShowAddModal(false);
-      } catch (err) {
-        showNotification("Error al crear y agregar el insumo.", "error");
-      }
-    };
-
-    const handleCategoryClick = (cat: "food" | "drinks" | "desserts") => {
-      setInsumosB1CategoryFilter(cat);
-      const newSubs = Array.from(
-        new Set(
-          products
-            .filter((p) => p.category === cat)
-            .map((p) => p.subcategory)
-        )
-      ).filter(Boolean).sort() as string[];
-      setInsumosB1SelectedSubcategory(newSubs[0] || "");
-      setInsumosB1SelectedSubgroup("Todos");
-      setInsumosB1SelectedProduct(null);
-    };
-
-    const handleSubcategoryClick = (sub: string) => {
-      setInsumosB1SelectedSubcategory(sub);
-      setInsumosB1SelectedSubgroup("Todos");
-      setInsumosB1SelectedProduct(null);
-    };
-
-    const handleSubgroupClick = (sg: string) => {
-      setInsumosB1SelectedSubgroup(sg);
-      setInsumosB1SelectedProduct(null);
-    };
-
-    const handleApplyBulkRecipe = async () => {
-      if (!insumosB1BulkInsumoId) {
-        showNotification("Selecciona un insumo para aplicar de forma masiva.", "error");
-        return;
-      }
-      const qtyNum = parseFloat(insumosB1BulkQty);
-      if (isNaN(qtyNum) || qtyNum <= 0) {
-        showNotification("Ingresa una cantidad válida mayor a 0 para el descuento masivo.", "error");
-        return;
-      }
-
-      const targetProducts = products.filter((p) => {
-        const matchCat = p.category === insumosB1CategoryFilter;
-        const matchSubcat = !activeSubcat || p.subcategory === activeSubcat;
-        const matchSubgroup =
-          insumosB1SelectedSubgroup === "Todos" ||
-          p.subgroup === insumosB1SelectedSubgroup;
-        return matchCat && matchSubcat && matchSubgroup;
-      });
-
-      if (targetProducts.length === 0) {
-        showNotification("No hay productos en el grupo seleccionado para actualizar.", "error");
-        return;
-      }
-
-      try {
-        let count = 0;
-        const updatedProductsList = await Promise.all(
-          products.map(async (p) => {
-            const matchCat = p.category === insumosB1CategoryFilter;
-            const matchSubcat = !activeSubcat || p.subcategory === activeSubcat;
-            const matchSubgroup =
-              insumosB1SelectedSubgroup === "Todos" ||
-              p.subgroup === insumosB1SelectedSubgroup;
-
-            if (matchCat && matchSubcat && matchSubgroup) {
-              const currentRecipe = [...(p.recipe || [])];
-              const idx = currentRecipe.findIndex(r => r.inventoryItemId === insumosB1BulkInsumoId);
-              if (idx >= 0) {
-                currentRecipe[idx] = { ...currentRecipe[idx], quantity: qtyNum };
-              } else {
-                currentRecipe.push({ inventoryItemId: insumosB1BulkInsumoId, quantity: qtyNum });
-              }
-              const updatedP = { ...p, recipe: currentRecipe };
-              await updateProductInFirebase(p.id, updatedP);
-              count++;
-              return updatedP;
-            }
-            return p;
-          })
-        );
-
-        setProducts(updatedProductsList);
-        
-        if (insumosB1SelectedProduct) {
-          const matchSelected = updatedProductsList.find(p => p.id === insumosB1SelectedProduct.id);
-          if (matchSelected) {
-            setInsumosB1SelectedProduct(matchSelected);
-          }
-        }
-
-        const invItem = inventory.find(i => i.id === insumosB1BulkInsumoId);
-        showNotification(
-          `¡Éxito! Se agregaron/actualizaron ${qtyNum} ${invItem?.unit || "U"} de '${invItem?.name}' a ${count} productos en '${activeSubcat}' (${insumosB1SelectedSubgroup}). 🎉`,
-          "success"
-        );
-
-        setInsumosB1BulkInsumoId("");
-        setInsumosB1BulkQty("");
-        setInsumosB1ShowBulkConfirm(false);
-      } catch (err) {
-        console.error("Error bulk editing products:", err);
-        showNotification("Error al actualizar las recetas en grupo.", "error");
-      }
-    };
-
-    // Cost calculation
-    let totalRecipeCost = 0;
-    activeRecipe.forEach((rIng: any) => {
-      const inv = inventory.find((i) => i.id === rIng.inventoryItemId);
-      if (inv) {
-        const itemCost = inv.cost || inv.price || 0;
-        totalRecipeCost += rIng.quantity * itemCost;
-      }
-    });
-
-    return (
-      <IonPage>
-        {renderMaterialHeader({
-          title: "Recetas",
-          showBack: true,
-          onBack: () => setAppMode("floorplan"),
-        })}
-
-        <IonContent className="bg-slate-50" style={{ "--background": "#f8fafc" }}>
-          
-          {/* Main Ionic Mobile-First Container */}
-          <div className="max-w-full mx-auto px-1 sm:px-2 py-2" style={{ fontFamily: "'Inter', sans-serif" }}>
-            
-            {/* Title / Heading */}
-            <div className="mb-4 text-left px-2">
-              <h1 className="text-2xl font-bold text-slate-800 m-0">Recetas</h1>
-            </div>
-
-            {/* Custom Dynamic Notification Banner */}
-            {insumosB1Notification && (
-              <div
-                className={`p-4 rounded-2xl mb-4 text-sm flex items-center gap-2.5 border animate-fadeIn transition-all shadow-xs ${
-                  insumosB1Notification.type === "success"
-                    ? "bg-[#edfbf6] border-[#32d296] text-[#25be85]"
-                    : insumosB1Notification.type === "error"
-                    ? "bg-[#fff6f6] border-[#f0506e] text-[#ee2c50]"
-                    : "bg-[#f0f8ff] border-[#1e87f0] text-[#1e87f0]"
-                }`}
-              >
-                <span className="text-base font-bold">
-                  {insumosB1Notification.type === "success" ? "✓" : "⚠"}
-                </span>
-                <span className="font-semibold">{insumosB1Notification.message}</span>
-              </div>
-            )}
-
-            {/* SECTION 1: EVERYTHING AT THE TOP (Category Selector, Subcategories, Subgroups, Search) */}
-            <div className={`bg-white border border-slate-100 rounded-3xl p-5 shadow-sm mb-4 space-y-4 ${insumosB1SelectedProduct ? "hidden lg:block animate-fadeIn" : "block"}`}>
-              
-              {/* Category Segment Selector (Using Ionic components for total consistency) */}
-              <IonSegment
-                value={insumosB1CategoryFilter}
-                onIonChange={(e) => handleCategoryClick(e.detail.value as any)}
-                style={{ "--background": "#f1f5f9", marginBottom: "16px" }}
-              >
-                <IonSegmentButton
-                  value="food"
-                  style={{
-                    "--background-checked": "#ef4444",
-                    "--color-checked": "#ffffff",
-                    "--indicator-color": "#ef4444",
-                    transition: "all 0.3s ease",
-                  }}
-                >
-                  <IonIcon
-                    icon={fastFoodOutline}
-                    style={{
-                      fontSize: insumosB1CategoryFilter === "food" ? "1.4rem" : "1.2rem",
-                    }}
-                  />
-                  <IonLabel
-                    style={{
-                      fontWeight: insumosB1CategoryFilter === "food" ? "900" : "600",
-                    }}
-                  >
-                    Comida
-                  </IonLabel>
-                </IonSegmentButton>
-
-                <IonSegmentButton
-                  value="drinks"
-                  style={{
-                    "--background-checked": "#3b82f6",
-                    "--color-checked": "#ffffff",
-                    "--indicator-color": "#3b82f6",
-                    transition: "all 0.3s ease",
-                  }}
-                >
-                  <IonIcon
-                    icon={beerOutline}
-                    style={{
-                      fontSize: insumosB1CategoryFilter === "drinks" ? "1.4rem" : "1.2rem",
-                    }}
-                  />
-                  <IonLabel
-                    style={{
-                      fontWeight: insumosB1CategoryFilter === "drinks" ? "900" : "600",
-                    }}
-                  >
-                    Bebidas
-                  </IonLabel>
-                </IonSegmentButton>
-
-                <IonSegmentButton
-                  value="desserts"
-                  style={{
-                    "--background-checked": "#f59e0b",
-                    "--color-checked": "#ffffff",
-                    "--indicator-color": "#f59e0b",
-                    transition: "all 0.3s ease",
-                  }}
-                >
-                  <IonIcon
-                    icon={iceCreamOutline}
-                    style={{
-                      fontSize: insumosB1CategoryFilter === "desserts" ? "1.4rem" : "1.2rem",
-                    }}
-                  />
-                  <IonLabel
-                    style={{
-                      fontWeight: insumosB1CategoryFilter === "desserts" ? "900" : "600",
-                    }}
-                  >
-                    Postres
-                  </IonLabel>
-                </IonSegmentButton>
-              </IonSegment>
-
-              {/* Horizontal Scroll Subcategory (Grupo) Pills */}
-              <div className="text-left">
-                <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                  <span>📁</span> Grupo / Subcategoría
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    overflowX: "auto",
-                    padding: "4px 8px",
-                    gap: "8px",
-                  }}
-                  className="no-scrollbar"
-                >
-                  {availableSubcategories.length === 0 ? (
-                    <div className="text-sm text-slate-400 py-1 italic">No hay subcategorías en este grupo</div>
-                  ) : (
-                    availableSubcategories.map((sub) => {
-                      const categoryColor =
-                        insumosB1CategoryFilter === "food"
-                          ? "#ef4444"
-                          : insumosB1CategoryFilter === "drinks"
-                            ? "#3b82f6"
-                            : "#f59e0b";
-                      const isActiveSub = activeSubcat === sub;
-                      return (
-                        <IonButton
-                          key={sub}
-                          size="small"
-                          fill={isActiveSub ? "solid" : "outline"}
-                          onClick={() => handleSubcategoryClick(sub)}
-                          style={{
-                            "--border-radius": "20px",
-                            fontSize: "0.75rem",
-                            fontWeight: "bold",
-                            flexShrink: 0,
-                            "--background": isActiveSub ? categoryColor : "",
-                            "--border-color": categoryColor,
-                            "--color": isActiveSub ? "white" : categoryColor,
-                          }}
-                        >
-                          {sub}
-                        </IonButton>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Horizontal Scroll Subgroup Specific Pills */}
-              {activeSubcat && (
-                <div className="text-left border-t border-slate-50 pt-3.5">
-                  <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                    <span>🏷️</span> Subgrupo específico
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      overflowX: "auto",
-                      padding: "4px 8px",
-                      gap: "8px",
-                    }}
-                    className="no-scrollbar"
-                  >
-                    <IonButton
-                      size="small"
-                      fill={insumosB1SelectedSubgroup === "Todos" ? "solid" : "outline"}
-                      onClick={() => handleSubgroupClick("Todos")}
-                      style={{
-                        "--border-radius": "20px",
-                        fontSize: "0.75rem",
-                        fontWeight: "bold",
-                        flexShrink: 0,
-                        "--background": insumosB1SelectedSubgroup === "Todos" ? "#334155" : "",
-                        "--border-color": "#334155",
-                        "--color": insumosB1SelectedSubgroup === "Todos" ? "white" : "#334155",
-                      }}
-                    >
-                      🔍 Todos ({filteredBySubcat.length})
-                    </IonButton>
-                    {availableSubgroups.map((sg) => {
-                      const isActive = insumosB1SelectedSubgroup === sg;
-                      const groupCount = filteredBySubcat.filter((p) => p.subgroup === sg).length;
-                      return (
-                        <IonButton
-                          key={sg}
-                          size="small"
-                          fill={isActive ? "solid" : "outline"}
-                          onClick={() => handleSubgroupClick(sg)}
-                          style={{
-                            "--border-radius": "20px",
-                            fontSize: "0.75rem",
-                            fontWeight: "bold",
-                            flexShrink: 0,
-                            "--background": isActive ? "#334155" : "",
-                            "--border-color": "#334155",
-                            "--color": isActive ? "white" : "#334155",
-                          }}
-                        >
-                          {sg} ({groupCount})
-                        </IonButton>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Ionic Searchbar */}
-              <div className="relative border-t border-slate-50 pt-3.5">
-                <input
-                  type="text"
-                  placeholder="🔍 Buscar platillo o bebida..."
-                  value={insumosB1SearchQuery}
-                  onChange={(e) => setInsumosB1SearchQuery(e.target.value)}
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3.5 text-base focus:border-indigo-500 outline-none transition-all placeholder-slate-400 text-left bg-slate-50 text-slate-700"
-                />
-                {insumosB1SearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setInsumosB1SearchQuery("")}
-                    className="absolute right-4 bottom-4 text-slate-400 hover:text-slate-600 bg-transparent border-none p-0 cursor-pointer text-sm"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* COLLAPSIBLE GROUP/BULK ASSISTANT BANNER */}
-            {activeSubcat && !insumosB1SelectedProduct && (
-              <div className="mb-4 text-left">
-                <button
-                  type="button"
-                  onClick={() => setInsumosB1ShowBulkSection(!insumosB1ShowBulkSection)}
-                  className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${
-                    insumosB1ShowBulkSection
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 font-bold"
-                      : "bg-white border-slate-100 text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">⚡</span>
-                    <div className="text-left">
-                      <span className="text-sm font-bold block">Fórmula Grupal / Descuento Masivo</span>
-                      <span className="text-[12px] text-slate-400 font-normal">Aplica un insumo a los {filteredProducts.length} productos del grupo</span>
-                    </div>
-                  </div>
-                  <span className="text-sm font-semibold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
-                    {insumosB1ShowBulkSection ? "Ocultar ▲" : "Configurar ▼"}
-                  </span>
-                </button>
-
-                {insumosB1ShowBulkSection && (
-                  <div className="mt-2 bg-gradient-to-r from-slate-50 to-indigo-50/20 border border-indigo-100 rounded-3xl p-6 shadow-xs text-left animate-fadeIn">
-                    <div className="p-5 bg-white/80 border border-indigo-50 rounded-2xl mb-4 text-sm space-y-2">
-                      <span className="font-semibold text-slate-700 block">
-                        Alcance de la actualización masiva:
-                      </span>
-                      <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 font-medium">
-                        <div>Categoría: <strong className="text-slate-800">{insumosB1CategoryFilter === "food" ? "Alimentos" : insumosB1CategoryFilter === "drinks" ? "Bebidas" : "Postres"}</strong></div>
-                        <div>Grupo: <strong className="text-slate-800">{activeSubcat}</strong></div>
-                        <div>Subgrupo: <strong className="text-slate-800">{insumosB1SelectedSubgroup}</strong></div>
-                        <div>Total productos: <strong className="text-indigo-600 font-bold">{filteredProducts.length} platillos</strong></div>
-                      </div>
-                    </div>
-
-                    {insumosB1ShowBulkConfirm ? (
-                      <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl space-y-4">
-                        <span className="text-sm font-bold text-amber-900 block flex items-center gap-1.5">
-                          ⚠ Confirmación Requerida
-                        </span>
-                        <p className="text-sm text-amber-800 leading-relaxed">
-                          ¿Estás seguro de que deseas agregar o actualizar 
-                          <strong className="text-slate-900 font-bold"> {insumosB1BulkQty} {inventory.find(i => i.id === insumosB1BulkInsumoId)?.unit} </strong> 
-                          de <strong className="text-slate-900 font-bold">'{inventory.find(i => i.id === insumosB1BulkInsumoId)?.name}'</strong> en la receta de los <strong className="text-indigo-700 font-bold">{filteredProducts.length} productos</strong> de esta selección?
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setInsumosB1ShowBulkConfirm(false)}
-                            className="px-4 py-2 border border-slate-200 bg-white text-slate-600 text-sm font-semibold rounded-xl cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleApplyBulkRecipe}
-                            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl cursor-pointer border-none shadow-xs"
-                          >
-                            Sí, Aplicar Masivamente
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col sm:flex-row items-end gap-3">
-                        <div className="flex-1 w-full space-y-1.5">
-                          <label className="text-[13px] font-bold text-slate-500 block">Insumo de Almacén:</label>
-                          <select
-                            value={insumosB1BulkInsumoId}
-                            onChange={(e) => {
-                              if (e.target.value === "CREATE_NEW_BULK") {
-                                setInsumosB1BulkInsumoId("");
-                                setInsumosB1ModalName("");
-                                setInsumosB1ModalUnit("Pza");
-                                setInsumosB1ModalCost("");
-                                setInsumosB1ModalQty("1");
-                                setInsumosB1AddModalTarget("bulk");
-                                setInsumosB1ShowAddModal(true);
-                                return;
-                              }
-                              setInsumosB1BulkInsumoId(e.target.value);
-                              const inv = inventory.find(i => i.id === e.target.value);
-                              if (inv) {
-                                if (inv.unit === "Kg") setInsumosB1BulkQty("0.05");
-                                else if (inv.unit === "g") setInsumosB1BulkQty("1");
-                                else if (inv.unit === "Ltr") setInsumosB1BulkQty("0.1");
-                                else setInsumosB1BulkQty("1");
-                              }
-                            }}
-                            className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2.5 text-sm font-medium focus:border-indigo-500 outline-none"
-                          >
-                            <option value="">-- Seleccionar insumo --</option>
-                            <option value="CREATE_NEW_BULK" className="font-extrabold text-indigo-600 bg-indigo-50">
-                              ➕ [Registrar nuevo insumo en almacén...]
-                            </option>
-                            {inventory
-                              .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                              .map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.name} ({item.unit}) - Costo: ${item.cost || 0}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        <div className="w-full sm:w-32 space-y-1.5">
-                          <label className="text-[13px] font-bold text-slate-500 block">Cant. Unit.:</label>
-                          <input
-                            type="number"
-                            step="0.001"
-                            placeholder="0"
-                            value={insumosB1BulkQty}
-                            onChange={(e) => setInsumosB1BulkQty(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-indigo-500 outline-none text-right"
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!insumosB1BulkInsumoId) {
-                              showNotification("Por favor selecciona un insumo.", "error");
-                              return;
-                            }
-                            const parsed = parseFloat(insumosB1BulkQty);
-                            if (isNaN(parsed) || parsed <= 0) {
-                              showNotification("Ingresa una cantidad mayor a 0.", "error");
-                              return;
-                            }
-                            setInsumosB1ShowBulkConfirm(true);
-                          }}
-                          className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition border-none cursor-pointer shadow-xs whitespace-nowrap shrink-0"
-                        >
-                          Aplicar a Todo 🚀
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TWO COLUMN / IONIC RESPONSIVE MASTER-DETAIL LAYOUT */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* MASTER SCREEN: Products List Panel */}
-              <div className={`lg:col-span-1 space-y-3 ${insumosB1SelectedProduct ? "hidden lg:block" : "block animate-fadeIn"}`}>
-                
-                <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-xs divide-y divide-slate-100">
-                  <div className="p-4 bg-slate-50/50 flex justify-between items-center text-sm font-bold text-slate-500 uppercase tracking-wider">
-                    <span>📋 Catálogo ({filteredProducts.length})</span>
-                  </div>
-
-                  <div className="max-h-[550px] overflow-y-auto divide-y divide-slate-100 scrollbar-thin">
-                    {filteredProducts.length === 0 ? (
-                      <div className="p-12 text-center text-slate-400 text-sm italic">
-                        No se encontraron platillos con los filtros actuales 📭
-                      </div>
-                    ) : (
-                      filteredProducts.map((p) => {
-                        const isSelected = insumosB1SelectedProduct?.id === p.id;
-                        const recipeCount = p.recipe?.length || 0;
-                        
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => {
-                              setInsumosB1SelectedProduct(p);
-                              setInsumosB1InsumoSearch("");
-                              setInsumosB1SelectedInsumoId("");
-                            }}
-                            className={`p-4.5 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                              isSelected
-                                ? "bg-indigo-50/50 border-l-4 border-indigo-600 pl-3.5"
-                                : "hover:bg-slate-50/50 border-l-4 border-transparent"
-                            }`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <span className="font-bold text-slate-800 text-base block truncate">
-                                {p.name}
-                              </span>
-                              <span className="text-xs text-slate-400 font-medium block mt-1">
-                                {p.subcategory || p.category} · <strong className="text-slate-600">${p.price}</strong>
-                              </span>
-                            </div>
-
-                            <div className="shrink-0 flex items-center gap-2">
-                              {recipeCount === 0 ? (
-                                <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
-                                  Sin receta
-                                </span>
-                              ) : (
-                                <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
-                                  {recipeCount} {recipeCount === 1 ? "insumo" : "insumos"}
-                                </span>
-                              )}
-                              {/* Chevron indicator typical of Ionic Lists */}
-                              <span className="text-slate-300 font-bold text-lg">›</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* DETAIL SCREEN: Recipe Formulation Screen */}
-              <div className={`lg:col-span-2 space-y-4 ${insumosB1SelectedProduct ? "block animate-fadeIn" : "hidden lg:block"}`}>
-                
-                {insumosB1SelectedProduct ? (
-                  <div className="space-y-4">
-                    
-                    {/* MOBILE BACK BUTTON (Ionic flow) */}
-                    <div className="lg:hidden">
-                      <button
-                        type="button"
-                        onClick={() => setInsumosB1SelectedProduct(null)}
-                        className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 px-4 rounded-2xl text-sm transition border-none cursor-pointer shadow-sm"
-                      >
-                        <span>←</span> Volver al Catálogo de Productos
-                      </button>
-                    </div>
-
-                    {/* FORM HEADER CARD */}
-                    <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs text-left">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3.5 mb-4 gap-2">
-                        <div>
-                          <span className="text-[11px] font-black uppercase tracking-widest bg-indigo-600 text-white px-3 py-1.5 rounded-full">
-                            {insumosB1SelectedProduct.category === "food"
-                              ? "🍔 Platillo"
-                              : insumosB1SelectedProduct.category === "drinks"
-                              ? "🍹 Bebida"
-                              : "🍰 Postre"}
-                          </span>
-                          <h2 className="text-xl font-extrabold text-slate-800 mt-2.5">
-                            {insumosB1SelectedProduct.name}
-                          </h2>
-                          <p className="text-xs text-slate-400 mt-1 font-medium">
-                            Grupo: {insumosB1SelectedProduct.subcategory || "General"} · ID: {insumosB1SelectedProduct.id}
-                          </p>
-                        </div>
-                        <div className="text-left sm:text-right bg-slate-50 px-4 py-2 rounded-2xl">
-                          <span className="text-[11px] font-bold text-slate-400 block uppercase">Precio de Venta</span>
-                          <span className="text-2xl font-black text-slate-800">${insumosB1SelectedProduct.price.toFixed(2)}</span>
-                        </div>
-                      </div>
-
-                      {/* CURRENT RECIPE INGREDIENTS */}
-                      <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider text-left">
-                          Ingredientes de la Fórmula (Resta Stock en Venta)
-                        </h3>
-
-                        {activeRecipe.length === 0 ? (
-                          <div className="border border-dashed border-slate-200 rounded-2xl p-10 text-center text-slate-400 text-sm italic">
-                            Esta receta está vacía. Añade insumos con el buscador de abajo para que cada venta reste stock del almacén.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                            <table className="w-full text-left text-sm border-collapse">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100">
-                                  <th className="p-3.5 font-bold text-slate-400 uppercase tracking-wider">Insumo</th>
-                                  <th className="p-3.5 font-bold text-slate-400 uppercase tracking-wider text-center">Unidad</th>
-                                  <th className="p-3.5 font-bold text-slate-400 uppercase tracking-wider text-right">Cant. Descontar</th>
-                                  <th className="p-3.5 font-bold text-slate-400 uppercase tracking-wider text-right">Costo Est.</th>
-                                  <th className="p-3.5 font-bold text-slate-400 uppercase tracking-wider text-center"></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {activeRecipe.map((rIng: any, index: number) => {
-                                  const inv = inventory.find((i) => i.id === rIng.inventoryItemId);
-                                  if (!inv) {
-                                    return (
-                                      <tr key={index}>
-                                        <td colSpan={5} className="p-3.5 text-sm text-rose-500 italic">
-                                          Insumo no encontrado en inventario (ID: {rIng.inventoryItemId})
-                                        </td>
-                                      </tr>
-                                    );
-                                  }
-
-                                  const itemCost = inv.cost || inv.price || 0;
-                                  const totalItemCost = rIng.quantity * itemCost;
-
-                                  return (
-                                    <tr key={`${insumosB1SelectedProduct.id}-${inv.id}-${index}`} className="hover:bg-slate-50/30">
-                                      <td className="p-3.5 font-bold text-slate-700">
-                                        {inv.name}
-                                      </td>
-                                      <td className="p-3.5 text-center text-slate-500 font-medium">
-                                        {inv.unit}
-                                      </td>
-                                      <td className="p-3.5 text-right">
-                                        <div className="flex justify-end items-center">
-                                          <input
-                                            type="number"
-                                            step="0.001"
-                                            min="0"
-                                            defaultValue={rIng.quantity}
-                                            onBlur={(e) => {
-                                              const parsed = parseFloat(e.target.value);
-                                              handleUpdateQuantity(index, parsed);
-                                            }}
-                                            className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-right text-sm font-bold focus:border-indigo-500 outline-none"
-                                          />
-                                        </div>
-                                      </td>
-                                      <td className="p-3.5 text-right font-medium text-slate-500">
-                                        ${totalItemCost.toFixed(2)}
-                                      </td>
-                                      <td className="p-3.5 text-center">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveIngredient(index)}
-                                          className="text-red-500 hover:text-red-700 font-extrabold bg-transparent border-none cursor-pointer text-base"
-                                          title="Quitar ingrediente"
-                                        >
-                                          ✕
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Cost & Profit Estimation */}
-                        {activeRecipe.length > 0 && (
-                          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 text-[13px] space-y-2.5 text-left">
-                            <div className="flex justify-between items-center text-slate-600 font-medium">
-                              <span>Costo Estimado de Producción:</span>
-                              <strong className="text-slate-800 text-sm font-black">${totalRecipeCost.toFixed(2)}</strong>
-                            </div>
-                            <div className="flex justify-between items-center text-slate-600 font-medium border-t border-slate-200/50 pt-2.5">
-                              <span>Utilidad Estimada:</span>
-                              <strong className="text-emerald-600 text-sm font-black">
-                                ${(insumosB1SelectedProduct.price - totalRecipeCost).toFixed(2)} ({insumosB1SelectedProduct.price > 0
-                                  ? (((insumosB1SelectedProduct.price - totalRecipeCost) / insumosB1SelectedProduct.price) * 100).toFixed(0)
-                                  : 0}%)
-                              </strong>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* ADD INGREDIENT BOX */}
-                    <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs text-left">
-                      <div className="flex justify-between items-center border-b border-slate-50 pb-3 mb-4">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-                          Añadir Insumo
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setInsumosB1ShowNewForm(!insumosB1ShowNewForm)}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm font-bold bg-transparent border-none p-0 cursor-pointer"
-                        >
-                          {insumosB1ShowNewForm ? "✕ Cancelar" : "➕ Crear nuevo insumo de almacén"}
-                        </button>
-                      </div>
-
-                      {insumosB1ShowNewForm ? (
-                        <form onSubmit={handleCreateInlineCustomInsumo} className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 text-left">
-                          <span className="text-[11px] font-black uppercase text-indigo-600 block">
-                            Creación de Insumo Express
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="flex flex-col gap-1.5 text-left">
-                              <label className="text-[12px] text-slate-400 font-bold uppercase">Nombre:</label>
-                              <input
-                                type="text"
-                                placeholder="p. ej. Salsa Roja Especial"
-                                value={insumosB1NewInsumoName}
-                                onChange={(e) => setInsumosB1NewInsumoName(e.target.value)}
-                                className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 outline-none"
-                                required
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 text-left">
-                              <div className="flex flex-col gap-1.5">
-                                <label className="text-[12px] text-slate-400 font-bold uppercase">Unidad:</label>
-                                <select
-                                  value={insumosB1NewInsumoUnit}
-                                  onChange={(e) => setInsumosB1NewInsumoUnit(e.target.value)}
-                                  className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white font-semibold text-slate-700"
-                                >
-                                  <option value="Pza">Pza (Unidad)</option>
-                                  <option value="Kg">Kg (Kilos)</option>
-                                  <option value="Ltr">Ltr (Litros)</option>
-                                  <option value="g">g (Gramos)</option>
-                                  <option value="ml">ml (Mililitros)</option>
-                                </select>
-                              </div>
-                              <div className="flex flex-col gap-1.5">
-                                <label className="text-[12px] text-slate-400 font-bold uppercase">Costo ($):</label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  value={insumosB1NewInsumoCost}
-                                  onChange={(e) => setInsumosB1NewInsumoCost(e.target.value)}
-                                  className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 outline-none text-right font-bold"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex justify-end gap-3 pt-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setInsumosB1ShowNewForm(false)}
-                              className="px-4 py-2 border border-slate-200 rounded-xl text-sm bg-white text-slate-600 font-semibold cursor-pointer"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="submit"
-                              className="px-5 py-2 bg-[#32d296] hover:bg-[#25be85] text-white rounded-xl text-sm font-bold border-none cursor-pointer shadow-xs"
-                            >
-                              Crear y Autoseleccionar
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="flex flex-col sm:flex-row items-end gap-4 text-left">
-                          <div className="flex-1 space-y-2.5 w-full text-left">
-                            <label className="text-[12px] font-bold text-slate-400 uppercase block">Buscar y Seleccionar Insumo:</label>
-                            
-                            {/* Search bar input field */}
-                            <div className="relative">
-                              <input
-                                type="text"
-                                placeholder="🔍 Escribe para buscar insumo... (p. ej. toast)"
-                                value={insumosB1InsumoSearch}
-                                onChange={(e) => {
-                                  const term = e.target.value;
-                                  setInsumosB1InsumoSearch(term);
-                                  // Automatically select if there's an exact match
-                                  const exactMatch = inventory.find(
-                                    (i) => (i.name || "").toLowerCase().trim() === term.toLowerCase().trim()
-                                  );
-                                  if (exactMatch) {
-                                    setInsumosB1SelectedInsumoId(exactMatch.id);
-                                  } else {
-                                    setInsumosB1SelectedInsumoId("");
-                                  }
-                                }}
-                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:border-indigo-500 outline-none font-semibold text-slate-700 bg-slate-50/50"
-                              />
-                              {insumosB1InsumoSearch && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setInsumosB1InsumoSearch("");
-                                    setInsumosB1SelectedInsumoId("");
-                                  }}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none text-slate-400 hover:text-slate-600 cursor-pointer text-sm font-bold"
-                                >
-                                  ✕
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={insumosB1SelectedInsumoId}
-                                onChange={(e) => {
-                                  if (e.target.value === "CREATE_NEW_MODAL" || e.target.value === "CREATE_NEW_MODAL_DIRECT") {
-                                    setInsumosB1SelectedInsumoId("");
-                                    setInsumosB1ModalName(e.target.value === "CREATE_NEW_MODAL" ? (insumosB1InsumoSearch || "") : "");
-                                    setInsumosB1ModalUnit("Pza");
-                                    setInsumosB1ModalCost("");
-                                    setInsumosB1ModalQty("1");
-                                    setInsumosB1AddModalTarget("single");
-                                    setInsumosB1ShowAddModal(true);
-                                    return;
-                                  }
-                                  setInsumosB1SelectedInsumoId(e.target.value);
-                                  const inv = inventory.find(i => i.id === e.target.value);
-                                  if (inv) {
-                                    setInsumosB1InsumoSearch(inv.name || "");
-                                    if (inv.unit === "Kg") setInsumosB1Qty("0.05");
-                                    else if (inv.unit === "g") setInsumosB1Qty("10");
-                                    else if (inv.unit === "Ltr") setInsumosB1Qty("0.1");
-                                    else setInsumosB1Qty("1");
-                                  }
-                                }}
-                                className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-semibold text-slate-700 h-[44px]"
-                              >
-                                <option value="">-- Elige un insumo del almacén --</option>
-                                <option value="CREATE_NEW_MODAL_DIRECT" className="font-extrabold text-indigo-600 bg-indigo-50">
-                                  ➕ [Registrar nuevo insumo en almacén...]
-                                </option>
-                                {insumosB1InsumoSearch.trim() && (
-                                  <option value="CREATE_NEW_MODAL" className="font-extrabold text-indigo-600 bg-indigo-50">
-                                    ➕ Crear '{insumosB1InsumoSearch}' y agregar...
-                                  </option>
-                                )}
-                                {inventory
-                                  .filter((item) => {
-                                    if (!insumosB1InsumoSearch.trim()) return true;
-                                    const nameNorm = (item.name || "").toLowerCase();
-                                    return nameNorm.includes(insumosB1InsumoSearch.toLowerCase());
-                                  })
-                                  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                                  .map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.name} ({item.unit}) - Stock: {item.stock || 0}
-                                    </option>
-                                  ))}
-                              </select>
-
-                              {/* Shortcut add button if search is active but not matched exactly */}
-                              {insumosB1InsumoSearch.trim() && !inventory.some(i => (i.name || "").toLowerCase().trim() === insumosB1InsumoSearch.toLowerCase().trim()) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setInsumosB1ModalName(insumosB1InsumoSearch);
-                                    setInsumosB1ModalUnit("Pza");
-                                    setInsumosB1ModalCost("");
-                                    setInsumosB1ModalQty("1");
-                                    setInsumosB1AddModalTarget("single");
-                                    setInsumosB1ShowAddModal(true);
-                                  }}
-                                  className="bg-indigo-600 hover:bg-indigo-700 text-white border-none px-4 py-2.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer flex items-center gap-1.5 h-[44px] whitespace-nowrap shadow-md shadow-indigo-100 animate-pulse"
-                                >
-                                  ➕ Agregar "{insumosB1InsumoSearch}"
-                                </button>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setInsumosB1ModalName(insumosB1InsumoSearch || "");
-                                  setInsumosB1ModalUnit("Pza");
-                                  setInsumosB1ModalCost("");
-                                  setInsumosB1ModalQty("1");
-                                  setInsumosB1AddModalTarget("single");
-                                  setInsumosB1ShowAddModal(true);
-                                }}
-                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 h-[44px] whitespace-nowrap"
-                                title="Agregar Insumo Nuevo"
-                              >
-                                ➕ Nuevo
-                              </button>
-                            </div>
-
-
-                          </div>
-
-                          <div className="w-full sm:w-28 space-y-1.5 text-left">
-                            <label className="text-[12px] font-bold text-slate-400 uppercase block">Cant:</label>
-                            <input
-                              type="number"
-                              step="0.001"
-                              placeholder="0"
-                              value={insumosB1Qty}
-                              onChange={(e) => setInsumosB1Qty(e.target.value)}
-                              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 outline-none text-right font-bold h-[44px]"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAddIngredient();
-                              setInsumosB1InsumoSearch("");
-                            }}
-                            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition border-none cursor-pointer shadow-xs whitespace-nowrap h-[44px]"
-                          >
-                            Agregar Insumo ➕
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                ) : (
-                  /* EMPTY STATE - NO PRODUCT SELECTED */
-                  <div className="bg-white border border-slate-100 rounded-3xl p-14 text-center shadow-xs flex flex-col items-center justify-center gap-5 min-h-[400px]">
-                    <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center text-4xl shadow-inner animate-pulse">
-                      🍲
-                    </div>
-                    <h2 className="text-xl font-extrabold text-slate-800">Recetario Vacío</h2>
-                    <p className="text-sm text-slate-400 leading-relaxed max-w-xs mx-auto">
-                      Selecciona un platillo o bebida del catálogo de la izquierda para diseñar su fórmula de ingredientes y automatizar su vinculación rápida.
-                    </p>
-                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl max-w-sm mx-auto">
-                      <span className="text-xs text-slate-400 font-medium block">
-                        💡 Tip: Puedes dar de alta insumos al instante usando el botón "Crear nuevo insumo" en el formulario de la receta.
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-
-            {/* Modal "Add Ingredient" (Agregar Insumo) */}
-            {insumosB1ShowAddModal && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md overflow-hidden">
-                  
-                  {/* Modal Header */}
-                  <div className="bg-slate-900 px-6 py-5 flex justify-between items-center text-white">
-                    <div>
-                      <h3 className="text-lg font-bold m-0 text-white">Add Ingredient</h3>
-                      <p className="text-xs text-slate-300 mt-0.5">Crea un nuevo ingrediente y agrégalo directamente a este platillo</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setInsumosB1ShowAddModal(false)}
-                      className="text-white/80 hover:text-white bg-transparent border-none text-xl font-bold cursor-pointer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* Modal Body / Form */}
-                  <form onSubmit={handleCreateAndAddModalInsumo} className="p-6 space-y-4 text-left">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase">Nombre del Insumo:</label>
-                      <input
-                        type="text"
-                        placeholder="p. ej. toast"
-                        value={insumosB1ModalName}
-                        onChange={(e) => setInsumosB1ModalName(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:border-indigo-500 outline-none font-semibold text-slate-800 bg-slate-50/50"
-                        required
-                        autoFocus
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase">Unidad de Medida:</label>
-                        <select
-                          value={insumosB1ModalUnit}
-                          onChange={(e) => setInsumosB1ModalUnit(e.target.value)}
-                          className="w-full border border-slate-200 bg-white rounded-xl px-3.5 py-2.5 text-sm focus:border-indigo-500 outline-none font-bold text-slate-700"
-                        >
-                          <option value="Pza">Pza (Unidad)</option>
-                          <option value="Kg">Kg (Kilos)</option>
-                          <option value="Ltr">Ltr (Litros)</option>
-                          <option value="g">g (Gramos)</option>
-                          <option value="ml">ml (Mililitros)</option>
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase">Costo Unitario ($):</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={insumosB1ModalCost}
-                          onChange={(e) => setInsumosB1ModalCost(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:border-indigo-500 outline-none text-right font-bold text-slate-800 bg-slate-50/50"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 bg-indigo-50/40 p-3 rounded-2xl border border-indigo-100/50">
-                      <label className="text-xs text-indigo-500 font-black uppercase">Cantidad a agregar a la receta:</label>
-                      <div className="flex items-center gap-3 mt-1">
-                        <input
-                          type="number"
-                          step="0.001"
-                          placeholder="1"
-                          value={insumosB1ModalQty}
-                          onChange={(e) => setInsumosB1ModalQty(e.target.value)}
-                          className="w-28 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:border-indigo-500 outline-none text-right font-extrabold text-slate-800 bg-white"
-                          required
-                        />
-                        <span className="text-sm font-bold text-slate-500 uppercase">{insumosB1ModalUnit}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1 leading-snug">
-                        Se descontará automáticamente esta cantidad del stock de almacén por cada venta del platillo.
-                      </p>
-                    </div>
-
-                    {/* Modal Actions */}
-                    <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setInsumosB1ShowAddModal(false)}
-                        className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-slate-600 font-bold cursor-pointer hover:bg-slate-50 transition-all"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black border-none cursor-pointer shadow-md shadow-indigo-100 transition-all flex items-center gap-2"
-                      >
-                        <span>Add</span> ➕
-                      </button>
-                    </div>
-                  </form>
-
-                </div>
-              </div>
-            )}
-
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
-
-
-  const renderTicketLocal = () => {
-    // We want the user to be able to set and select different presets of print text
-    const presets = [
-      {
-        id: "simple",
-        name: "🎫 Ticket Simple (Hola Mundo)",
-        text: `================================\n    PRUEBA DE IMPRESION LOCAL   \n================================\nDispositivo: Celular Android\nServicio: Impresor Quail 2026\n\n¡Hola Mundo desde Cocinet!\nLa impresion ha sido exitosa.\n\nFecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n================================\n\n\n\n`
-      },
-      {
-        id: "comanda",
-        name: "🍔 Comanda de Alimentos (Completo)",
-        text: `================================\n         COCINET REST           \n       Av. Principal 123        \n      Tel: 555-123-4567         \n================================\nFolio: #A-5829\nFecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\nAtendido por: ${currentUser?.name || "Cajero"}\nMesa: Mesa 4\n--------------------------------\nCant  Producto           Importe\n--------------------------------\n2x    Hamburguesa Res    $198.00\n1x    Papas Fritas Gde    $45.00\n3x    Refresco Cola 600m  $75.00\n--------------------------------\nSUBTOTAL:              $318.00\nIVA (16%):              $50.88\nTOTAL:                 $318.00\n--------------------------------\n¡Gracias por su preferencia!\nServicio de Impresion Quail\n================================\n\n\n\n`
-      },
-      {
-        id: "char_test",
-        name: "🔤 Prueba de Caracteres Especiales",
-        text: `================================\n PRUEBA DE CODIFICACION (CP1252)\n================================\nAcentos: á é í ó ú Á É Í Ó Ú\nLetra Ñ: ñ Ñ\nSimbolos: $ % & / ( ) = ? ¡ ¿\nOperaciones: + - * /\nSeparadores: . , ; : _ - * =\n================================\n\n\n\n`
-      }
-    ];
-
-    // Initialize text if empty on view load
-    if (!localPrinterText) {
-      setLocalPrinterText(presets[0].text);
-    }
-
-    const selectPreset = (presetText: string) => {
-      setLocalPrinterText(presetText);
-    };
-
-    const handleSendTestTicket = async () => {
-      if (!localPrinterMac.trim()) {
-        triggerAppNotification("Error ❌", "Por favor introduce la dirección MAC de la impresora Bluetooth.", "warning");
-        return;
-      }
-      if (!localPrinterHost.trim()) {
-        triggerAppNotification("Error ❌", "Por favor introduce la URL del servidor local.", "warning");
-        return;
-      }
-      
-      setLocalPrinterStatus("sending");
-      setLocalPrinterResponse("");
-      const timestamp = new Date().toLocaleTimeString();
-      const logMsg = `[${timestamp}] Iniciando envío a ${localPrinterHost}...`;
-      setLocalPrinterLogs(prev => [logMsg, ...prev]);
-
-      try {
-        const requestBody = `mac=${encodeURIComponent(localPrinterMac.trim())}&texto=${encodeURIComponent(localPrinterText)}`;
-        
-        // Save preferences to localStorage
-        localStorage.setItem("local_printer_mac", localPrinterMac.trim());
-        localStorage.setItem("local_printer_host", localPrinterHost.trim());
-
-        const response = await fetch(localPrinterHost.trim(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: requestBody,
-        });
-
-        const responseText = await response.text();
-        if (response.ok) {
-          setLocalPrinterStatus("success");
-          setLocalPrinterResponse(responseText);
-          setLocalPrinterLogs(prev => [
-            `[${new Date().toLocaleTimeString()}] ✅ ¡Éxito! Respuesta del servidor: "${responseText}"`,
-            ...prev
-          ]);
-          triggerAppNotification("¡Éxito! 🖨️", "Ticket de prueba enviado correctamente a la impresora.", "success");
-        } else {
-          setLocalPrinterStatus("error");
-          setLocalPrinterResponse(responseText || `Código de estado: ${response.status}`);
-          setLocalPrinterLogs(prev => [
-            `[${new Date().toLocaleTimeString()}] ❌ Error del servidor (${response.status}): ${responseText || response.statusText}`,
-            ...prev
-          ]);
-          triggerAppNotification("Error de Impresión ❌", `El servidor respondió con error: ${response.status}`, "warning");
-        }
-      } catch (err: any) {
-        console.error("Error sending test ticket:", err);
-        setLocalPrinterStatus("error");
-        setLocalPrinterResponse(err.message || String(err));
-        setLocalPrinterLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ❌ Error de Red: ${err.message || String(err)}. Asegúrate de que el servidor local de impresión esté activo en tu teléfono y que el navegador permita conexiones insecure content.`,
-          ...prev
-        ]);
-        triggerAppNotification("Error de Conexión 🔌", "No se pudo conectar con el servidor de impresión local.", "warning");
-      }
-    };
-
-    return (
-      <IonPage>
-        {renderMaterialHeader({
-          title: "Ticket de Prueba Local 🖨️",
-          subtitle: "Prueba la conexión con tu impresora Bluetooth física",
-          showBack: true,
-          onBack: () => setAppMode("floorplan"),
-        })}
-        <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-          <div className="max-w-4xl mx-auto space-y-6 pb-12">
-            
-            {/* Intro Alert Box */}
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-3xl p-5 flex items-start gap-4">
-              <span className="text-2xl mt-0.5">📲</span>
-              <div className="space-y-1.5 text-left">
-                <h4 className="text-sm font-extrabold text-indigo-950 uppercase tracking-wider">Servicio de Impresión Android Activo</h4>
-                <p className="text-xs text-indigo-900/80 leading-relaxed">
-                  Este formulario se comunica directamente con la aplicación de servidor local de impresión (HTTP Server) que instalaste en tu teléfono Android. Envía peticiones POST en tiempo real para mandar comandos ESC/POS a tu impresora de tickets Bluetooth vinculada.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
-              {/* Left Column: Form & Configuration (7 Cols) */}
-              <div className="lg:col-span-7 space-y-6">
-                
-                {/* Configuration Card */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4 text-left">
-                  <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                    🔧 Configuración del Impresor
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Dirección MAC de Impresora:</label>
-                      <input
-                        type="text"
-                        placeholder="p. ej. 66:32:B1:A5:42:01"
-                        value={localPrinterMac}
-                        onChange={(e) => setLocalPrinterMac(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold text-slate-700 focus:border-indigo-500 outline-none"
-                      />
-                      <p className="text-[12px] text-slate-400 leading-tight">
-                        La puedes encontrar en la configuración Bluetooth de tu teléfono.
-                      </p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">URL del Servidor local:</label>
-                      <input
-                        type="text"
-                        placeholder="http://localhost:8080/imprimir"
-                        value={localPrinterHost}
-                        onChange={(e) => setLocalPrinterHost(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold text-slate-700 focus:border-indigo-500 outline-none"
-                      />
-                      <p className="text-[12px] text-slate-400 leading-tight">
-                        La app de Android corre en el puerto <strong>8080</strong> de forma predeterminada.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Presets & Custom Text Card */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4 text-left">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                      📝 Contenido del Ticket
-                    </h3>
-                    
-                    <div className="flex flex-wrap gap-1.5">
-                      {presets.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => selectPreset(p.text)}
-                          className="bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 border border-slate-100 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                        >
-                          {p.name.split(" ")[0]} Preset
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Preset Quick Dropdown */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Seleccionar Plantilla Completa:</label>
-                    <select
-                      onChange={(e) => {
-                        const pr = presets.find(p => p.id === e.target.value);
-                        if (pr) selectPreset(pr.text);
-                      }}
-                      className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none"
-                    >
-                      {presets.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Editor de Texto ESC/POS (Código):</label>
-                    <textarea
-                      rows={10}
-                      value={localPrinterText}
-                      onChange={(e) => setLocalPrinterText(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-3 text-xs font-mono bg-slate-900 text-emerald-400 focus:border-indigo-500 outline-none leading-relaxed"
-                      placeholder="Escribe el contenido que deseas enviar a imprimir..."
-                    />
-                    <p className="text-[12px] text-slate-400 leading-tight">
-                      Consejo: Agrega 3 saltos de línea al final del ticket para que la impresora avance el papel lo suficiente.
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleSendTestTicket}
-                      disabled={localPrinterStatus === "sending"}
-                      className={`w-full sm:w-auto px-8 py-3.5 rounded-xl text-sm font-black border-none cursor-pointer shadow-lg transition-all flex items-center justify-center gap-2 ${
-                        localPrinterStatus === "sending"
-                          ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                          : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:shadow-indigo-200"
-                      }`}
-                    >
-                      {localPrinterStatus === "sending" ? (
-                        <>
-                          <span>Enviando Comanda...</span>
-                          <span className="animate-spin text-lg">⏳</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Enviar Ticket de Prueba 🖨️</span>
-                          <span className="text-base">🚀</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* Right Column: Interactive Printer Status Preview (5 Cols) */}
-              <div className="lg:col-span-5 space-y-6 text-left">
-                
-                {/* Visual Status card */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4">
-                  <h3 className="text-base font-extrabold text-slate-800">
-                    📡 Estado de Conexión
-                  </h3>
-
-                  <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl text-center space-y-3">
-                    {localPrinterStatus === "idle" && (
-                      <>
-                        <div className="w-14 h-14 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-2xl shadow-inner">
-                          🖨️
-                        </div>
-                        <div>
-                          <span className="inline-block px-3 py-1 bg-slate-200/60 text-slate-600 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            Listo para Probar
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                          Establece los parámetros y haz clic en "Enviar Ticket de Prueba".
-                        </p>
-                      </>
-                    )}
-
-                    {localPrinterStatus === "sending" && (
-                      <>
-                        <div className="w-14 h-14 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center text-2xl shadow-inner animate-pulse">
-                          ⏳
-                        </div>
-                        <div>
-                          <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[12px] font-black uppercase tracking-wider animate-bounce">
-                            Transmitiendo Datos...
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                          La app está enviando la petición HTTP localmente a tu celular.
-                        </p>
-                      </>
-                    )}
-
-                    {localPrinterStatus === "success" && (
-                      <>
-                        <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-2xl shadow-inner">
-                          ✅
-                        </div>
-                        <div>
-                          <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            ¡Éxito en Envío!
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                          El servidor local de impresión recibió el comando exitosamente y lo transmitió a la impresora Bluetooth.
-                        </p>
-                        {localPrinterResponse && (
-                          <div className="w-full bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100 text-[11px] font-mono font-bold text-emerald-800 break-all text-left">
-                            Respuesta: {localPrinterResponse}
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {localPrinterStatus === "error" && (
-                      <>
-                        <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-2xl shadow-inner animate-bounce">
-                          ❌
-                        </div>
-                        <div>
-                          <span className="inline-block px-3 py-1 bg-rose-100 text-rose-700 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            Error Detectado
-                          </span>
-                        </div>
-                        <p className="text-xs text-rose-600/90 font-medium max-w-xs leading-relaxed">
-                          {localPrinterResponse || "No se pudo conectar con el servidor."}
-                        </p>
-                        <div className="text-left w-full bg-rose-50/40 p-3 rounded-xl border border-rose-100/50 space-y-1">
-                          <span className="text-[12px] font-bold uppercase text-rose-700 block">💡 Tips de solución:</span>
-                          <ul className="list-disc pl-4 text-[12px] text-slate-500 space-y-1">
-                            <li>¿La app está instalada y activa en tu celular Android?</li>
-                            <li>¿Configuraste la MAC Address correcta?</li>
-                            <li>¿Permitiste Insecure Content en la barra de direcciones del navegador?</li>
-                            <li>Ambos dispositivos (PC y Celular) deben estar en la misma red Wi-Fi si usas una IP local.</li>
-                          </ul>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Console Logs Card */}
-                <div className="bg-slate-900 rounded-3xl p-6 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      ⌨️ Logs de Consola Local
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setLocalPrinterLogs([])}
-                      className="text-[12px] font-extrabold text-slate-500 hover:text-slate-300 bg-transparent border-none cursor-pointer"
-                    >
-                      Limpiar Logs
-                    </button>
-                  </div>
-
-                  <div className="bg-black/40 rounded-xl p-3 h-44 overflow-y-auto font-mono text-[12px] leading-relaxed text-slate-400 space-y-1 text-left select-text">
-                    {localPrinterLogs.length === 0 ? (
-                      <span className="text-slate-600">Ningún evento registrado aún...</span>
-                    ) : (
-                      localPrinterLogs.map((log, i) => (
-                        <div key={i} className="whitespace-pre-wrap border-b border-slate-900/40 pb-1">
-                          {log}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
-
-
-  const renderTicketRed = () => {
-    // Presets for the network printer ticket content
-    const presets = [
-      {
-        id: "simple",
-        name: "🎫 Ticket Simple (Hola Mundo)",
-        text: `================================\n    PRUEBA DE IMPRESION RED     \n================================\nDispositivo: Windows PC / Red\nPuerto Impresora: 9100 (RAW)\nServicio: Puente Python local\n\n¡Hola Mundo desde Cocinet!\nLa impresion en red fue exitosa.\n\nFecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n================================\n\n\n\n`
-      },
-      {
-        id: "comanda",
-        name: "🍔 Comanda de Alimentos (Completo)",
-        text: `================================\n         COCINET REST           \n       Av. Principal 123        \n      Tel: 555-123-4567         \n================================\nFolio: #RED-1024\nFecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\nAtendido por: ${currentUser?.name || "Cajero"}\nMesa: Mesa Terraza 1\n--------------------------------\nCant  Producto           Importe\n--------------------------------\n1x    Pizza Familiar     $249.00\n2x    Refresco Cola      $50.00\n1x    Clericot Jarra     $180.00\n--------------------------------\nSUBTOTAL:              $479.00\nIVA (16%):              $76.64\nTOTAL:                 $479.00\n--------------------------------\n¡Gracias por su preferencia!\nImpresora en Red - Puerto 9100\n================================\n\n\n\n`
-      },
-      {
-        id: "char_test",
-        name: "🔤 Prueba de Caracteres Especiales",
-        text: `================================\n PRUEBA DE CODIFICACION (CP1252)\n================================\nAcentos: á é í ó ú Á É Í Ó Ú\nLetra Ñ: ñ Ñ\nSimbolos: $ % & / ( ) = ? ¡ ¿\nOperaciones: + - * /\nSeparadores: . , ; : _ - * =\n================================\n\n\n\n`
-      }
-    ];
-
-    // Initialize text if empty
-    if (!netPrinterText) {
-      setNetPrinterText(presets[0].text);
-    }
-
-    const selectPreset = (presetText: string) => {
-      setNetPrinterText(presetText);
-    };
-
-    const handleSendNetTicket = async () => {
-      if (!netPrinterIp.trim()) {
-        triggerAppNotification("Error ❌", "Por favor introduce la IP de la impresora de red.", "warning");
-        return;
-      }
-      if (!netPrinterPort.trim()) {
-        triggerAppNotification("Error ❌", "Por favor introduce el puerto (generalmente 9100).", "warning");
-        return;
-      }
-      if (!netPrinterBridgeUrl.trim()) {
-        triggerAppNotification("Error ❌", "Por favor introduce la URL del puente local.", "warning");
-        return;
-      }
-
-      setNetPrinterStatus("sending");
-      setNetPrinterResponse("");
-      const timestamp = new Date().toLocaleTimeString();
-      const logMsg = `[${timestamp}] Enviando ticket red a través de ${netPrinterBridgeUrl}...`;
-      setNetPrinterLogs(prev => [logMsg, ...prev]);
-
-      try {
-        const requestBody = `ip=${encodeURIComponent(netPrinterIp.trim())}&port=${encodeURIComponent(netPrinterPort.trim())}&texto=${encodeURIComponent(netPrinterText)}`;
-        
-        // Save to localStorage
-        localStorage.setItem("net_printer_ip", netPrinterIp.trim());
-        localStorage.setItem("net_printer_port", netPrinterPort.trim());
-        localStorage.setItem("net_printer_bridge_url", netPrinterBridgeUrl.trim());
-
-        const response = await fetch(netPrinterBridgeUrl.trim(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: requestBody,
-        });
-
-        const responseText = await response.text();
-        if (response.ok && responseText.includes("Exito")) {
-          setNetPrinterStatus("success");
-          setNetPrinterResponse(responseText);
-          setNetPrinterLogs(prev => [
-            `[${new Date().toLocaleTimeString()}] ✅ ¡Éxito! Imprimido correctamente en ${netPrinterIp}:${netPrinterPort}`,
-            ...prev
-          ]);
-          triggerAppNotification("¡Éxito! 🖨️", "Ticket enviado correctamente a la impresora en red.", "success");
-        } else {
-          setNetPrinterStatus("error");
-          setNetPrinterResponse(responseText || `Error de respuesta: ${response.status}`);
-          setNetPrinterLogs(prev => [
-            `[${new Date().toLocaleTimeString()}] ❌ Respuesta del puente: "${responseText || response.statusText}"`,
-            ...prev
-          ]);
-          triggerAppNotification("Error de Impresión ❌", responseText || `El puente respondió con error: ${response.status}`, "warning");
-        }
-      } catch (err: any) {
-        console.error("Error sending network ticket:", err);
-        setNetPrinterStatus("error");
-        setNetPrinterResponse(err.message || String(err));
-        setNetPrinterLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ❌ Error de Red: ${err.message || String(err)}. Asegúrate de que el script puente 'impresor_red_windows.py' esté corriendo en tu PC con Windows en la dirección ${netPrinterBridgeUrl}.`,
-          ...prev
-        ]);
-        triggerAppNotification("Error de Conexión 🔌", "No se pudo conectar con el puente de impresión local.", "warning");
-      }
-    };
-
-    return (
-      <IonPage>
-        {renderMaterialHeader({
-          title: "Prueba de Impresión Red (Puerto 9100) 🌐",
-          subtitle: "Imprime a través de tu red local en Windows",
-          showBack: true,
-          onBack: () => setAppMode("floorplan"),
-        })}
-        <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-          <div className="max-w-5xl mx-auto space-y-6 pb-12">
-
-            {/* Explanatory Box */}
-            <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-100 rounded-3xl p-6 flex items-start gap-4">
-              <span className="text-2xl mt-0.5">🖥️</span>
-              <div className="space-y-2 text-left">
-                <h4 className="text-sm font-extrabold text-teal-950 uppercase tracking-wider">¿Cómo funciona la impresión en red local?</h4>
-                <p className="text-xs text-teal-900/80 leading-relaxed">
-                  Dado que Cocinet se ejecuta en un navegador web seguro en la nube, las directivas de seguridad impiden que el navegador abra sockets TCP directos en el puerto <strong>9100</strong> de tu red de Windows. 
-                  Para solucionar esto, proporcionamos un script puente en Python muy sencillo que ejecutas en tu Windows. Este puente actúa como intermediario local: recibe la comanda de la web mediante HTTP y la reenvía inmediatamente al puerto 9100 de tu impresora.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-              {/* Left Column (7 cols): Configuration & Ticket Input */}
-              <div className="lg:col-span-7 space-y-6">
-
-                {/* Configuration Card */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4 text-left">
-                  <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                    ⚙️ Configuración de Impresora y Puente
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">IP de la Impresora:</label>
-                      <input
-                        type="text"
-                        placeholder="p. ej. 192.168.1.100"
-                        value={netPrinterIp}
-                        onChange={(e) => setNetPrinterIp(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 focus:border-indigo-500 outline-none"
-                      />
-                      <p className="text-[12px] text-slate-400">IP local de tu impresora de tickets.</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Puerto TCP (9100):</label>
-                      <input
-                        type="text"
-                        placeholder="9100"
-                        value={netPrinterPort}
-                        onChange={(e) => setNetPrinterPort(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 focus:border-indigo-500 outline-none"
-                      />
-                      <p className="text-[12px] text-slate-400">9100 es el estándar RAW.</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">URL Puente Local:</label>
-                      <input
-                        type="text"
-                        placeholder="http://localhost:9101/imprimir"
-                        value={netPrinterBridgeUrl}
-                        onChange={(e) => setNetPrinterBridgeUrl(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 focus:border-indigo-500 outline-none"
-                      />
-                      <p className="text-[12px] text-slate-400">Dirección de tu script de Python.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ticket text & presets */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4 text-left">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1">
-                      📝 Contenido a Imprimir
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {presets.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => selectPreset(p.text)}
-                          className="bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 border border-slate-100 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer"
-                        >
-                          {p.name.split(" ")[0]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase block">Plantilla:</label>
-                    <select
-                      onChange={(e) => {
-                        const pr = presets.find(p => p.id === e.target.value);
-                        if (pr) selectPreset(pr.text);
-                      }}
-                      className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-indigo-500 outline-none"
-                    >
-                      {presets.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase block">Texto del Ticket:</label>
-                    <textarea
-                      rows={9}
-                      value={netPrinterText}
-                      onChange={(e) => setNetPrinterText(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono bg-slate-900 text-emerald-400 focus:border-emerald-500 outline-none leading-relaxed"
-                    />
-                    <p className="text-[12px] text-slate-400 leading-tight">
-                      Asegúrate de incluir saltos de línea al final para dejar suficiente espacio para el corte de papel.
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleSendNetTicket}
-                      disabled={netPrinterStatus === "sending"}
-                      className={`w-full sm:w-auto px-8 py-3.5 rounded-xl text-sm font-black border-none cursor-pointer shadow-lg transition-all flex items-center justify-center gap-2 ${
-                        netPrinterStatus === "sending"
-                          ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                          : "bg-teal-600 hover:bg-teal-700 text-white shadow-teal-100 hover:shadow-teal-200"
-                      }`}
-                    >
-                      {netPrinterStatus === "sending" ? (
-                        <>
-                          <span>Enviando a Red...</span>
-                          <span className="animate-spin text-lg">⏳</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Enviar Ticket a Red 🌐</span>
-                          <span className="text-base">🚀</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Right Column (5 cols): Status, Instructions & Code copy */}
-              <div className="lg:col-span-5 space-y-6 text-left">
-
-                {/* Status Indicator */}
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4">
-                  <h3 className="text-sm font-extrabold text-slate-800">
-                    📡 Estado del Envío
-                  </h3>
-
-                  <div className="flex flex-col items-center justify-center p-5 bg-slate-50 rounded-2xl text-center space-y-3">
-                    {netPrinterStatus === "idle" && (
-                      <>
-                        <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-xl shadow-inner">
-                          🌐
-                        </div>
-                        <div>
-                          <span className="inline-block px-2.5 py-0.5 bg-slate-200/60 text-slate-600 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            Listo para Probar
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          Ingresa la IP de tu impresora local en Windows y haz clic en "Enviar Ticket a Red".
-                        </p>
-                      </>
-                    )}
-
-                    {netPrinterStatus === "sending" && (
-                      <>
-                        <div className="w-12 h-12 bg-teal-50 text-teal-500 rounded-full flex items-center justify-center text-xl shadow-inner animate-pulse">
-                          ⏳
-                        </div>
-                        <div>
-                          <span className="inline-block px-2.5 py-0.5 bg-teal-100 text-teal-700 rounded-full text-[12px] font-black uppercase tracking-wider animate-bounce">
-                            Enviando Datos...
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          La web se está comunicando con el script de Python que corre en tu PC de Windows...
-                        </p>
-                      </>
-                    )}
-
-                    {netPrinterStatus === "success" && (
-                      <>
-                        <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-xl shadow-inner">
-                          ✅
-                        </div>
-                        <div>
-                          <span className="inline-block px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            ¡Conexión Exitosa!
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          ¡Excelente! El script puente recibió el contenido y lo envió directamente al puerto 9100 de tu impresora.
-                        </p>
-                      </>
-                    )}
-
-                    {netPrinterStatus === "error" && (
-                      <>
-                        <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-xl shadow-inner animate-bounce">
-                          ❌
-                        </div>
-                        <div>
-                          <span className="inline-block px-2.5 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[12px] font-black uppercase tracking-wider">
-                            Error Detectado
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-rose-600 font-bold break-words max-w-full">
-                          {netPrinterResponse}
-                        </p>
-                        <div className="w-full text-left bg-rose-50/40 p-2.5 rounded-lg border border-rose-100/30 text-[12px] text-slate-500 space-y-1">
-                          <span className="font-bold text-rose-700">Tips de Solución:</span>
-                          <ul className="list-disc pl-3.5 space-y-0.5">
-                            <li>¿Corriste el script de Python en tu Windows?</li>
-                            <li>¿La IP de la impresora ({netPrinterIp}) es correcta y responde a ping?</li>
-                            <li>¿Tu Windows y la impresora están en la misma red local?</li>
-                          </ul>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Instructions on how to run python script */}
-                <div className="bg-slate-900 rounded-3xl p-5 shadow-sm space-y-3">
-                  <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                    💻 Instrucciones para Windows
-                  </h3>
-                  <p className="text-[12px] text-slate-400 leading-relaxed">
-                    Hemos creado un script puente llamado <code className="text-teal-400 bg-slate-950 px-1 py-0.5 rounded font-mono">impresor_red_windows.py</code> listo para ser usado en tu computadora Windows:
-                  </p>
-
-                  <div className="space-y-2 text-[12px] text-slate-300">
-                    <div className="flex gap-2">
-                      <span className="font-black text-teal-400">1.</span>
-                      <p>Instala Python en tu Windows si aún no lo tienes (asegúrate de marcar 'Add to PATH').</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="font-black text-teal-400">2.</span>
-                      <p>Crea un archivo llamado <code className="text-teal-400 bg-slate-950 px-1 py-0.5 rounded font-mono">impresor.py</code> en tu PC y pega el siguiente código puente:</p>
-                    </div>
-                  </div>
-
-                  {/* Copy code container */}
-                  <div className="relative bg-slate-950 rounded-xl p-3 max-h-48 overflow-y-auto border border-slate-800">
-                    <pre className="text-[11px] font-mono text-slate-400 leading-normal text-left">
-{`import socket
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import urllib.parse
-
-class NetworkPrinterBridgeHandler(BaseHTTPRequestHandler):
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-
-    def do_POST(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Content-type', 'text/plain; charset=utf-8')
-        self.end_headers()
-
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            params = urllib.parse.parse_qs(post_data)
-            ip = params.get('ip', [''])[0]
-            port_str = params.get('port', ['9100'])[0]
-            texto = params.get('texto', [''])[0]
-
-            if not ip or not texto:
-                self.wfile.write("Error: Falta IP o texto".encode('utf-8'))
-                return
-
-            port = int(port_str)
-            print(f"Enviando impresion a {ip}:{port}...")
-            
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(5.0)
-            s.connect((ip, port))
-            s.sendall(texto.encode('cp1252', errors='replace'))
-            s.close()
-            
-            self.wfile.write("Exito".encode('utf-8'))
-        except Exception as e:
-            self.wfile.write(f"Error: {str(e)}".encode('utf-8'))
-
-httpd = HTTPServer(('', 9101), NetworkPrinterBridgeHandler)
-print("Puente activo en puerto 9101...")
-httpd.serve_forever()`}
-                    </pre>
-                  </div>
-
-                  <div className="space-y-2 text-[12px] text-slate-300">
-                    <div className="flex gap-2">
-                      <span className="font-black text-teal-400">3.</span>
-                      <p>Ejecútalo abriendo tu consola de Windows (CMD) y escribiendo: <code className="text-teal-400 bg-slate-950 px-1 py-0.5 rounded font-mono">python impresor.py</code></p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Network bridge logs */}
-                <div className="bg-slate-900 rounded-3xl p-5 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                      ⌨️ Bitácora de Conexión
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setNetPrinterLogs([])}
-                      className="text-[11px] font-bold text-slate-500 hover:text-slate-300 bg-transparent border-none cursor-pointer"
-                    >
-                      Limpiar
-                    </button>
-                  </div>
-                  <div className="bg-black/40 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[11px] text-slate-400 space-y-1 text-left select-text">
-                    {netPrinterLogs.length === 0 ? (
-                      <span className="text-slate-600">No hay eventos aún...</span>
-                    ) : (
-                      netPrinterLogs.map((log, i) => (
-                        <div key={i} className="border-b border-slate-900/30 pb-0.5">
-                          {log}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
 
   const renderReporteMovimientos = () => {
     const startOfReport = new Date(reporteMovimientosInicio);
@@ -42332,11 +35771,6 @@ httpd.serve_forever()`}
           {appMode === "table-details" && renderTableDetails()}
           {appMode === "checkout" && renderCheckout()}
           {appMode === "admin" && renderAdminPanel()}
-          {appMode === "inventory" && renderAdminInventory()}
-          {appMode === "ia-insumos" && renderIAInsumos()}
-          {appMode === "ops-inventarios" && renderOpsInventarios()}
-          {appMode === "inventario-v2" && renderInventarioV2()}
-          {appMode === "purchase-supplier" && renderPurchaseSupplier()}
 
           {appMode === "manage-menu" && renderManageMenu()}
           {appMode === "suppliers" && renderSuppliers()}
@@ -42347,20 +35781,7 @@ httpd.serve_forever()`}
           {appMode === "corte-express" && renderCorteExpress()}
           {appMode === "corte-tabla" && renderCorteTabla()}
           {appMode === "corte-x" && renderCorteX()}
-          {appMode === "insumos-b1" && renderInsumosB1()}
           {appMode === "expenses" && renderExpenses()}
-          {appMode === "ticket-local" && renderTicketLocal()}
-          {appMode === "ticket-red" && renderTicketRed()}
-          {appMode === "verify-menu" && (
-            <VerifyMenu
-              products={products}
-              inventory={inventory}
-              updateProductInFirebase={updateProductInFirebase}
-              setAppMode={setAppMode}
-              currentUser={currentUser}
-              renderMaterialHeader={renderMaterialHeader}
-            />
-          )}
 
           {renderSidebar()}
           {renderPaymentModal()}
@@ -43226,6 +36647,166 @@ httpd.serve_forever()`}
           }
         ]}
       />
+
+      <AnimatePresence>
+        {showOfflineBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            style={{
+              position: "fixed",
+              bottom: "20px",
+              left: "16px",
+              right: "16px",
+              margin: "0 auto",
+              maxWidth: "500px",
+              background: "rgba(185, 28, 28, 0.95)",
+              backdropFilter: "blur(12px)",
+              color: "white",
+              padding: "20px",
+              borderRadius: "24px",
+              boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5), 0 0 20px rgba(239, 68, 68, 0.3)",
+              border: "2px solid rgba(239, 68, 68, 0.4)",
+              zIndex: 99999,
+              fontFamily: "'Space Grotesk', sans-serif",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px"
+            }}
+          >
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(255, 255, 255, 0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "24px"
+                }}
+              >
+                📴
+              </motion.div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "900", letterSpacing: "0.03em" }}>
+                  SIN CONEXIÓN A INTERNET
+                </h3>
+                <p style={{ margin: "4px 0 0 0", fontSize: "11px", opacity: 0.95, fontWeight: "bold", lineHeight: "1.4" }}>
+                  PUEDE SEGUIR OPERANDO, LE AVISAREMOS EN CUANTO SE CONECTE DE NUEVO
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowOfflineBanner(false)}
+              style={{
+                width: "100%",
+                padding: "14px",
+                background: "white",
+                color: "#b91c1c",
+                fontWeight: "900",
+                fontSize: "12px",
+                borderRadius: "16px",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}
+            >
+              <span>👍</span> Enterado y continuar la operación
+            </button>
+          </motion.div>
+        )}
+
+        {showOnlineBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            style={{
+              position: "fixed",
+              bottom: "20px",
+              left: "16px",
+              right: "16px",
+              margin: "0 auto",
+              maxWidth: "500px",
+              background: "rgba(6, 95, 70, 0.95)",
+              backdropFilter: "blur(12px)",
+              color: "white",
+              padding: "20px",
+              borderRadius: "24px",
+              boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5), 0 0 20px rgba(16, 185, 129, 0.3)",
+              border: "2px solid rgba(16, 185, 129, 0.4)",
+              zIndex: 99999,
+              fontFamily: "'Space Grotesk', sans-serif",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px"
+            }}
+          >
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(255, 255, 255, 0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "24px"
+                }}
+              >
+                📶
+              </motion.div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "900", letterSpacing: "0.03em" }}>
+                  CONEXIÓN REESTABLECIDA
+                </h3>
+                <p style={{ margin: "4px 0 0 0", fontSize: "11px", opacity: 0.95, fontWeight: "bold", lineHeight: "1.4" }}>
+                  El sistema ha recuperado la conexión y está operando en línea.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowOnlineBanner(false)}
+              style={{
+                width: "100%",
+                padding: "14px",
+                background: "white",
+                color: "#065f46",
+                fontWeight: "900",
+                fontSize: "12px",
+                borderRadius: "16px",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}
+            >
+              <span>👍</span> Enterado y continuar la operación
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </IonApp>
   );
 }
