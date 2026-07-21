@@ -26,6 +26,7 @@ export interface Product {
   destination: Destination;
   quickNotes?: string[];
   recipe?: Array<{ inventoryItemId: string; quantity: number }>;
+  description?: string;
 }
 
 export function getOperatingDay(dateInput: Date | string): string {

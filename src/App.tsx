@@ -112,7 +112,7 @@ import {
   checkmarkOutline,
 } from "ionicons/icons";
 
-import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport } from "./utils/printer";
+import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport, WebBluetoothTransport, sendTestReceipt, getWindowsPrinters } from "./utils/printer";
 import {
   getLocalProducts,
   saveLocalProducts,
@@ -227,7 +227,16 @@ import {
   addNotificationToFirebase,
   subscribeToNotifications,
   updateNotificationInFirebase,
+  saveCompaniesConfigToFirebase,
+  subscribeToCompaniesConfigFromFirebase,
+  exportTenantDataJson,
+  TenantBackupSnapshot,
+  saveTenantBackupSnapshot,
+  subscribeToTenantBackupSnapshots,
+  deleteTenantBackupSnapshot,
+  restoreTenantBackupSnapshot,
 } from "./utils/firestore";
+
 
 import { parseVoiceTranscriptLocally } from "./utils/voiceParser";
 import DatabaseDeveloperPanel from "./components/DatabaseDeveloperPanel";
@@ -501,6 +510,24 @@ const playNotificationSound = (isCancellation = false) => {
     setTimeout(() => {
       playChimeSound();
     }, 850);
+  }
+};
+
+const toggleTextCase = (text: string): string => {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return "";
+  
+  if (trimmed === trimmed.toUpperCase()) {
+    return trimmed
+      .toLowerCase()
+      .split(/\s+/)
+      .map(word => {
+        if (!word) return "";
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(" ");
+  } else {
+    return trimmed.toUpperCase();
   }
 };
 
@@ -1527,6 +1554,15 @@ export default function App() {
     };
   }, [selectedTenant?.id]);
 
+  // 📦 Subscribe to full tenant backup snapshots (real-time)
+  useEffect(() => {
+    if (!selectedTenant?.id) return;
+    const unsub = subscribeToTenantBackupSnapshots(selectedTenant.id, (snapshots) => {
+      setTenantBackupSnapshots(snapshots);
+    });
+    return () => unsub();
+  }, [selectedTenant?.id]);
+
   // Sincronización continua con la base de datos local (SQLite) para el Sentinel de Impresión ⚙️⚡
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "error" | "success">("idle");
   const lastSyncRef = useRef<number>(0);
@@ -1734,6 +1770,7 @@ export default function App() {
   const [showTenantCrudModal, setShowTenantCrudModal] = useState(false);
   const [tenantsVersion, setTenantsVersion] = useState(0);
 
+
   useEffect(() => {
     const unsub = subscribeToTenants(async (firestoreTenants) => {
       // Merge Firestore tenants with DEFAULT_COMPANY_CATALOG
@@ -1775,6 +1812,29 @@ export default function App() {
       
       setTenantsVersion((v) => v + 1);
 
+      // 🔑 BUG FIX: Auto-add any new tenants to companiesConfig so they are visible on ALL devices
+      setCompaniesConfig((prevConfig) => {
+        let changed = false;
+        const next = { ...prevConfig };
+        merged.forEach((tenant) => {
+          if (!next[tenant.id]) {
+            next[tenant.id] = {
+              id: tenant.id,
+              visible: true,
+              groupName: tenant.propietario ? `Grupo ${tenant.propietario}` : "Grupo General",
+              uuid: `usr_ten_${tenant.id}`,
+              created_at: getMexicoISOString(),
+              updated_at: getMexicoISOString(),
+            };
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem("cocinet_companies_config_v3", JSON.stringify(next));
+        }
+        return changed ? next : prevConfig;
+      });
+
       // Keep selectedTenant state synchronized with Firestore updates
       setSelectedTenant((current) => {
         if (!current) return current;
@@ -1786,6 +1846,23 @@ export default function App() {
           }
         }
         return current;
+      });
+    });
+    return () => unsub();
+  }, []);
+
+  // 🌐 Sync companiesConfig from Firestore (so all devices see the same visibility settings)
+  useEffect(() => {
+    const unsub = subscribeToCompaniesConfigFromFirebase((firestoreConfig) => {
+      if (!firestoreConfig) return;
+      setCompaniesConfig((prev) => {
+        // Merge: Firestore is authoritative, but keep any local-only entries (new tenants not yet synced)
+        const merged = { ...prev };
+        Object.entries(firestoreConfig).forEach(([id, conf]) => {
+          merged[id] = conf as any;
+        });
+        localStorage.setItem("cocinet_companies_config_v3", JSON.stringify(merged));
+        return merged;
       });
     });
     return () => unsub();
@@ -2884,6 +2961,25 @@ export default function App() {
     targetName?: string;
   }>({ isOpen: false, type: "single" });
 
+  // 📦 Tenant Full Backup System
+  const [tenantBackupSnapshots, setTenantBackupSnapshots] = useState<TenantBackupSnapshot[]>([]);
+  const [tenantBackupNote, setTenantBackupNote] = useState("");
+  const [tenantBackupProgress, setTenantBackupProgress] = useState("");
+  const [isTenantBackupLoading, setIsTenantBackupLoading] = useState(false);
+  const [tenantBackupMode, setTenantBackupMode] = useState<"full" | "day">("day");
+  const [tenantBackupDate, setTenantBackupDate] = useState<string>(() => {
+    const d = new Date(getMexicoISOString());
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [tenantBackupConfirm, setTenantBackupConfirm] = useState<{
+    isOpen: boolean;
+    type: "create" | "restore" | "delete" | "move" | null;
+    snapshot?: TenantBackupSnapshot;
+    targetTenantId?: string;
+  }>({ isOpen: false, type: null });
+  const [tenantBackupMoveTarget, setTenantBackupMoveTarget] = useState("");
+
   const [showMenuToast, setShowMenuToast] = useState(false);
   const [menuToastMessage, setMenuToastMessage] = useState("");
 
@@ -3236,15 +3332,22 @@ export default function App() {
     setShowMenuToast(true);
 
     try {
-      await bulkAddProductsToFirebase(itemsToAdd, false);
+      await bulkAddProductsToFirebase(itemsToAdd, false, selectedTenant.id);
 
-      setMenuToastMessage(`Éxito: ${itemsToAdd.length} productos agregados.`);
+      const foodCount = itemsToAdd.filter(p => p.category === "food").length;
+      const drinksCount = itemsToAdd.filter(p => p.category === "drinks").length;
+      const dessertsCount = itemsToAdd.filter(p => p.category === "desserts").length;
+
+      const msg = `✅ ¡Éxito! Se importaron ${itemsToAdd.length} productos al menú:\n\n🌮 Alimentos: ${foodCount}\n🥤 Bebidas: ${drinksCount}\n🍰 Postres: ${dessertsCount}`;
+      alert(msg);
+
+      setMenuToastMessage(`Cargados: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
       setIsAddingProducts(false);
 
       setTimeout(() => {
         setDetectedProducts([]);
         setShowMenuToast(false);
-      }, 3000);
+      }, 4000);
     } catch (error: any) {
       console.error("Error adding products:", error);
       setMenuToastMessage(
@@ -3265,16 +3368,23 @@ export default function App() {
     setShowMenuToast(true);
 
     try {
-      await resetAllSystemsInFirebase();
-      await bulkAddProductsToFirebase(itemsToAdd, true);
+      await resetAllSystemsInFirebase(selectedTenant.id);
+      await bulkAddProductsToFirebase(itemsToAdd, true, selectedTenant.id);
 
-      setMenuToastMessage(`Menú reiniciado con éxito. Productos cargados.`);
+      const foodCount = itemsToAdd.filter(p => p.category === "food").length;
+      const drinksCount = itemsToAdd.filter(p => p.category === "drinks").length;
+      const dessertsCount = itemsToAdd.filter(p => p.category === "desserts").length;
+
+      const msg = `✅ ¡Menú Reiniciado con Éxito! Se cargaron ${itemsToAdd.length} productos:\n\n🌮 Alimentos: ${foodCount}\n🥤 Bebidas: ${drinksCount}\n🍰 Postres: ${dessertsCount}`;
+      alert(msg);
+
+      setMenuToastMessage(`Reiniciado con: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
       setIsAddingProducts(false);
       setTimeout(() => {
         setDetectedProducts([]);
         setShowMenuToast(false);
-      }, 3000);
-    } catch (error) {
+      }, 4000);
+    } catch (error: any) {
       console.error("Error resetting menu:", error);
       setMenuToastMessage("Error al reiniciar el menú.");
       setIsAddingProducts(false);
@@ -3734,6 +3844,11 @@ export default function App() {
   const [systemUseRawBt, setSystemUseRawBt] = useState<boolean>(() => {
     return localStorage.getItem("system_use_rawbt") === "true"; // por default será false ya que la clave no existirá
   });
+
+  const [bluetoothPrinterCuentas, setBluetoothPrinterCuentas] = useState<string>(() => localStorage.getItem("bluetooth_printer_cuentas") || "cuentas");
+  const [bluetoothPrinterCocina, setBluetoothPrinterCocina] = useState<string>(() => localStorage.getItem("bluetooth_printer_cocina") || "cocina");
+  const [bluetoothPrinterBarra, setBluetoothPrinterBarra] = useState<string>(() => localStorage.getItem("bluetooth_printer_barra") || "barra");
+  const [bluetoothTransportMode, setBluetoothTransportMode] = useState<string>(() => localStorage.getItem("bluetooth_transport_mode") || "webbluetooth");
 
   const [ticketBusinessName, setTicketBusinessName] = useState<string>(
     "Taquería El Pastorcito",
@@ -5121,6 +5236,8 @@ export default function App() {
       </IonModal>
     );
   };
+
+
 
   const renderBranchSwitcherModal = () => {
     if (!showBranchSwitcherModal) return null;
@@ -7544,22 +7661,32 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     localStorage.setItem(
                       "cocinet_companies_config_v3",
                       JSON.stringify(companiesConfig),
                     );
-                    triggerAppNotification(
-                      "💾 Sincronización Exitosa",
-                      "Los grupos y la filtración de sucursales se guardaron en MySQL correctamente vía WebSockets. 🔔 Notificaciones de red configuradas.",
-                      "success",
-                    );
+                    try {
+                      await saveCompaniesConfigToFirebase(companiesConfig);
+                      triggerAppNotification(
+                        "💾 Sincronización Exitosa ☁️",
+                        "Los grupos y visibilidad de sucursales se guardaron en la nube. Todos los dispositivos verán los cambios automáticamente.",
+                        "success",
+                      );
+                    } catch (err) {
+                      console.error("Error syncing companies config to Firestore:", err);
+                      triggerAppNotification(
+                        "💾 Guardado Local",
+                        "Se guardó localmente pero no se pudo sincronizar a la nube. Intente de nuevo.",
+                        "warning",
+                      );
+                    }
                     setShowManageCompaniesModal(false);
                   }}
                   className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-2xl transition-all shadow-lg shadow-indigo-200 cursor-pointer select-none uppercase tracking-wider border-none"
                   style={{ backgroundColor: "#4f46e5" }}
                 >
-                  💾 Guardar y Sincronizar
+                  💾 Guardar y Sincronizar ☁️
                 </button>
               </div>
             </div>
@@ -17562,6 +17689,8 @@ Instrucciones:
           style={{ "--background": "#f8fafc" }}
         >
 
+
+
           {configActiveTab === "inventory" && (
             <div className="space-y-6 max-w-4xl mx-auto py-4 text-center">
               <div className="bg-white border border-slate-100 rounded-3xl p-8 shadow-sm">
@@ -17730,6 +17859,61 @@ Instrucciones:
                   >
                     Enviar Prueba de Impresión
                   </button>
+                </div>
+
+                {/* Card 5: Bluetooth Printer Configuration 📲 */}
+                <div className="bg-white border border-blue-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                        <IonIcon
+                          icon={hardwareChipOutline}
+                          style={{ fontSize: "24px" }}
+                        />
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${connectedBtDeviceName ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                        {connectedBtDeviceName ? `🟢 Conectado` : "⚪ Sin Conexión"}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-1">
+                      Impresoras Bluetooth
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Busca, vincula y mapea tus impresoras Bluetooth para Caja/Cuentas, Cocina y Barra, e imprime páginas de prueba.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        setBluetoothPrinterCuentas(localStorage.getItem("bluetooth_printer_cuentas") || "cuentas");
+                        setBluetoothPrinterCocina(localStorage.getItem("bluetooth_printer_cocina") || "cocina");
+                        setBluetoothPrinterBarra(localStorage.getItem("bluetooth_printer_barra") || "barra");
+                        setBluetoothTransportMode(localStorage.getItem("bluetooth_transport_mode") || "rawbt");
+                        setShowBluetoothConfigModal(true);
+                      }}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-2xl transition duration-200 cursor-pointer text-center text-xs shadow-md border-none"
+                    >
+                      ⚙️ Formulario y Configuración Bluetooth
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleScanBluetoothDevice("cuentas")}
+                        disabled={isScanningBt || !WebBluetoothTransport.isSupported()}
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold py-2.5 px-3 rounded-xl transition duration-200 cursor-pointer text-center text-[11px] border border-blue-200 disabled:opacity-50"
+                      >
+                        {isScanningBt ? "🌀 Buscando..." : "🔍 Buscar Impresora"}
+                      </button>
+
+                      <button
+                        onClick={() => handleTestPrinter("cuentas", bluetoothPrinterCuentas)}
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-2.5 px-3 rounded-xl transition duration-200 cursor-pointer text-center text-[11px] border border-emerald-200"
+                      >
+                        📄 Imprimir Prueba
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* CONFIGURACIÓN DE DATOS DE LA EMPRESA (TICKET PROFECO / SAT) */}
@@ -18994,6 +19178,7 @@ Instrucciones:
       const reportName = formData.get("reportName") as string;
       const sortOrderRaw = formData.get("sortOrder");
       const sortOrder = sortOrderRaw ? Number(sortOrderRaw) : 9999;
+      const description = formData.get("description") as string;
 
       if (!name || isNaN(price)) {
         triggerAppNotification("Error", "Nombre y precio son requeridos", "warning");
@@ -19008,6 +19193,7 @@ Instrucciones:
         subcategory,
         subgroup,
         destination,
+        description: description ? description.trim() : "",
         reportName: reportName ? reportName.trim() : "",
         sortOrder: isNaN(sortOrder) ? 9999 : sortOrder,
         quickNotes: crudQuickNotes,
@@ -19017,6 +19203,13 @@ Instrucciones:
       try {
         if (isEditing && p) {
           await updateProductInFirebase(p.id, data);
+          setRelationMatches(prev => prev.map(m => m.productId === p.id ? {
+            ...m,
+            proposedReportName: data.reportName || m.proposedReportName,
+            proposedSortOrder: data.sortOrder === 9999 ? m.proposedSortOrder : data.sortOrder,
+            proposedDescription: data.description || m.proposedDescription,
+            proposedSubgroup: data.subgroup || m.proposedSubgroup
+          } : m));
           triggerAppNotification("Producto Actualizado", `${name} se actualizó correctamente`, "success");
         } else {
           const newId = `prod_${Date.now()}`;
@@ -19127,6 +19320,17 @@ Instrucciones:
                     placeholder="Ej. Pastor"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Descripción del Producto</label>
+                <textarea
+                  name="description"
+                  defaultValue={p?.description || ""}
+                  rows={2}
+                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                  placeholder="Detalles del platillo (ingredientes, alérgenos, etc.)"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -20250,13 +20454,15 @@ Instrucciones:
                               try {
                                 triggerAppNotification("🔄 Exportando...", "Recuperando todos los datos de la base de datos actual. Por favor, espere...", "info");
                                 const data = await exportFullDatabaseJson();
-                                const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
+                                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                                const url = URL.createObjectURL(blob);
                                 const dl = document.createElement("a");
-                                dl.setAttribute("href", jsonString);
+                                dl.setAttribute("href", url);
                                 dl.setAttribute("download", `cocinet_full_backup_${data.projectId}_${getMexicoISOString().slice(0,10)}.json`);
                                 document.body.appendChild(dl);
                                 dl.click();
                                 dl.remove();
+                                URL.revokeObjectURL(url);
                                 triggerAppNotification("📥 Copia Descargada ✅", "Los datos se han descargado con éxito. Ahora conecta tu nuevo Firebase e impórtalos aquí.", "success");
                               } catch (err: any) {
                                 triggerAppNotification("❌ Error al exportar", err.message || "Falló la exportación", "warning");
@@ -20479,10 +20685,30 @@ Instrucciones:
                     </div>
                   </div>
 
+                  {/* Auto-suffix preview */}
+                  {(() => {
+                    const now = new Date();
+                    const tenantShortName = (selectedTenant?.sucursalDefault || selectedTenant?.name || "Sucursal").slice(0, 30);
+                    const dateStr = now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+                    const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+                    const autoSuffix = `${tenantShortName} - ${dateStr} ${timeStr}`;
+                    const finalName = newBackupName.trim() ? `${autoSuffix} - ${newBackupName.trim()}` : autoSuffix;
+                    return (
+                      <div style={{ marginBottom: "10px" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", marginBottom: "4px" }}>
+                          📝 Nombre del respaldo (generado automáticamente):
+                        </div>
+                        <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "8px 12px", fontSize: "0.82rem", fontWeight: "700", color: "#0369a1", fontFamily: "monospace", wordBreak: "break-all" }}>
+                          {finalName}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                     <input
                       type="text"
-                      placeholder="Ej. Respaldo menú fin de semana / menú festivo"
+                      placeholder="Nota adicional (opcional): Ej. menú festivo / cambio de precios"
                       value={newBackupName}
                       onChange={(e) => setNewBackupName(e.target.value)}
                       style={{
@@ -20501,7 +20727,12 @@ Instrucciones:
                       color="primary"
                       onClick={async () => {
                         try {
-                          const backupName = newBackupName.trim() || `Respaldo del ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                          const now = new Date();
+                          const tenantShortName = (selectedTenant?.sucursalDefault || selectedTenant?.name || "Sucursal").slice(0, 30);
+                          const dateStr = now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+                          const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+                          const autoSuffix = `${tenantShortName} - ${dateStr} ${timeStr}`;
+                          const backupName = newBackupName.trim() ? `${autoSuffix} - ${newBackupName.trim()}` : autoSuffix;
                           const branchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
                           
                           await createMenuBackup(
@@ -22738,27 +22969,6 @@ Instrucciones:
 
             return (
               <div style={{ padding: "10px" }}>
-                <div
-                  style={{
-                    background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
-                    color: "white",
-                    padding: "24px",
-                    borderRadius: "16px",
-                    marginBottom: "24px",
-                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-                    <span style={{ fontSize: "2rem" }}>📋✨</span>
-                    <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: "800" }}>
-                      Autogenerar y Ordenar Catálogo de Ventas
-                    </h2>
-                  </div>
-                  <p style={{ margin: "0 0 16px 0", fontSize: "0.9rem", color: "#e0f2fe", lineHeight: "1.5" }}>
-                    Esta herramienta lee todos los productos de tu base de datos, los ordena automáticamente por Categoría/Subgrupo y genera sugerencias de nombres legibles y descriptivos para tus reportes de ventas (ej. convirtiendo "Pastor (Harina)" en "GRINGA AL PASTOR DE HARINA").
-                  </p>
-                </div>
-
                 {/* Generador Local */}
                 <div
                   style={{
@@ -22819,34 +23029,6 @@ Instrucciones:
                       </button>
                     )}
                   </div>
-
-                  {/* Consola de Logueo */}
-                  {relationLog.length > 0 && (
-                    <div
-                      style={{
-                        background: "#0f172a",
-                        borderRadius: "12px",
-                        padding: "16px",
-                        color: "#38bdf8",
-                        fontFamily: "monospace",
-                        fontSize: "0.85rem",
-                        marginTop: "20px",
-                        border: "1px solid #334155",
-                        textAlign: "left",
-                        boxShadow: "inset 0 2px 4px 0 rgba(0,0,0,0.6)"
-                      }}
-                    >
-                      <div style={{ fontWeight: "bold", color: "#f8fafc", marginBottom: "8px", borderBottom: "1px solid #334155", paddingBottom: "6px" }}>
-                        ⚙️ Historial de Operaciones
-                      </div>
-                      {relationLog.map((log, lIdx) => (
-                        <div key={lIdx} style={{ marginBottom: "4px", display: "flex", gap: "6px" }}>
-                          <span style={{ color: "#64748b" }}>[{lIdx + 1}]</span>
-                          <span style={{ color: log.startsWith("❌") ? "#ef4444" : log.startsWith("✨") || log.startsWith("✍️") ? "#4ade80" : "#38bdf8" }}>{log}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* Tabla de Resultados de Relación */}
@@ -22887,11 +23069,284 @@ Instrucciones:
                       </div>
                     </div>
 
+                    {selectedRelationProductIds.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+                          border: "2px solid #6366f1",
+                          borderRadius: "16px",
+                          padding: "16px 20px",
+                          marginBottom: "16px",
+                          boxShadow: "0 10px 25px -5px rgba(99, 102, 241, 0.15), 0 8px 10px -6px rgba(99, 102, 241, 0.15)",
+                          flexWrap: "wrap",
+                          gap: "16px",
+                          position: "sticky",
+                          top: "0",
+                          zIndex: 50,
+                          transition: "all 0.3s ease"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontSize: "1.1rem" }}>⚡</span>
+                          <div>
+                            <div style={{ fontWeight: "800", color: "#4f46e5", fontSize: "0.95rem" }}>
+                              {selectedRelationProductIds.length} productos seleccionados
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setSelectedRelationProductIds([]);
+                              }}
+                              style={{
+                                background: "transparent",
+                                color: "#64748b",
+                                border: "none",
+                                padding: 0,
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                                textAlign: "left"
+                              }}
+                            >
+                              Limpiar selección
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Mover Orden en Bloque */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "800", marginRight: "4px" }}>ORDEN:</span>
+                          <button
+                            onClick={(e) => { e.preventDefault(); moveSelectedUp(); }}
+                            style={{
+                              background: "white",
+                              color: "#1e293b",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "8px",
+                              padding: "6px 12px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.color = "#6366f1"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#1e293b"; }}
+                          >
+                            ⬆️ Subir
+                          </button>
+                          <button
+                            onClick={(e) => { e.preventDefault(); moveSelectedDown(); }}
+                            style={{
+                              background: "white",
+                              color: "#1e293b",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "8px",
+                              padding: "6px 12px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.color = "#6366f1"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#1e293b"; }}
+                          >
+                            ⬇️ Bajar
+                          </button>
+                          <button
+                            onClick={(e) => { e.preventDefault(); moveSelectedToTop(); }}
+                            style={{
+                              background: "white",
+                              color: "#1e293b",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "8px",
+                              padding: "6px 12px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.color = "#6366f1"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#1e293b"; }}
+                          >
+                            🔝 Al Inicio
+                          </button>
+                          <button
+                            onClick={(e) => { e.preventDefault(); moveSelectedToBottom(); }}
+                            style={{
+                              background: "white",
+                              color: "#1e293b",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "8px",
+                              padding: "6px 12px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6366f1"; e.currentTarget.style.color = "#6366f1"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#1e293b"; }}
+                          >
+                            🔚 Al Final
+                          </button>
+                        </div>
+
+                        {/* Modificaciones en Lote */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                          {/* Cambiar Subgrupo */}
+                          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                            <input
+                              type="text"
+                              placeholder="Nuevo Subgrupo"
+                              value={bulkSubgroup}
+                              onChange={(e) => setBulkSubgroup(e.target.value)}
+                              list="bulk-subgroups-list"
+                              style={{
+                                padding: "6px 10px",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "8px",
+                                fontSize: "0.8rem",
+                                width: "130px",
+                                background: "white"
+                              }}
+                            />
+                            <datalist id="bulk-subgroups-list">
+                              {Array.from(new Set(relationMatches.map(m => m.proposedSubgroup).filter(Boolean))).map(sg => (
+                                <option key={sg} value={sg} />
+                              ))}
+                            </datalist>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (!bulkSubgroup) return;
+                                applyBulkSubgroup(bulkSubgroup);
+                                setBulkSubgroup("");
+                              }}
+                              style={{
+                                background: "#4f46e5",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "8px",
+                                padding: "6px 12px",
+                                fontSize: "0.8rem",
+                                fontWeight: "bold",
+                                cursor: "pointer"
+                              }}
+                            >
+                              Aplicar
+                            </button>
+                          </div>
+
+                          {/* Cambiar Sección */}
+                          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                            <input
+                              type="text"
+                              placeholder="Nueva Sección"
+                              value={bulkSubcategory}
+                              onChange={(e) => setBulkSubcategory(e.target.value)}
+                              list="bulk-subcategories-list"
+                              style={{
+                                padding: "6px 10px",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "8px",
+                                fontSize: "0.8rem",
+                                width: "130px",
+                                background: "white"
+                              }}
+                            />
+                            <datalist id="bulk-subcategories-list">
+                              {Array.from(new Set(relationMatches.map(m => m.proposedSubcategory).filter(Boolean))).map(sc => (
+                                <option key={sc} value={sc} />
+                              ))}
+                            </datalist>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (!bulkSubcategory) return;
+                                applyBulkSubcategory(bulkSubcategory);
+                                setBulkSubcategory("");
+                              }}
+                              style={{
+                                background: "#0d9488",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "8px",
+                                padding: "6px 12px",
+                                fontSize: "0.8rem",
+                                fontWeight: "bold",
+                                cursor: "pointer"
+                              }}
+                            >
+                              Sección
+                            </button>
+                          </div>
+
+                          {/* Alternar Letra */}
+                          <button
+                            onClick={(e) => { e.preventDefault(); applyBulkCaseToggle(); }}
+                            style={{
+                              background: "#f1f5f9",
+                              color: "#1e293b",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "8px",
+                              padding: "6px 12px",
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "#e2e8f0"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
+                            title="Alternar Mayuscular/Capitalizado"
+                          >
+                            🔠 Alternar Letra
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ overflowX: "auto", marginBottom: "20px", maxHeight: "500px", border: "1px solid #e2e8f0", borderRadius: "12px" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px", fontSize: "0.85rem" }}>
                         <thead>
                           <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", textAlign: "left" }}>
+                            <th style={{ padding: "12px", width: "40px", textAlign: "center" }}>
+                              <input
+                                type="checkbox"
+                                checked={filteredMatches.length > 0 && filteredMatches.every(m => selectedRelationProductIds.includes(m.productId))}
+                                onChange={(e) => {
+                                  const isAllSelected = filteredMatches.length > 0 && filteredMatches.every(m => selectedRelationProductIds.includes(m.productId));
+                                  if (isAllSelected) {
+                                    setSelectedRelationProductIds(prev => prev.filter(id => !filteredMatches.some(m => m.productId === id)));
+                                  } else {
+                                    const next = [...selectedRelationProductIds];
+                                    filteredMatches.forEach(m => {
+                                      if (!next.includes(m.productId)) next.push(m.productId);
+                                    });
+                                    setSelectedRelationProductIds(next);
+                                  }
+                                }}
+                                style={{ transform: "scale(1.2)", cursor: "pointer" }}
+                              />
+                            </th>
+                            <th style={{ padding: "12px", width: "50px", textAlign: "center", color: "#475569", fontWeight: "700" }}>Mover</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Producto Original (Waiter Menu)</th>
+                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Subgrupo</th>
+                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Sección</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Nombre en Reportes (Deseado por Dueño)</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700", minWidth: "180px" }}>
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -22944,6 +23399,7 @@ Instrucciones:
                                 </div>
                               </div>
                             </th>
+                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700", textAlign: "center" }}>Editar</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700", textAlign: "center" }}>Estado</th>
                           </tr>
                         </thead>
@@ -22953,21 +23409,70 @@ Instrucciones:
                             if (!pObj) return null;
                             const idx = relationMatches.findIndex(m => m.productId === match.productId);
                             return (
-                              <tr key={match.productId} style={{ borderBottom: "1px solid #f1f5f9", background: "white" }}>
+                              <tr
+                                key={match.productId}
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, idx)}
+                                onDragOver={(e) => handleDragOver(e, idx)}
+                                onDragEnd={handleDragEnd}
+                                onDrop={(e) => handleDrop(e, idx)}
+                                style={{
+                                  borderBottom: "1px solid #f1f5f9",
+                                  borderTop: draggedOverIndex === idx ? "3px solid #6366f1" : undefined,
+                                  opacity: draggedIndex === idx ? 0.4 : 1,
+                                  backgroundColor: selectedRelationProductIds.includes(match.productId) ? "#f0fdf4" : "white",
+                                  transition: "all 0.15s ease"
+                                }}
+                              >
+                                {/* Checkbox de Selección */}
+                                <td style={{ padding: "12px", textAlign: "center", width: "40px" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedRelationProductIds.includes(match.productId)}
+                                    onChange={() => {
+                                      const isSelected = selectedRelationProductIds.includes(match.productId);
+                                      if (isSelected) {
+                                        setSelectedRelationProductIds(prev => prev.filter(id => id !== match.productId));
+                                      } else {
+                                        setSelectedRelationProductIds(prev => [...prev, match.productId]);
+                                      }
+                                    }}
+                                    style={{ transform: "scale(1.2)", cursor: "pointer" }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </td>
+
+                                {/* Handle de arrastre */}
+                                <td
+                                  style={{
+                                    padding: "12px",
+                                    textAlign: "center",
+                                    width: "50px",
+                                    cursor: "grab",
+                                    userSelect: "none",
+                                    color: "#94a3b8",
+                                    fontSize: "1.1rem"
+                                  }}
+                                  title="Arrastra para reordenar"
+                                >
+                                  ⋮⋮
+                                </td>
+
                                 <td style={{ padding: "12px" }}>
                                   <div style={{ fontWeight: "700", color: "#1e293b" }}>{match.originalName}</div>
                                   <div style={{ fontSize: "0.75rem", color: "#64748b", display: "flex", gap: "6px", marginTop: "2px" }}>
-                                    <span style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px" }}>{pObj.subcategory}</span>
-                                    {pObj.subgroup && <span style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>{pObj.subgroup}</span>}
+                                    <span style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px" }}>{match.proposedSubcategory}</span>
+                                    {match.proposedSubgroup && <span style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>{match.proposedSubgroup}</span>}
                                   </div>
                                 </td>
-                                <td style={{ padding: "12px" }}>
+                                <td style={{ padding: "12px", minWidth: "150px" }}>
                                   <input
                                     type="text"
-                                    value={match.proposedReportName}
+                                    value={match.proposedSubgroup}
+                                    placeholder="Subgrupo"
                                     onChange={(e) => {
                                       const val = e.target.value;
-                                      setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedReportName: val } : m));
+                                      setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedSubgroup: val } : m));
                                     }}
                                     style={{
                                       width: "100%",
@@ -22978,6 +23483,69 @@ Instrucciones:
                                       background: "white"
                                     }}
                                   />
+                                </td>
+                                <td style={{ padding: "12px", minWidth: "150px" }}>
+                                  <input
+                                    type="text"
+                                    value={match.proposedSubcategory}
+                                    placeholder="Sección"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedSubcategory: val } : m));
+                                    }}
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px",
+                                      border: "1px solid #cbd5e1",
+                                      borderRadius: "8px",
+                                      fontSize: "0.85rem",
+                                      background: "white"
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: "12px", minWidth: "240px" }}>
+                                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                    <input
+                                      type="text"
+                                      value={match.proposedReportName}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedReportName: val } : m));
+                                      }}
+                                      style={{
+                                        flex: 1,
+                                        padding: "8px",
+                                        border: "1px solid #cbd5e1",
+                                        borderRadius: "8px",
+                                        fontSize: "0.85rem",
+                                        background: "white"
+                                      }}
+                                    />
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        const nextText = toggleTextCase(match.proposedReportName);
+                                        setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedReportName: nextText } : m));
+                                      }}
+                                      style={{
+                                        background: "#f1f5f9",
+                                        border: "1px solid #cbd5e1",
+                                        borderRadius: "8px",
+                                        padding: "8px 10px",
+                                        cursor: "pointer",
+                                        fontSize: "0.9rem",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        transition: "background 0.2s"
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.background = "#e2e8f0"; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
+                                      title="Cambiar mayúsculas/minúsculas"
+                                    >
+                                      🔠
+                                    </button>
+                                  </div>
                                 </td>
                                 <td style={{ padding: "12px", width: "120px" }}>
                                   <input
@@ -22998,6 +23566,34 @@ Instrucciones:
                                       background: "white"
                                     }}
                                   />
+                                </td>
+                                <td style={{ padding: "12px", textAlign: "center" }}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setProductCrudModal({ isOpen: true, product: pObj });
+                                    }}
+                                    style={{
+                                      background: "#4f46e5",
+                                      color: "white",
+                                      border: "none",
+                                      borderRadius: "8px",
+                                      padding: "8px 12px",
+                                      fontSize: "0.8rem",
+                                      fontWeight: "bold",
+                                      cursor: "pointer",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: "4px",
+                                      boxShadow: "0 2px 4px rgba(79, 70, 229, 0.2)",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "#4338ca"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "#4f46e5"; }}
+                                  >
+                                    ✏️ Editar
+                                  </button>
                                 </td>
                                 <td style={{ padding: "12px", textAlign: "center" }}>
                                   <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "4px 8px", borderRadius: "20px", fontWeight: "bold", fontSize: "0.75rem" }}>
@@ -23076,7 +23672,15 @@ Instrucciones:
     proposedReportName: string;
     proposedSortOrder: number;
     matched: boolean;
+    proposedDescription: string;
+    proposedSubgroup: string;
+    proposedSubcategory: string;
   }[]>([]);
+  const [selectedRelationProductIds, setSelectedRelationProductIds] = useState<string[]>([]);
+  const [bulkSubgroup, setBulkSubgroup] = useState("");
+  const [bulkSubcategory, setBulkSubcategory] = useState("");
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [draggedOverIndex, setDraggedOverIndex] = useState<number | null>(null);
   const [relationLog, setRelationLog] = useState<string[]>([]);
   const [relationFilter, setRelationFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [relationSearch, setRelationSearch] = useState<string>("");
@@ -23190,11 +23794,15 @@ Instrucciones:
         originalName: p.name,
         proposedReportName: p.reportName || suggestedName,
         proposedSortOrder: p.sortOrder && p.sortOrder !== 9999 ? p.sortOrder : (index + 1),
-        matched: true
+        matched: true,
+        proposedDescription: p.description || "",
+        proposedSubgroup: p.subgroup || "",
+        proposedSubcategory: p.subcategory || ""
       };
     });
 
     setRelationMatches(matches);
+    setSelectedRelationProductIds([]);
     setRelationLog([
       "📋 Catálogo de productos leído correctamente.",
       `✨ Se ordenaron los ${products.length} productos por Categoría y Subgrupo.`,
@@ -23208,14 +23816,14 @@ Instrucciones:
     );
   };
 
-  const saveRelationChanges = async (onlyMatched = false) => {
+  const saveRelationChanges = async (onlyMatched = false, shouldExit = true) => {
     if (relationMatches.length === 0) {
       alert("No hay cambios propuestos para guardar.");
       return;
     }
 
     const confirm = window.confirm(
-      `¿Está seguro de que desea guardar los nombres descriptivos y el orden de los ${relationMatches.length} productos en la base de datos?\n\nEsto afectará inmediatamente a los reportes y cortes.`
+      `¿Está seguro de que desea guardar los nombres de reporte, subgrupos, subcategorías, descripciones y el orden de los ${relationMatches.length} productos en la base de datos?\n\nEsto afectará inmediatamente a los reportes y cortes.`
     );
     if (!confirm) return;
 
@@ -23225,7 +23833,10 @@ Instrucciones:
         if (onlyMatched && !match.matched) continue;
         await updateProductInFirebase(match.productId, {
           reportName: match.proposedReportName.trim(),
-          sortOrder: Number(match.proposedSortOrder)
+          sortOrder: Number(match.proposedSortOrder),
+          description: (match.proposedDescription || "").trim(),
+          subgroup: (match.proposedSubgroup || "").trim(),
+          subcategory: (match.proposedSubcategory || "").trim()
         });
         count++;
       }
@@ -23234,16 +23845,182 @@ Instrucciones:
 
       triggerAppNotification(
         "📋 Catálogo Sincronizado",
-        `Se han actualizado ${count} productos con nombres de reporte y orden secuencial con éxito.`,
+        `Se han actualizado ${count} productos con nombres de reporte, subgrupos, subcategorías, descripciones y orden secuencial con éxito.`,
         "success"
       );
 
-      setRelationMatches([]);
-      setRelationLog([]);
-      setManageMenuTab(null);
+      if (shouldExit) {
+        setRelationMatches([]);
+        setRelationLog([]);
+        setSelectedRelationProductIds([]);
+        setManageMenuTab(null);
+      }
     } catch (err: any) {
       alert("❌ Ocurrió un error al guardar los cambios en la base de datos: " + err.message);
     }
+  };
+
+  // Drag and Drop native handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", index.toString());
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedOverIndex !== index) {
+      setDraggedOverIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDraggedOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndexStr = e.dataTransfer.getData("text/plain");
+    if (!sourceIndexStr) return;
+    const sourceIndex = parseInt(sourceIndexStr, 10);
+    
+    if (sourceIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDraggedOverIndex(null);
+      return;
+    }
+
+    setRelationMatches(prev => {
+      const next = [...prev];
+      const [draggedItem] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, draggedItem);
+      // Reassign sequential sortOrder
+      return next.map((item, idx) => ({
+        ...item,
+        proposedSortOrder: idx + 1
+      }));
+    });
+
+    setDraggedIndex(null);
+    setDraggedOverIndex(null);
+  };
+
+  // Bulk Reordering Shift functions
+  const moveSelectedUp = () => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => {
+      const next = [...prev];
+      // Iterate from top to bottom (index 1 to length-1)
+      for (let i = 1; i < next.length; i++) {
+        const item = next[i];
+        const isSelected = selectedRelationProductIds.includes(item.productId);
+        const prevSelected = selectedRelationProductIds.includes(next[i - 1].productId);
+        if (isSelected && !prevSelected) {
+          // Swap with previous
+          next[i] = next[i - 1];
+          next[i - 1] = item;
+        }
+      }
+      return next.map((item, idx) => ({
+        ...item,
+        proposedSortOrder: idx + 1
+      }));
+    });
+  };
+
+  const moveSelectedDown = () => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => {
+      const next = [...prev];
+      // Iterate from bottom to top (index length-2 down to 0)
+      for (let i = next.length - 2; i >= 0; i--) {
+        const item = next[i];
+        const isSelected = selectedRelationProductIds.includes(item.productId);
+        const nextSelected = selectedRelationProductIds.includes(next[i + 1].productId);
+        if (isSelected && !nextSelected) {
+          // Swap with next
+          next[i] = next[i + 1];
+          next[i + 1] = item;
+        }
+      }
+      return next.map((item, idx) => ({
+        ...item,
+        proposedSortOrder: idx + 1
+      }));
+    });
+  };
+
+  const moveSelectedToTop = () => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => {
+      const selected = prev.filter(item => selectedRelationProductIds.includes(item.productId));
+      const unselected = prev.filter(item => !selectedRelationProductIds.includes(item.productId));
+      const next = [...selected, ...unselected];
+      return next.map((item, idx) => ({
+        ...item,
+        proposedSortOrder: idx + 1
+      }));
+    });
+  };
+
+  const moveSelectedToBottom = () => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => {
+      const selected = prev.filter(item => selectedRelationProductIds.includes(item.productId));
+      const unselected = prev.filter(item => !selectedRelationProductIds.includes(item.productId));
+      const next = [...unselected, ...selected];
+      return next.map((item, idx) => ({
+        ...item,
+        proposedSortOrder: idx + 1
+      }));
+    });
+  };
+
+  // Bulk Field Assignment functions
+  const applyBulkSubgroup = (newSubgroup: string) => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => prev.map(item => {
+      if (selectedRelationProductIds.includes(item.productId)) {
+        return { ...item, proposedSubgroup: newSubgroup.trim() };
+      }
+      return item;
+    }));
+    triggerAppNotification(
+      "Subgrupo Actualizado",
+      `Se asignó el subgrupo "${newSubgroup}" a ${selectedRelationProductIds.length} productos.`,
+      "success"
+    );
+  };
+
+  const applyBulkSubcategory = (newSubcategory: string) => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => prev.map(item => {
+      if (selectedRelationProductIds.includes(item.productId)) {
+        return { ...item, proposedSubcategory: newSubcategory.trim() };
+      }
+      return item;
+    }));
+    triggerAppNotification(
+      "Sección Actualizada",
+      `Se asignó la sección "${newSubcategory}" a ${selectedRelationProductIds.length} productos.`,
+      "success"
+    );
+  };
+
+  const applyBulkCaseToggle = () => {
+    if (selectedRelationProductIds.length === 0) return;
+    setRelationMatches(prev => prev.map(item => {
+      if (selectedRelationProductIds.includes(item.productId)) {
+        return { ...item, proposedReportName: toggleTextCase(item.proposedReportName) };
+      }
+      return item;
+    }));
+    triggerAppNotification(
+      "Mayúsculas/Capitalizado",
+      `Se cambió el formato de texto de ${selectedRelationProductIds.length} productos.`,
+      "success"
+    );
   };
 
   const parseSplitProducts = (originalName: string): string[] => {
@@ -24011,6 +24788,25 @@ Instrucciones:
                             ⚙️
                           </span>
                           <span>Configuración de Sistema</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAppMode("admin");
+                            setConfigActiveTab("bluetooth");
+                            setAdminViewOnlyCorte(false);
+                            setShowBluetoothConfigModal(true);
+                            setShowSidebar(false);
+                          }}
+                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                            (appMode === "admin" && configActiveTab === "bluetooth") || showBluetoothConfigModal
+                              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-[1.02]"
+                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                          }`}
+                        >
+                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
+                            📲
+                          </span>
+                          <span>Configura Impresoras Bluetooth</span>
                         </button>
                         <button
                           onClick={() => {
@@ -30959,6 +31755,14 @@ Instrucciones:
                     <span>Reiniciar Corte ⚙️</span>
                   </button>
                 )}
+                {(currentUser?.id.endsWith("-sistemas") || currentUser?.role === "Sistemas" || isSystemsMode || isMasterAdmin) && (
+                  <button
+                    onClick={() => setTenantBackupConfirm({ isOpen: true, type: null })}
+                    className="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 px-4 rounded-xl transition duration-200 shadow-md shadow-violet-600/20 flex items-center gap-1.5 border-none cursor-pointer text-[13px] uppercase tracking-wider"
+                  >
+                    <span>📦 Respaldo del Tenant</span>
+                  </button>
+                )}
                 {sessionToRender?.status !== "open" && (
                   <div className="bg-slate-100 text-slate-500 font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 text-[13px] border border-slate-200 uppercase tracking-widest select-none">
                     <span>🔒 Turno Cerrado (Auditoría)</span>
@@ -31876,6 +32680,426 @@ Instrucciones:
               }
             ]}
           />
+
+          {/* ╔══════════════════════════════════════════════════════════════╗
+              ║  📦 MODAL RESPALDO COMPLETO DEL TENANT                       ║
+              ╚══════════════════════════════════════════════════════════════╝ */}
+          <IonModal
+            isOpen={tenantBackupConfirm.isOpen}
+            onDidDismiss={() => setTenantBackupConfirm({ isOpen: false, type: null })}
+            style={{ "--height": "95%", "--width": "100%", "--max-width": "780px", "--border-radius": "20px" }}
+          >
+            <IonHeader className="ion-no-border">
+              <IonToolbar style={{ "--background": "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", color: "white" }}>
+                <IonTitle style={{ fontSize: "1rem", fontWeight: "900", color: "white" }}>
+                  📦 Respaldo Completo del Tenant — {selectedTenant?.name || ""}
+                </IonTitle>
+                <IonButtons slot="end">
+                  <IonButton
+                    onClick={() => setTenantBackupConfirm({ isOpen: false, type: null })}
+                    style={{ "--color": "white", fontWeight: "bold" }}
+                  >
+                    Cerrar
+                  </IonButton>
+                </IonButtons>
+              </IonToolbar>
+            </IonHeader>
+            <IonContent style={{ "--background": "#f1f5f9" }}>
+              <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+                {/* ── INFO BANNER ── */}
+                <div style={{ background: "linear-gradient(135deg,#ede9fe,#ddd6fe)", borderRadius: "14px", padding: "16px 20px", border: "1px solid #c4b5fd" }}>
+                  <div style={{ fontWeight: "900", fontSize: "1rem", color: "#4c1d95", marginBottom: "4px" }}>📦 Sistema de Respaldos Completos</div>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "#5b21b6", lineHeight: "1.5" }}>
+                    Genera una copia completa de <strong>todos los datos del tenant actual</strong> (productos, mesas, historial, usuarios, gastos, proveedores, clientes y más).
+                    Los respaldos se guardan en la nube y puedes restaurarlos o moverlos a otro tenant en cualquier momento.
+                  </p>
+                  <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fef3c7", borderRadius: "8px", border: "1px solid #fcd34d", fontSize: "0.78rem", fontWeight: "700", color: "#92400e" }}>
+                    ⚠️ <strong>Recomendación:</strong> Se sugiere crear un respaldo antes de realizar cualquier operación de restauración o migración.
+                  </div>
+                </div>
+
+                {/* ── CREAR RESPALDO ── */}
+                <div style={{ background: "white", borderRadius: "14px", border: "1px solid #e2e8f0", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                  <h3 style={{ margin: "0 0 12px 0", fontWeight: "900", fontSize: "1rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                    💾 Crear Nuevo Respaldo
+                  </h3>
+
+                  {/* Mode Selector */}
+                  <div style={{ marginBottom: "14px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.78rem", fontWeight: "800", color: "#475569" }}>Modo de Alcance:</span>
+                    <button
+                      type="button"
+                      onClick={() => setTenantBackupMode("full")}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: tenantBackupMode === "full" ? "2px solid #4f46e5" : "1px solid #cbd5e1",
+                        background: tenantBackupMode === "full" ? "#eeefff" : "#f8fafc",
+                        color: tenantBackupMode === "full" ? "#4338ca" : "#64748b",
+                        fontWeight: "800",
+                        fontSize: "0.78rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      🌐 Respaldo Completo (Todo)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTenantBackupMode("day")}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: tenantBackupMode === "day" ? "2px solid #0284c7" : "1px solid #cbd5e1",
+                        background: tenantBackupMode === "day" ? "#e0f2fe" : "#f8fafc",
+                        color: tenantBackupMode === "day" ? "#0369a1" : "#64748b",
+                        fontWeight: "800",
+                        fontSize: "0.78rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      📅 Respaldo Por Día (Evita límite de tamaño)
+                    </button>
+                  </div>
+
+                  {/* Day Picker if mode is 'day' */}
+                  {tenantBackupMode === "day" && (
+                    <div style={{ marginBottom: "14px", background: "#f0f9ff", padding: "10px 14px", borderRadius: "10px", border: "1px solid #bae6fd", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: "800", color: "#0369a1" }}>📆 Seleccionar Fecha a Respaldar:</span>
+                      <input
+                        type="date"
+                        value={tenantBackupDate}
+                        onChange={(e) => setTenantBackupDate(e.target.value)}
+                        style={{ padding: "6px 12px", borderRadius: "8px", border: "1.5px solid #0284c7", fontWeight: "700", fontSize: "0.85rem", color: "#0f172a", outline: "none" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date(getMexicoISOString());
+                          d.setDate(d.getDate() - 1);
+                          setTenantBackupDate(d.toISOString().slice(0, 10));
+                        }}
+                        style={{ padding: "6px 10px", borderRadius: "6px", background: "#0284c7", color: "white", border: "none", fontWeight: "800", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        ⏪ Ayer (Día -1)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date(getMexicoISOString());
+                          d.setDate(d.getDate() - 2);
+                          setTenantBackupDate(d.toISOString().slice(0, 10));
+                        }}
+                        style={{ padding: "6px 10px", borderRadius: "6px", background: "#0369a1", color: "white", border: "none", fontWeight: "800", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        ⏪ Anteayer (Día -2)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTenantBackupDate(getMexicoISOString().slice(0, 10));
+                        }}
+                        style={{ padding: "6px 10px", borderRadius: "6px", background: "#e2e8f0", color: "#334155", border: "none", fontWeight: "700", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        📅 Hoy
+                      </button>
+
+                      {/* Botón rápido para respaldar los 2 días por separado */}
+                      <button
+                        type="button"
+                        disabled={isTenantBackupLoading}
+                        onClick={async () => {
+                          const now = new Date(getMexicoISOString());
+                          const d1 = new Date(now);
+                          d1.setDate(d1.getDate() - 1);
+                          const date1Str = d1.toISOString().slice(0, 10);
+
+                          const d2 = new Date(now);
+                          d2.setDate(d2.getDate() - 2);
+                          const date2Str = d2.toISOString().slice(0, 10);
+
+                          const ok = window.confirm(
+                            `¿Deseas crear 2 RESPALDOS INDEPENDIENTES para los últimos 2 días por separado?\n\n1. Respaldo Ayer: ${date1Str}\n2. Respaldo Anteayer: ${date2Str}`
+                          );
+                          if (!ok) return;
+
+                          setIsTenantBackupLoading(true);
+                          try {
+                            const tenantShortName = (selectedTenant?.sucursalDefault || selectedTenant?.name || "Tenant").slice(0, 40);
+                            const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+                            // 1. Respaldo Día -1 (Ayer)
+                            setTenantBackupProgress(`Creando respaldo del día ${date1Str} (Ayer)...`);
+                            const label1 = `${tenantShortName} - [DÍA ${date1Str}] ${timeStr}${tenantBackupNote.trim() ? ` - ${tenantBackupNote.trim()}` : ""}`;
+                            const data1 = await exportTenantDataJson(selectedTenant.id, { startDate: date1Str, endDate: date1Str });
+                            await saveTenantBackupSnapshot(selectedTenant.id, label1, tenantBackupNote.trim(), data1);
+
+                            // 2. Respaldo Día -2 (Anteayer)
+                            setTenantBackupProgress(`Creando respaldo del día ${date2Str} (Anteayer)...`);
+                            const label2 = `${tenantShortName} - [DÍA ${date2Str}] ${timeStr}${tenantBackupNote.trim() ? ` - ${tenantBackupNote.trim()}` : ""}`;
+                            const data2 = await exportTenantDataJson(selectedTenant.id, { startDate: date2Str, endDate: date2Str });
+                            await saveTenantBackupSnapshot(selectedTenant.id, label2, tenantBackupNote.trim(), data2);
+
+                            setTenantBackupProgress("");
+                            triggerAppNotification("✅ 2 Respaldos Creados", `Se guardaron exitosamente 2 respaldos por separado para ${date1Str} (Ayer) y ${date2Str} (Anteayer).`, "success");
+                          } catch (err: any) {
+                            console.error(err);
+                            setTenantBackupProgress("");
+                            triggerAppNotification("❌ Error", `Error al crear respaldos: ${err.message}`, "warning");
+                          } finally {
+                            setIsTenantBackupLoading(false);
+                          }
+                        }}
+                        style={{ padding: "6px 12px", borderRadius: "8px", background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "white", border: "none", fontWeight: "900", fontSize: "0.78rem", cursor: "pointer", marginLeft: "auto" }}
+                      >
+                        ⚡ Respaldar Últimos 2 Días (Por Separado)
+                      </button>
+
+                      <span style={{ fontSize: "0.72rem", color: "#0284c7", fontWeight: "600", width: "100%" }}>
+                        💡 Genera respaldos independientes por día para mantener cada jornada ligera e independiente.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Auto-suffix preview */}
+                  {(() => {
+                    const now = new Date();
+                    const tenantShortName = (selectedTenant?.sucursalDefault || selectedTenant?.name || "Tenant").slice(0, 40);
+                    const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+                    const dateTag = tenantBackupMode === "day" ? `[DÍA ${tenantBackupDate}]` : now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+                    const autoSuffix = `${tenantShortName} - ${dateTag} ${timeStr}`;
+                    const finalLabel = tenantBackupNote.trim() ? `${autoSuffix} - ${tenantBackupNote.trim()}` : autoSuffix;
+                    return (
+                      <div style={{ marginBottom: "12px" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "700", marginBottom: "4px" }}>📝 Nombre del respaldo:</div>
+                        <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "8px 12px", fontSize: "0.82rem", fontWeight: "700", color: "#0369a1", fontFamily: "monospace", wordBreak: "break-all" }}>
+                          {finalLabel}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <input
+                      type="text"
+                      placeholder="Nota adicional (opcional): Ej. respaldo especial cierre"
+                      value={tenantBackupNote}
+                      onChange={(e) => setTenantBackupNote(e.target.value)}
+                      style={{ flex: 1, minWidth: "220px", padding: "10px 14px", border: "1.5px solid #cbd5e1", borderRadius: "10px", fontSize: "0.88rem", outline: "none" }}
+                    />
+                    <button
+                      disabled={isTenantBackupLoading}
+                      onClick={() => {
+                        const modeMsg = tenantBackupMode === "day"
+                          ? `Crear respaldo por día (${tenantBackupDate})`
+                          : `Crear respaldo completo de todas las fechas`;
+                        const ok = window.confirm(
+                          `¿Estás seguro de continuar?\n\nAcción: ${modeMsg} para "${selectedTenant?.name}".`
+                        );
+                        if (!ok) return;
+                        setIsTenantBackupLoading(true);
+                        setTenantBackupProgress("Exportando datos del tenant...");
+                        (async () => {
+                          try {
+                            const now = new Date();
+                            const tenantShortName = (selectedTenant?.sucursalDefault || selectedTenant?.name || "Tenant").slice(0, 40);
+                            const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+                            const dateTag = tenantBackupMode === "day" ? `[DÍA ${tenantBackupDate}]` : now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+                            const autoSuffix = `${tenantShortName} - ${dateTag} ${timeStr}`;
+                            const label = tenantBackupNote.trim() ? `${autoSuffix} - ${tenantBackupNote.trim()}` : autoSuffix;
+                            
+                            setTenantBackupProgress("Recopilando datos desde Firestore...");
+                            const exportOpts = tenantBackupMode === "day" ? { startDate: tenantBackupDate, endDate: tenantBackupDate } : undefined;
+                            const data = await exportTenantDataJson(selectedTenant.id, exportOpts);
+                            
+                            setTenantBackupProgress("Guardando respaldo en la nube...");
+                            await saveTenantBackupSnapshot(selectedTenant.id, label, tenantBackupNote.trim(), data);
+                            setTenantBackupNote("");
+                            setTenantBackupProgress("");
+                            triggerAppNotification("✅ Respaldo Creado", `Respaldo "${label}" guardado exitosamente en la nube.`, "success");
+                          } catch (err: any) {
+                            console.error(err);
+                            setTenantBackupProgress("");
+                            triggerAppNotification("❌ Error", `No se pudo crear el respaldo: ${err.message}`, "warning");
+                          } finally {
+                            setIsTenantBackupLoading(false);
+                          }
+                        })();
+                      }}
+                      style={{ padding: "10px 20px", background: isTenantBackupLoading ? "#94a3b8" : "#4f46e5", color: "white", border: "none", borderRadius: "10px", fontWeight: "900", fontSize: "0.88rem", cursor: isTenantBackupLoading ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+                    >
+                      {isTenantBackupLoading ? "⏳ Procesando..." : "💾 Crear Respaldo"}
+                    </button>
+                  </div>
+                  {tenantBackupProgress && (
+                    <div style={{ marginTop: "10px", padding: "8px 12px", background: "#f0f9ff", borderRadius: "8px", fontSize: "0.78rem", fontWeight: "700", color: "#0369a1", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>⏳</span> {tenantBackupProgress}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── LÍNEA TEMPORAL DE RESPALDOS ── */}
+                <div style={{ background: "white", borderRadius: "14px", border: "1px solid #e2e8f0", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                  <h3 style={{ margin: "0 0 16px 0", fontWeight: "900", fontSize: "1rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                    ⏳ Línea de Tiempo de Respaldos
+                    <span style={{ fontSize: "0.72rem", fontWeight: "700", background: "#ede9fe", color: "#5b21b6", padding: "2px 8px", borderRadius: "99px" }}>
+                      {tenantBackupSnapshots.length} respaldos
+                    </span>
+                  </h3>
+
+                  {tenantBackupSnapshots.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "32px 20px", color: "#94a3b8" }}>
+                      <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>📂</div>
+                      <p style={{ fontWeight: "600", fontSize: "0.9rem", margin: "0 0 4px" }}>No hay respaldos registrados aún</p>
+                      <p style={{ fontSize: "0.78rem", margin: 0 }}>Crea tu primer respaldo usando el panel de arriba.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {tenantBackupSnapshots.map((snap, idx) => {
+                        const sizeKb = snap.sizeEstimate ? Math.round(snap.sizeEstimate / 1024) : 0;
+                        const totalDocs = snap.totalDocs ?? (snap.data?.collections
+                          ? Object.values(snap.data.collections).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0)
+                          : 0);
+                        const createdAt = snap.createdAt ? new Date(snap.createdAt).toLocaleString("es-MX", { hour12: false }) : "";
+                        const isDayFiltered = Boolean(snap.startDate);
+                        return (
+                          <div
+                            key={snap.id}
+                            style={{
+                              background: idx === 0 ? "#faf5ff" : "#f8fafc",
+                              border: idx === 0 ? "2px solid #c4b5fd" : "1px solid #e2e8f0",
+                              borderRadius: "12px",
+                              padding: "14px 16px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "10px",
+                            }}
+                          >
+                            {/* Header row */}
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginBottom: "4px" }}>
+                                  {idx === 0 && (
+                                    <span style={{ fontSize: "0.65rem", fontWeight: "800", background: "#4f46e5", color: "white", padding: "2px 6px", borderRadius: "4px", letterSpacing: "0.05em" }}>⭐ MÁS RECIENTE</span>
+                                  )}
+                                  {isDayFiltered ? (
+                                    <span style={{ fontSize: "0.65rem", fontWeight: "800", background: "#0284c7", color: "white", padding: "2px 6px", borderRadius: "4px" }}>📅 DÍA {snap.startDate}</span>
+                                  ) : (
+                                    <span style={{ fontSize: "0.65rem", fontWeight: "800", background: "#6b21a8", color: "white", padding: "2px 6px", borderRadius: "4px" }}>🌐 COMPLETO</span>
+                                  )}
+                                </div>
+                                <div style={{ fontWeight: "800", fontSize: "0.88rem", color: "#1e293b", wordBreak: "break-word" }}>{snap.label}</div>
+                                <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", marginTop: "2px" }}>
+                                  🕒 {createdAt} · 📄 {totalDocs} registros · 💾 {sizeKb} KB
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {/* Restore to same tenant */}
+                              <button
+                                style={{ padding: "6px 12px", background: "#dcfce7", color: "#15803d", border: "1px solid #86efac", borderRadius: "8px", fontWeight: "800", fontSize: "0.75rem", cursor: "pointer" }}
+                                onClick={() => {
+                                  const ok1 = window.confirm(
+                                    `¿Estás seguro de RESTAURAR este respaldo?\n\n"${snap.label}"\n\nSe REEMPLAZARÁN los datos actuales del tenant "${selectedTenant?.name}".\n\n⚠️ Se recomienda crear un respaldo previo antes de continuar.`
+                                  );
+                                  if (!ok1) return;
+                                  const ok2 = window.confirm(
+                                    `⚠️ CONFIRMACIÓN FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${selectedTenant?.name}".\n\n¿Deseas continuar?`
+                                  );
+                                  if (!ok2) return;
+                                  setIsTenantBackupLoading(true);
+                                  setTenantBackupProgress("Restaurando datos...");
+                                  restoreTenantBackupSnapshot(snap, selectedTenant.id, (msg) => setTenantBackupProgress(msg))
+                                    .then((count) => {
+                                      setTenantBackupProgress("");
+                                      triggerAppNotification("✅ Restauración Completa", `Se restauraron ${count} registros en "${selectedTenant?.name}".`, "success");
+                                    })
+                                    .catch((err: any) => {
+                                      setTenantBackupProgress("");
+                                      triggerAppNotification("❌ Error", `Error al restaurar: ${err.message}`, "warning");
+                                    })
+                                    .finally(() => setIsTenantBackupLoading(false));
+                                }}
+                              >
+                                🔄 Restaurar aquí
+                              </button>
+
+                              {/* Move to another tenant */}
+                              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                                <select
+                                  value={tenantBackupMoveTarget}
+                                  onChange={(e) => setTenantBackupMoveTarget(e.target.value)}
+                                  style={{ padding: "5px 8px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "700", background: "white", color: "#334155", outline: "none" }}
+                                >
+                                  <option value="">📤 Mover a otro tenant...</option>
+                                  {COMPANY_CATALOG.filter(c => c.id !== selectedTenant?.id).map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                                {tenantBackupMoveTarget && (
+                                  <button
+                                    style={{ padding: "6px 12px", background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", borderRadius: "8px", fontWeight: "800", fontSize: "0.75rem", cursor: "pointer" }}
+                                    onClick={() => {
+                                      const destTenant = COMPANY_CATALOG.find(c => c.id === tenantBackupMoveTarget);
+                                      const ok1 = window.confirm(
+                                        `¿Confirmas mover el respaldo:\n"${snap.label}"\n\nal tenant:\n"${destTenant?.name}"?\n\n⚠️ Se recomienda hacer un respaldo previo del tenant destino antes de continuar.`
+                                      );
+                                      if (!ok1) return;
+                                      const ok2 = window.confirm(
+                                        `⚠️ ADVERTENCIA FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${destTenant?.name}".\n\nLos IDs de documentos serán reescritos con el tenantId destino.\n\n¿Deseas continuar?`
+                                      );
+                                      if (!ok2) return;
+                                      setIsTenantBackupLoading(true);
+                                      setTenantBackupProgress(`Migrando datos a "${destTenant?.name}"...`);
+                                      restoreTenantBackupSnapshot(snap, tenantBackupMoveTarget, (msg) => setTenantBackupProgress(msg))
+                                        .then((count) => {
+                                          setTenantBackupProgress("");
+                                          setTenantBackupMoveTarget("");
+                                          triggerAppNotification("✅ Migración Completa", `Se migraron ${count} registros a "${destTenant?.name}".`, "success");
+                                        })
+                                        .catch((err: any) => {
+                                          setTenantBackupProgress("");
+                                          triggerAppNotification("❌ Error", `Error al migrar: ${err.message}`, "warning");
+                                        })
+                                        .finally(() => setIsTenantBackupLoading(false));
+                                    }}
+                                  >
+                                    📤 Mover
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Delete */}
+                              <button
+                                style={{ padding: "6px 12px", background: "#fee2e2", color: "#b91c1c", border: "1px solid #fca5a5", borderRadius: "8px", fontWeight: "800", fontSize: "0.75rem", cursor: "pointer", marginLeft: "auto" }}
+                                onClick={() => {
+                                  const ok = window.confirm(`¿Eliminar este respaldo?\n\n"${snap.label}"\n\nEsta acción es irreversible.`);
+                                  if (!ok) return;
+                                  deleteTenantBackupSnapshot(snap.id)
+                                    .then(() => triggerAppNotification("🗑️ Eliminado", "El respaldo fue eliminado.", "info"))
+                                    .catch((err: any) => triggerAppNotification("❌ Error", err.message, "warning"));
+                                }}
+                              >
+                                🗑️ Eliminar
+                              </button>
+                            </div>
+                            {tenantBackupProgress && isTenantBackupLoading && (
+                              <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#0369a1", background: "#f0f9ff", padding: "6px 10px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                ⏳ {tenantBackupProgress}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </IonContent>
+          </IonModal>
+
         </IonContent>
       </IonPage>
     );
@@ -35732,18 +36956,6 @@ Instrucciones:
 
   return (
     <IonApp>
-      {!isOnline && (
-        <div
-          style={{ zIndex: 9999999 }}
-          className="fixed top-2.5 left-1/2 -translate-x-1/2 bg-rose-600/95 backdrop-blur-sm text-white py-1.5 px-3.5 rounded-full flex items-center gap-2 shadow-[0_4px_16px_rgba(220,38,38,0.4)] border border-rose-500/50 text-[11px] font-black uppercase tracking-wider animate-pulse whitespace-nowrap"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-40"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-          </span>
-          <span>Sin internet (puede seguir operando)</span>
-        </div>
-      )}
       <InstallPWA />
       <NotificationsModal 
         isOpen={showNotificationModal}
@@ -35759,6 +36971,7 @@ Instrucciones:
       />
       {showTenantPinModal && renderPinModalOverlay()}
       {showBranchSwitcherModal && renderBranchSwitcherModal()}
+      {showBluetoothConfigModal && renderBluetoothConfigModal()}
       {/* Master Render */}
       {!currentUser ? (
         renderLogin()

@@ -77,30 +77,21 @@ export type PrinterArea = "cuentas" | "cocina" | "barra";
  */
 export async function createTransport(
   area: PrinterArea = "cuentas"
-): Promise<RawBtTransport | WindowsSpoolerTransport | DatabaseQueueTransport | ConsoleMockTransport> {
-  // 1. En Windows, si el centinela local está activo, imprimir directo
+): Promise<WebBluetoothTransport | WindowsSpoolerTransport | DatabaseQueueTransport | ConsoleMockTransport> {
+  // 1. Si Web Bluetooth está conectado activamente por GATT, usar directo Web Bluetooth (Nativo)
+  if (WebBluetoothTransport.isConnected()) {
+    return new WebBluetoothTransport(area);
+  }
+
+  // 2. En Windows, si el centinela local está activo, imprimir directo por Windows Spooler
   if (isWindows()) {
     const online = await isSentinelOnline();
     if (online) {
       return new WindowsSpoolerTransport(area);
     }
   }
-  
-  // 2. En Android
-  if (isAndroid()) {
-    // Comprobar si se ha habilitado explícitamente "Usar RAWBT" en la configuración
-    // NOTA: Por defecto estará deshabilitado (false), lo cual evita que intente abrir la app Bluetooth automáticamente.
-    const useRawBt = localStorage.getItem("system_use_rawbt") === "true";
-    if (useRawBt) {
-      return new RawBtTransport(area);
-    } else {
-      // Si está deshabilitado por default, lo enviamos a la cola central en la base de datos SQLite
-      // de modo que el centinela de Windows pueda detectarlo e imprimirlo físicamente.
-      return new DatabaseQueueTransport(area);
-    }
-  }
 
-  // 3. Fallback general: registrar en la base de datos central para impresión remota por el centinela central
+  // 3. Fallback general: registrar en la base de datos central para impresión remota por el centinela
   return new DatabaseQueueTransport(area);
 }
 
@@ -142,24 +133,31 @@ export class DatabaseQueueTransport {
 /** Envía el trabajo a la app RawBT en Android vía Intent URL scheme */
 export class RawBtTransport {
   printerName?: string;
+  forceRawBt: boolean;
 
-  constructor(printerName?: string) {
+  constructor(printerName?: string, forceRawBt: boolean = false) {
     this.printerName = printerName;
+    this.forceRawBt = forceRawBt;
   }
 
   send(prn: string) {
-    // Comprobar si "Usar RAWBT" está explícitamente habilitado en localStorage
-    // IMPORTANTE: Por defecto está deshabilitado (false), lo cual evita llamadas involuntarias
-    const useRawBt = localStorage.getItem("system_use_rawbt") === "true";
+    // Determinar la clave lógica original (por defecto 'cuentas')
+    const logicalKey = this.printerName || "cuentas";
+    
+    // Mapear la clave lógica a la impresora bluetooth configurada
+    const mappedPrinter = localStorage.getItem(`bluetooth_printer_${logicalKey}`) || logicalKey;
+
+    // Comprobar si "Usar RAWBT" está explícitamente habilitado en localStorage o si se fuerza
+    const useRawBt = this.forceRawBt || localStorage.getItem("system_use_rawbt") === "true";
     if (!useRawBt) {
       console.log(`🔌 [RawBtTransport] Redirigiendo impresión a DatabaseQueueTransport porque RAWBT está deshabilitado por default.`);
-      new DatabaseQueueTransport(this.printerName || "cuentas").send(prn);
+      new DatabaseQueueTransport(logicalKey).send(prn);
       return;
     }
 
     let S = "#Intent;scheme=rawbt;";
-    if (this.printerName) {
-      S += `S.printer=${this.printerName};`;
+    if (mappedPrinter) {
+      S += `S.printer=${mappedPrinter};`;
     }
     const P = "package=ru.a402d.rawbtprinter;end;";
     const textEncoded = "base64," + btoa(unescape(prn));
@@ -221,6 +219,203 @@ export class ConsoleMockTransport {
     console.log("ESC/POS raw data (URL-encoded):", prn.substring(0, 200) + "...");
     console.groupEnd();
   }
+}
+
+// ─── Web Bluetooth Transport ──────────────────────────────────────────────────
+
+/**
+ * Transporte para comunicación directa con impresoras térmicas vía Web Bluetooth API (GATT)
+ */
+export class WebBluetoothTransport {
+  static activeDevice: any = null;
+  static gattServer: any = null;
+  static writeCharacteristic: any = null;
+  printerName?: string;
+
+  constructor(printerName?: string) {
+    this.printerName = printerName;
+  }
+
+  static isSupported(): boolean {
+    return typeof navigator !== "undefined" && "bluetooth" in navigator;
+  }
+
+  static isConnected(): boolean {
+    return !!(WebBluetoothTransport.activeDevice && WebBluetoothTransport.gattServer?.connected && WebBluetoothTransport.writeCharacteristic);
+  }
+
+  static async scanAndConnect(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
+    if (!WebBluetoothTransport.isSupported()) {
+      return { success: false, error: "Web Bluetooth API no está soportado en este navegador. Usa Chrome o Edge." };
+    }
+
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [
+          "000018f0-0000-1000-8000-00805f9b34fb", // Common Serial/Printer service
+          "49535343-fe7d-41a3-93d0-8609310014f5", // ISSC Transparent service
+          "00001101-0000-1000-8000-00805f9b34fb", // SPP UUID
+          "0000e7e0-0000-1000-8000-00805f9b34fb"  // Custom ESC/POS service
+        ]
+      });
+
+      if (!device) return { success: false, error: "No se seleccionó ningún dispositivo Bluetooth." };
+
+      const server = await device.gatt.connect();
+      const services = await server.getPrimaryServices();
+      let charFound: any = null;
+
+      for (const service of services) {
+        try {
+          const characteristics = await service.getCharacteristics();
+          for (const char of characteristics) {
+            if (char.properties.write || char.properties.writeWithoutResponse) {
+              charFound = char;
+              break;
+            }
+          }
+        } catch {
+          continue;
+        }
+        if (charFound) break;
+      }
+
+      if (!charFound) {
+        return { success: false, error: `Se conectó con '${device.name || device.id}', pero no se encontró un servicio de escritura compatible.` };
+      }
+
+      WebBluetoothTransport.activeDevice = device;
+      WebBluetoothTransport.gattServer = server;
+      WebBluetoothTransport.writeCharacteristic = charFound;
+
+      return { success: true, deviceName: device.name || device.id };
+    } catch (err: any) {
+      if (err.name === "NotFoundError") {
+        return { success: false, error: "Búsqueda cancelada por el usuario." };
+      }
+      console.error("Error al conectar por Web Bluetooth:", err);
+      return { success: false, error: err.message || "No se pudo establecer conexión Bluetooth." };
+    }
+  }
+
+  static async disconnect(): Promise<void> {
+    if (WebBluetoothTransport.gattServer && WebBluetoothTransport.gattServer.connected) {
+      WebBluetoothTransport.gattServer.disconnect();
+    }
+    WebBluetoothTransport.activeDevice = null;
+    WebBluetoothTransport.gattServer = null;
+    WebBluetoothTransport.writeCharacteristic = null;
+  }
+
+  async send(prn: string) {
+    if (!WebBluetoothTransport.isConnected()) {
+      console.warn("Web Bluetooth no está conectado activamente por GATT. Encolando para impresión en servidor...");
+      new DatabaseQueueTransport(this.printerName || "cuentas").send(prn);
+      return;
+    }
+
+    try {
+      // Convertir raw string URL percent-encoded a Uint8Array
+      const bytes: number[] = [];
+      let i = 0;
+      while (i < prn.length) {
+        if (prn[i] === "%" && i + 2 < prn.length) {
+          const hex = prn.substring(i + 1, i + 3);
+          bytes.push(parseInt(hex, 16));
+          i += 3;
+        } else {
+          bytes.push(prn.charCodeAt(i));
+          i++;
+        }
+      }
+
+      const buffer = new Uint8Array(bytes);
+      const chunkSize = 100;
+      for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+        const chunk = buffer.slice(offset, offset + chunkSize);
+        if (WebBluetoothTransport.writeCharacteristic.properties.writeWithoutResponse) {
+          await WebBluetoothTransport.writeCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await WebBluetoothTransport.writeCharacteristic.writeValueWithResponse(chunk);
+        }
+      }
+    } catch (err) {
+      console.error("Error al enviar datos por Web Bluetooth:", err);
+      new DatabaseQueueTransport(this.printerName || "cuentas").send(prn);
+    }
+  }
+}
+
+// ─── Generador de Páginas de Prueba ──────────────────────────────────────────
+
+export function sendTestReceipt(logicalKey: string, customName: string) {
+  const mode = localStorage.getItem("bluetooth_transport_mode") || "webbluetooth";
+  const driver = new EscPosDriver();
+
+  if (WebBluetoothTransport.isConnected() || mode === "webbluetooth") {
+    const transport = new WebBluetoothTransport(customName);
+    const job = new PosPrinterJob(driver, transport as any);
+    buildTestJob(job, logicalKey, customName, "Web Bluetooth Directo (Nativo)").execute();
+    return {
+      success: true,
+      message: `Página de prueba enviada a '${customName}' vía Web Bluetooth Directo (Nativo).`,
+    };
+  } else if (mode === "sentinel") {
+    const transport = new WindowsSpoolerTransport(logicalKey);
+    const job = new PosPrinterJob(driver, transport);
+    buildTestJob(job, logicalKey, customName, "Sentinel de Windows").execute();
+    return {
+      success: true,
+      message: `Página de prueba enviada a '${customName}' vía Sentinel de Windows.`,
+    };
+  } else {
+    const transport = new DatabaseQueueTransport(logicalKey);
+    const job = new PosPrinterJob(driver, transport as any);
+    buildTestJob(job, logicalKey, customName, "Cola Central SQLite").execute();
+    return {
+      success: true,
+      message: `Ticket de prueba para '${customName}' encolado en servidor central.`,
+    };
+  }
+}
+
+function buildTestJob(job: PosPrinterJob, logicalKey: string, customName: string, modeName: string): PosPrinterJob {
+  return job
+    .initialize()
+    .center()
+    .bold(true)
+    .printLine("================================")
+    .printLine("     COCINET RESTAURANTE PRO    ")
+    .printLine("  PAGINA DE PRUEBA DE IMPRESION ")
+    .printLine("================================")
+    .bold(false)
+    .left()
+    .printLine(`Area Logica: ${logicalKey.toUpperCase()}`)
+    .printLine(`Imp. Bluetooth: ${customName}`)
+    .printLine(`Modo Conex.: ${modeName}`)
+    .printLine(`Fecha: ${new Date().toLocaleDateString()}`)
+    .printLine(`Hora: ${new Date().toLocaleTimeString()}`)
+    .printLine("--------------------------------")
+    .printLine("PRUEBA DE FUENTES Y ALINEACION:")
+    .left().printLine("Izquierda  [OK]")
+    .center().printLine("Centro     [OK]")
+    .right().printLine("Derecha    [OK]")
+    .left()
+    .printLine("--------------------------------")
+    .bold(true)
+    .printLine("CARACTERES Y PATRON DE CORTE:")
+    .bold(false)
+    .printLine("ABCDEFGHIJKLM NOPQRSTUVWXYZ")
+    .printLine("1234567890 !@#$%^&*()_+-=")
+    .printLine("[██████████████████████████████]")
+    .printLine("--------------------------------")
+    .center()
+    .bold(true)
+    .printLine("CONEXION Y PRUEBA EXITOSA ⭐")
+    .bold(false)
+    .feed(3)
+    .cut();
 }
 
 // ─── Driver ESC/POS ──────────────────────────────────────────────────────────

@@ -11,3 +11,4 @@ firebase-key-*.json
 *.db*
 *.xlsx
 *.xls
+.firebase/

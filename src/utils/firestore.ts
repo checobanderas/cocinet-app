@@ -978,9 +978,10 @@ export async function syncLocalDataToFirebase(
 export async function bulkAddProductsToFirebase(
   products: any[],
   reset: boolean = false,
+  tenantId?: string,
 ) {
   const batch = writeBatch(db);
-  const currentTenant = getCurrentTenantId();
+  const currentTenant = tenantId || getCurrentTenantId();
 
   if (reset) {
     // ONLY delete products for the CURRENT active tenant!
@@ -1042,8 +1043,8 @@ export async function migrateAvatarsInFirebase() {
   }
 }
 
-export async function resetAllSystemsInFirebase() {
-  const currentTenant = getCurrentTenantId();
+export async function resetAllSystemsInFirebase(tenantId?: string) {
+  const currentTenant = tenantId || getCurrentTenantId();
 
   // Collections that are isolated by tenantId
   const tenantCollections = [
@@ -2170,6 +2171,25 @@ export function subscribeToMenuBackups(
   );
 }
 
+export async function fetchMenuBackupProducts(backup: MenuBackup | any): Promise<any[]> {
+  if (!backup) return [];
+  if (!backup.isChunked) {
+    return backup.products || [];
+  }
+  try {
+    const chunksSnap = await getDocs(collection(db, "products", backup.id, "chunks"));
+    if (chunksSnap.docs.length === 0) return backup.products || [];
+    const sortedDocs = chunksSnap.docs
+      .map((d) => d.data())
+      .sort((a: any, b: any) => a.idx - b.idx);
+    const jsonStr = sortedDocs.map((d: any) => d.content).join("");
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    console.error("Error al desensamblar productos del respaldo de menú:", err);
+    return backup.products || [];
+  }
+}
+
 export async function createMenuBackup(
   tenantId: string,
   sucursal: string,
@@ -2178,30 +2198,66 @@ export async function createMenuBackup(
 ) {
   const id = `bk_${tenantId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
   const ref = doc(db, "products", id);
+  
+  const jsonProducts = JSON.stringify(products);
+  const sizeEstimate = jsonProducts.length;
+  const isChunked = sizeEstimate > 750 * 1024; // > 750 KB
+
   const data: any = {
     id,
     tenantId,
     sucursal: sucursal || "Sucursal",
     timestamp: getMexicoISOString(),
     name: name || `Respaldo del ${new Date().toLocaleDateString()}`,
-    products,
+    products: isChunked ? [] : products,
+    productsCount: products.length,
     isBackup: true,
+    isChunked,
+    sizeEstimate,
     createdAt: getMexicoISOString(),
     updatedAt: getMexicoISOString()
   };
-  await runWrite(setDoc(ref, data));
+
+  await runWrite(setDoc(ref, cleanUndefined(data)));
+
+  if (isChunked) {
+    const chunkSize = 750 * 1024;
+    const totalChunks = Math.ceil(jsonProducts.length / chunkSize);
+    for (let idx = 0; idx < totalChunks; idx++) {
+      const chunkStr = jsonProducts.substring(idx * chunkSize, (idx + 1) * chunkSize);
+      const chunkRef = doc(db, "products", id, "chunks", `chunk_${idx}`);
+      await runWrite(setDoc(chunkRef, { idx, content: chunkStr }));
+    }
+    data.products = products;
+  }
+
   return data as unknown as MenuBackup;
 }
 
 export async function deleteMenuBackupFromFirebase(id: string) {
+  try {
+    const chunksSnap = await getDocs(collection(db, "products", id, "chunks"));
+    if (chunksSnap.docs.length > 0) {
+      const batch = writeBatch(db);
+      chunksSnap.docs.forEach((d) => batch.delete(d.ref));
+      await runWrite(batch.commit());
+    }
+  } catch (err) {
+    console.warn("Error borrando subcolección chunks de menú:", err);
+  }
   const ref = doc(db, "products", id);
   await runWrite(deleteDoc(ref));
 }
 
 export async function restoreMenuBackupInFirebase(
   tenantId: string,
-  backupProducts: any[]
+  backupProducts: any[] | any
 ) {
+  let productsToRestore = backupProducts;
+  if (!Array.isArray(backupProducts) || (backupProducts as any)?.isChunked) {
+    productsToRestore = await fetchMenuBackupProducts(backupProducts);
+  }
+
   const batch = writeBatch(db);
   
   // 1. Delete current products of this tenant (EXCLUDING any backup documents)
@@ -2219,7 +2275,7 @@ export async function restoreMenuBackupInFirebase(
   });
 
   // 2. Restore backup products
-  backupProducts.forEach((p) => {
+  (productsToRestore || []).forEach((p: any) => {
     const rawId = p.id || `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const id = rawId.startsWith(`prod_${tenantId}_`) ? rawId : `prod_${tenantId}_${rawId}`;
     const ref = doc(db, "products", id);
@@ -2630,5 +2686,330 @@ export async function updateNotificationInFirebase(id: string, updateData: any) 
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏢 COMPANIES CONFIG (Global visibility config synced to Firestore)
+// ─────────────────────────────────────────────────────────────────────────────
 
+export async function saveCompaniesConfigToFirebase(config: Record<string, any>): Promise<void> {
+  const ref = doc(db, "settings", "companiesConfig_global");
+  await runWrite(
+    setDoc(ref, cleanUndefined({ config, updatedAt: getMexicoISOString() }))
+  );
+}
 
+export function subscribeToCompaniesConfigFromFirebase(
+  callback: (config: Record<string, any> | null) => void
+) {
+  const ref = doc(db, "settings", "companiesConfig_global");
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        callback(data?.config ?? null);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, "settings/companiesConfig_global");
+    }
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📦 TENANT FULL BACKUP SNAPSHOTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Exports all data filtered by a specific tenantId.
+ * Collections that have a tenantId field are filtered, the rest are included fully.
+ */
+export async function exportTenantDataJson(
+  tenantId: string,
+  options?: { startDate?: string; endDate?: string }
+): Promise<any> {
+  const tenantFilteredCollections = [
+    "products",
+    "tables",
+    "users",
+    "history",
+    "expenses",
+    "suppliers",
+    "customers",
+    "cash_movements",
+    "cashier_sessions_v2",
+    "arqueos",
+    "menu_backups",
+    "inventory_movements",
+    "inventory",
+  ];
+
+  const timeCollections = [
+    "history",
+    "expenses",
+    "cash_movements",
+    "inventory_movements",
+    "arqueos",
+    "cashier_sessions_v2",
+  ];
+
+  const exportedData: Record<string, any[]> = {};
+
+  for (const colName of tenantFilteredCollections) {
+    try {
+      const q = query(collection(db, colName), where("tenantId", "==", tenantId));
+      const snapshot = await getDocs(q);
+      let docsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      if ((options?.startDate || options?.endDate) && timeCollections.includes(colName)) {
+        docsList = docsList.filter((docItem: any) => {
+          const dateVal = docItem.createdAt || docItem.timestamp || docItem.closedAt || docItem.openedAt || docItem.date;
+          if (!dateVal) return true;
+          const docDateStr = typeof dateVal === "string" ? dateVal.slice(0, 10) : new Date(dateVal).toISOString().slice(0, 10);
+          if (options?.startDate && docDateStr < options.startDate) return false;
+          if (options?.endDate && docDateStr > options.endDate) return false;
+          return true;
+        });
+      }
+
+      exportedData[colName] = docsList;
+    } catch (colErr) {
+      // Fallback: export all if where() fails (collection may not have tenantId field)
+      try {
+        const snapshot = await getDocs(collection(db, colName));
+        let docsList = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((doc: any) => !doc.tenantId || doc.tenantId === tenantId);
+
+        if ((options?.startDate || options?.endDate) && timeCollections.includes(colName)) {
+          docsList = docsList.filter((docItem: any) => {
+            const dateVal = docItem.createdAt || docItem.timestamp || docItem.closedAt || docItem.openedAt || docItem.date;
+            if (!dateVal) return true;
+            const docDateStr = typeof dateVal === "string" ? dateVal.slice(0, 10) : new Date(dateVal).toISOString().slice(0, 10);
+            if (options?.startDate && docDateStr < options.startDate) return false;
+            if (options?.endDate && docDateStr > options.endDate) return false;
+            return true;
+          });
+        }
+
+        exportedData[colName] = docsList;
+      } catch (fallbackErr) {
+        console.warn(`Error exportando colección ${colName}:`, fallbackErr);
+        exportedData[colName] = [];
+      }
+    }
+  }
+
+  return {
+    exportedAt: getMexicoISOString(),
+    tenantId,
+    version: "1.0",
+    startDate: options?.startDate || null,
+    endDate: options?.endDate || null,
+    collections: exportedData,
+  };
+}
+
+export interface TenantBackupSnapshot {
+  id: string;
+  tenantId: string;
+  label: string;
+  createdAt: string;
+  note?: string;
+  sizeEstimate?: number; // bytes approx
+  totalDocs?: number;
+  isChunked?: boolean;
+  startDate?: string;
+  endDate?: string;
+  data?: any;
+}
+
+/**
+ * Save a full tenant backup snapshot to Firestore.
+ */
+export async function saveTenantBackupSnapshot(
+  tenantId: string,
+  label: string,
+  note: string,
+  data: any
+): Promise<string> {
+  const snapshotId = `snap_${tenantId}_${Date.now()}`;
+  const ref = doc(db, "tenant_backups", snapshotId);
+  const jsonStr = JSON.stringify(data);
+  const sizeEstimate = jsonStr.length;
+
+  const totalDocs = data && data.collections
+    ? Object.values(data.collections).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0)
+    : 0;
+
+  // 1. Write the metadata document first (without the "data" field)
+  await runWrite(
+    setDoc(ref, cleanUndefined({
+      id: snapshotId,
+      tenantId,
+      label,
+      note: note || "",
+      createdAt: getMexicoISOString(),
+      sizeEstimate,
+      totalDocs,
+      isChunked: true,
+      startDate: data?.startDate || null,
+      endDate: data?.endDate || null,
+    }))
+  );
+
+  // 2. Fragment the JSON and write chunks to a subcollection "chunks"
+  const chunkSize = 800 * 1024; // 800 KB
+  const totalChunks = Math.ceil(jsonStr.length / chunkSize);
+  
+  for (let idx = 0; idx < totalChunks; idx++) {
+    const chunkStr = jsonStr.substring(idx * chunkSize, (idx + 1) * chunkSize);
+    const chunkRef = doc(db, "tenant_backups", snapshotId, "chunks", `chunk_${idx}`);
+    await runWrite(setDoc(chunkRef, { idx, content: chunkStr }));
+  }
+
+  return snapshotId;
+}
+
+/**
+ * Fetch and reassemble a full tenant backup snapshot JSON data from its chunks.
+ */
+export async function fetchTenantBackupSnapshotData(snapshotId: string): Promise<any> {
+  const parentRef = doc(db, "tenant_backups", snapshotId);
+  const parentSnap = await getDoc(parentRef);
+  if (!parentSnap.exists()) {
+    throw new Error("El respaldo no existe.");
+  }
+  const parentData = parentSnap.data();
+
+  // Legacy fallback: if not chunked, data is stored directly in parent
+  if (!parentData.isChunked && parentData.data) {
+    return parentData.data;
+  }
+
+  // Load all chunks from subcollection, sort by index and assemble
+  const chunksSnap = await getDocs(collection(db, "tenant_backups", snapshotId, "chunks"));
+  const sortedDocs = chunksSnap.docs
+    .map(d => d.data())
+    .sort((a: any, b: any) => a.idx - b.idx);
+
+  if (sortedDocs.length === 0) {
+    throw new Error("No se encontraron fragmentos para este respaldo.");
+  }
+
+  const jsonStr = sortedDocs.map((d: any) => d.content).join("");
+  return JSON.parse(jsonStr);
+}
+
+/**
+ * Subscribe to all backup snapshots for a tenant (real-time).
+ */
+export function subscribeToTenantBackupSnapshots(
+  tenantId: string,
+  callback: (snapshots: TenantBackupSnapshot[]) => void
+) {
+  const q = query(
+    collection(db, "tenant_backups"),
+    where("tenantId", "==", tenantId),
+    orderBy("createdAt", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const snapshots = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as TenantBackupSnapshot[];
+      callback(snapshots);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, `tenant_backups/${tenantId}`);
+    }
+  );
+}
+
+/**
+ * Delete a tenant backup snapshot and all its chunks.
+ */
+export async function deleteTenantBackupSnapshot(snapshotId: string): Promise<void> {
+  // 1. Delete all chunk sub-documents
+  try {
+    const chunksSnap = await getDocs(collection(db, "tenant_backups", snapshotId, "chunks"));
+    if (chunksSnap.docs.length > 0) {
+      const batch = writeBatch(db);
+      chunksSnap.docs.forEach((d) => batch.delete(d.ref));
+      await runWrite(batch.commit());
+    }
+  } catch (err) {
+    console.warn("Error deleting subcollection chunks for backup:", err);
+  }
+
+  // 2. Delete parent document
+  const ref = doc(db, "tenant_backups", snapshotId);
+  await runWrite(deleteDoc(ref));
+}
+
+/**
+ * Restore a tenant backup snapshot into a target tenant.
+ * All documents in the backup will have their tenantId replaced with targetTenantId.
+ */
+export async function restoreTenantBackupSnapshot(
+  snapshot: TenantBackupSnapshot,
+  targetTenantId: string,
+  onProgress?: (msg: string) => void
+): Promise<number> {
+  let data = snapshot.data;
+  if (!data) {
+    if (onProgress) {
+      onProgress("Descargando y ensamblando fragmentos del respaldo...");
+    }
+    data = await fetchTenantBackupSnapshotData(snapshot.id);
+  }
+
+  if (!data || !data.collections) {
+    throw new Error("El respaldo no tiene un formato válido.");
+  }
+
+  let writeCount = 0;
+  const batchSize = 100;
+
+  for (const [colName, docs] of Object.entries(data.collections)) {
+    if (!Array.isArray(docs) || docs.length === 0) continue;
+
+    if (onProgress) {
+      onProgress(`Restaurando ${docs.length} registros de "${colName}"...`);
+    }
+
+    for (let i = 0; i < (docs as any[]).length; i += batchSize) {
+      const chunk = (docs as any[]).slice(i, i + batchSize);
+      const batch = writeBatch(db);
+
+      for (const docData of chunk) {
+        const { id, ...cleanData } = docData;
+        if (!id) continue;
+
+        // Rewrite tenantId to target tenant
+        const newId = targetTenantId !== snapshot.tenantId
+          ? id.replace(snapshot.tenantId, targetTenantId)
+          : id;
+
+        const docRef = doc(db, colName, newId);
+        batch.set(
+          docRef,
+          cleanUndefined({
+            ...cleanData,
+            tenantId: targetTenantId,
+            updatedAt: getMexicoISOString(),
+          }),
+          { merge: false }
+        );
+        writeCount++;
+      }
+
+      await batch.commit();
+    }
+  }
+
+  return writeCount;
+}
