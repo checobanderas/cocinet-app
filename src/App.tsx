@@ -3849,6 +3849,10 @@ export default function App() {
   const [bluetoothPrinterCocina, setBluetoothPrinterCocina] = useState<string>(() => localStorage.getItem("bluetooth_printer_cocina") || "cocina");
   const [bluetoothPrinterBarra, setBluetoothPrinterBarra] = useState<string>(() => localStorage.getItem("bluetooth_printer_barra") || "barra");
   const [bluetoothTransportMode, setBluetoothTransportMode] = useState<string>(() => localStorage.getItem("bluetooth_transport_mode") || "webbluetooth");
+  const [showBluetoothConfigModal, setShowBluetoothConfigModal] = useState<boolean>(false);
+  const [connectedBtDeviceName, setConnectedBtDeviceName] = useState<string | null>(() => localStorage.getItem("bt_connected_device_name"));
+  const [isScanningBt, setIsScanningBt] = useState<boolean>(false);
+
 
   const [ticketBusinessName, setTicketBusinessName] = useState<string>(
     "Taquería El Pastorcito",
@@ -5436,6 +5440,195 @@ export default function App() {
             )}
           </div>
         </IonContent>
+      </IonModal>
+    );
+  };
+
+  const handleScanBluetoothDevice = async (area: "cuentas" | "cocina" | "barra" = "cuentas") => {
+    setIsScanningBt(true);
+    try {
+      const res = await WebBluetoothTransport.scanAndConnect();
+      if (res.success && res.deviceName) {
+        setConnectedBtDeviceName(res.deviceName);
+        localStorage.setItem("bt_connected_device_name", res.deviceName);
+        setMenuToastMessage(`Impresora Bluetooth conectada: ${res.deviceName} 🖨️`);
+        setShowMenuToast(true);
+      } else if (res.error) {
+        setMenuToastMessage(`Error Bluetooth: ${res.error}`);
+        setShowMenuToast(true);
+      }
+    } catch (err: any) {
+      console.error("Error al buscar dispositivo Bluetooth:", err);
+      setMenuToastMessage(`No se conectó impresora Bluetooth: ${err?.message || "Cancelado"}`);
+      setShowMenuToast(true);
+    } finally {
+      setIsScanningBt(false);
+    }
+  };
+
+  const handleTestPrinter = async (area: "cuentas" | "cocina" | "barra" = "cuentas", printerName?: string) => {
+    try {
+      await sendTestReceipt(area, printerName || "Impresora de Prueba");
+      setMenuToastMessage(`Ticket de prueba enviado a ${area} 📄`);
+      setShowMenuToast(true);
+    } catch (err: any) {
+      console.error("Error al enviar prueba de impresión:", err);
+      setMenuToastMessage(`Error al imprimir prueba: ${err?.message || "Error de conexión"}`);
+      setShowMenuToast(true);
+    }
+  };
+
+  const renderBluetoothConfigModal = () => {
+    if (!showBluetoothConfigModal) return null;
+
+    return (
+      <IonModal
+        isOpen={showBluetoothConfigModal}
+        onDidDismiss={() => setShowBluetoothConfigModal(false)}
+        style={{
+          "--height": "auto",
+          "--max-height": "90vh",
+          "--width": "100%",
+          "--max-width": "600px",
+          "--border-radius": "24px",
+        }}
+      >
+        <div className="p-6 bg-white space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 text-xl">
+                🖨️
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 m-0">Configuración de Impresoras</h2>
+                <p className="text-xs text-slate-500 m-0">Asigna y vincula impresoras Bluetooth, RawBT o Sentinel</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowBluetoothConfigModal(false)}
+              className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Modo de Conexión Principal
+              </label>
+              <select
+                value={bluetoothTransportMode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBluetoothTransportMode(val);
+                  localStorage.setItem("bluetooth_transport_mode", val);
+                }}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-800"
+              >
+                <option value="webbluetooth">Nativo Web Bluetooth (Conexión Directa a la Impresora)</option>
+                <option value="rawbt">App RawBT (Android Intent)</option>
+                <option value="windows">Sentinel de Impresión Local (Windows - Puerto 3010)</option>
+              </select>
+            </div>
+
+            {connectedBtDeviceName && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Dispositivo Vinculado</div>
+                  <div className="text-sm font-black text-emerald-900">{connectedBtDeviceName}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("bt_connected_device_name");
+                    setConnectedBtDeviceName(null);
+                  }}
+                  className="text-xs font-bold text-red-600 hover:underline"
+                >
+                  Desvincular
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Mapeo de Nombre/Alias de Impresora
+              </label>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-24 text-xs font-bold text-slate-600">Caja / Cuentas:</span>
+                  <input
+                    type="text"
+                    value={bluetoothPrinterCuentas}
+                    onChange={(e) => {
+                      setBluetoothPrinterCuentas(e.target.value);
+                      localStorage.setItem("bluetooth_printer_cuentas", e.target.value);
+                    }}
+                    placeholder="Ej. cuentas o Nombre Bluetooth"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                  />
+                  <button
+                    onClick={() => handleTestPrinter("cuentas", bluetoothPrinterCuentas)}
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                  >
+                    Prueba
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="w-24 text-xs font-bold text-slate-600">Cocina:</span>
+                  <input
+                    type="text"
+                    value={bluetoothPrinterCocina}
+                    onChange={(e) => {
+                      setBluetoothPrinterCocina(e.target.value);
+                      localStorage.setItem("bluetooth_printer_cocina", e.target.value);
+                    }}
+                    placeholder="Ej. cocina"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                  />
+                  <button
+                    onClick={() => handleTestPrinter("cocina", bluetoothPrinterCocina)}
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                  >
+                    Prueba
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="w-24 text-xs font-bold text-slate-600">Barra / Bebidas:</span>
+                  <input
+                    type="text"
+                    value={bluetoothPrinterBarra}
+                    onChange={(e) => {
+                      setBluetoothPrinterBarra(e.target.value);
+                      localStorage.setItem("bluetooth_printer_barra", e.target.value);
+                    }}
+                    placeholder="Ej. barra"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                  />
+                  <button
+                    onClick={() => handleTestPrinter("barra", bluetoothPrinterBarra)}
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                  >
+                    Prueba
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => handleScanBluetoothDevice("cuentas")}
+                disabled={isScanningBt}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl transition text-center text-xs shadow-md border-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span>{isScanningBt ? "🌀 Buscando Dispositivos Bluetooth..." : "🔍 Vincular Nueva Impresora Bluetooth"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </IonModal>
     );
   };
