@@ -13,9 +13,36 @@
 
 // ─── Detección de plataforma ─────────────────────────────────────────────────
 
+export function getActiveTenantId(): string {
+  try {
+    const raw = localStorage.getItem("pos_selected_tenant");
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (obj && obj.id) return obj.id;
+    }
+  } catch (e) {
+    console.error("Error parsing pos_selected_tenant:", e);
+  }
+  return "default";
+}
+
+export function getTenantPrintDestination(): string {
+  const tenantId = getActiveTenantId();
+  return localStorage.getItem(`system_print_destination_${tenantId}`) || 
+         localStorage.getItem("system_print_destination") || 
+         "bluetooth";
+}
+
+export function getTenantPrinterPort(): string {
+  const tenantId = getActiveTenantId();
+  return localStorage.getItem(`windows_printer_port_${tenantId}`) || 
+         localStorage.getItem("windows_printer_port") || 
+         "3010";
+}
+
 /** URL base del sentinel de impresión en Windows (puerto configurable) */
 export function getSentinelUrl(): string {
-  const port = localStorage.getItem("windows_printer_port") || "3010";
+  const port = getTenantPrinterPort();
   return `http://localhost:${port}`;
 }
 
@@ -81,7 +108,7 @@ export type PrinterArea = "cuentas" | "cocina" | "barra";
 export async function createTransport(
   area: PrinterArea = "cuentas"
 ): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
-  const destination = localStorage.getItem("system_print_destination") || "bluetooth";
+  const destination = getTenantPrintDestination();
 
   if (destination === "windows") {
     return new WindowsSpoolerTransport(area);
@@ -369,13 +396,13 @@ export class WebBluetoothTransport {
 // ─── Generador de Páginas de Prueba ──────────────────────────────────────────
 
 export function sendTestReceipt(logicalKey: string, customName: string) {
-  const destination = localStorage.getItem("system_print_destination") || "bluetooth";
+  const destination = getTenantPrintDestination();
   const driver = new EscPosDriver();
 
   if (destination === "windows") {
     const transport = new WindowsSpoolerTransport(logicalKey);
     const job = new PosPrinterJob(driver, transport);
-    const port = localStorage.getItem("windows_printer_port") || "3010";
+    const port = getTenantPrinterPort();
     buildTestJob(job, logicalKey, customName, `Puerto de Windows (Puerto ${port})`).execute();
     return {
       success: true,

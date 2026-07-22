@@ -3972,6 +3972,16 @@ export default function App() {
     }
   }, [showBluetoothConfigModal]);
 
+  useEffect(() => {
+    if (selectedTenant?.id) {
+      const tenantId = selectedTenant.id;
+      const dest = localStorage.getItem(`system_print_destination_${tenantId}`) || localStorage.getItem("system_print_destination") || "bluetooth";
+      const port = localStorage.getItem(`windows_printer_port_${tenantId}`) || localStorage.getItem("windows_printer_port") || "3010";
+      setSystemPrintDestination(dest);
+      setWindowsPrinterPort(port);
+    }
+  }, [selectedTenant?.id]);
+
   const fetchWindowsPrinters = async () => {
     setIsSentinelLoading(true);
     try {
@@ -6055,6 +6065,9 @@ export default function App() {
                   onClick={() => {
                     setSystemPrintDestination("bluetooth");
                     localStorage.setItem("system_print_destination", "bluetooth");
+                    if (selectedTenant?.id) {
+                      localStorage.setItem(`system_print_destination_${selectedTenant.id}`, "bluetooth");
+                    }
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
                     systemPrintDestination === "bluetooth"
@@ -6071,6 +6084,9 @@ export default function App() {
                   onClick={() => {
                     setSystemPrintDestination("windows");
                     localStorage.setItem("system_print_destination", "windows");
+                    if (selectedTenant?.id) {
+                      localStorage.setItem(`system_print_destination_${selectedTenant.id}`, "windows");
+                    }
                   }}
                   className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
                     systemPrintDestination === "windows"
@@ -6096,6 +6112,9 @@ export default function App() {
                         const val = e.target.value.replace(/\D/g, "");
                         setWindowsPrinterPort(val);
                         localStorage.setItem("windows_printer_port", val);
+                        if (selectedTenant?.id) {
+                          localStorage.setItem(`windows_printer_port_${selectedTenant.id}`, val);
+                        }
                       }}
                       placeholder="Ej. 3010"
                       className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-slate-800 text-center"
