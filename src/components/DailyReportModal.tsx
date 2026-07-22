@@ -91,7 +91,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
         (comanda.items || []).forEach((item: any) => {
           if (item.isCancelled) return;
           const key = item.product.id;
-          const liveProduct = products.find(p => p.id === item.product.id) || item.product;
+          const liveProduct = products.find(p => String(p.id) === String(item.product.id)) || item.product;
           if (!summary[key]) {
             summary[key] = { name: getProductReportName(liveProduct), quantity: 0, total: 0, product: liveProduct };
           }

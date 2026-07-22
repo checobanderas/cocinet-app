@@ -365,8 +365,9 @@ export function getProductReportName(product: any): string {
 
 export function getProductSortScore(product: any): number {
   if (!product) return 999999;
-  if (typeof product.sortOrder === "number" && product.sortOrder !== 9999 && product.sortOrder !== 0) {
-    return product.sortOrder;
+  const sortOrder = product.sortOrder !== undefined && product.sortOrder !== null ? Number(product.sortOrder) : NaN;
+  if (!isNaN(sortOrder) && sortOrder !== 9999 && sortOrder !== 0) {
+    return sortOrder;
   }
   const name = (product.name || "").toLowerCase().trim();
   const subcat = (product.subcategory || "").toLowerCase().trim();
