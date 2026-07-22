@@ -33900,7 +33900,7 @@ Instrucciones:
           const liveProd = products.find((p: any) => String(p.id) === String(prod.id)) || 
                            products.find((p: any) => (p.name || "").toLowerCase().trim() === (prod.name || "").toLowerCase().trim()) || 
                            prod;
-          const prodId = liveProd.id || liveProd.name;
+           const prodId = prod.id || prod.name;
           const qty = Number(item.quantity || 0);
           const price = Number(prod.price || 0);
           const itemTotal = qty * price;
