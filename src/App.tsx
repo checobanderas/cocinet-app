@@ -3951,7 +3951,7 @@ export default function App() {
   const [bluetoothTransportMode, setBluetoothTransportMode] = useState<string>(() => localStorage.getItem("bluetooth_transport_mode") || "webbluetooth");
   const [showBluetoothConfigModal, setShowBluetoothConfigModal] = useState<boolean>(false);
   const [connectedBtDeviceName, setConnectedBtDeviceName] = useState<string | null>(() => localStorage.getItem("bt_connected_device_name"));
-  const [systemPrintDestination, setSystemPrintDestination] = useState<string>(() => localStorage.getItem("system_print_destination") || "bluetooth");
+  const [systemPrintDestination, setSystemPrintDestination] = useState<string>(() => localStorage.getItem("system_print_destination") || "windows");
   const [windowsPrinterPort, setWindowsPrinterPort] = useState<string>(() => localStorage.getItem("windows_printer_port") || "3010");
   const [isScanningBt, setIsScanningBt] = useState<boolean>(false);
   const [availableWindowsPrinters, setAvailableWindowsPrinters] = useState<string[]>([]);
@@ -3975,7 +3975,7 @@ export default function App() {
   useEffect(() => {
     if (selectedTenant?.id) {
       const tenantId = selectedTenant.id;
-      const dest = localStorage.getItem(`system_print_destination_${tenantId}`) || localStorage.getItem("system_print_destination") || "bluetooth";
+      const dest = localStorage.getItem(`system_print_destination_${tenantId}`) || localStorage.getItem("system_print_destination") || "windows";
       const port = localStorage.getItem(`windows_printer_port_${tenantId}`) || localStorage.getItem("windows_printer_port") || "3010";
       setSystemPrintDestination(dest);
       setWindowsPrinterPort(port);

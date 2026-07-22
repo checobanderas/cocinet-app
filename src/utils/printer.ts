@@ -30,7 +30,7 @@ export function getTenantPrintDestination(): string {
   const tenantId = getActiveTenantId();
   return localStorage.getItem(`system_print_destination_${tenantId}`) || 
          localStorage.getItem("system_print_destination") || 
-         "bluetooth";
+         "windows";
 }
 
 export function getTenantPrinterPort(): string {
