@@ -33897,7 +33897,9 @@ Instrucciones:
           if (item.isCancelled) return;
           const prod = item.product;
           if (!prod) return;
-          const liveProd = products.find((p: any) => p.id === prod.id) || prod;
+          const liveProd = products.find((p: any) => String(p.id) === String(prod.id)) || 
+                           products.find((p: any) => (p.name || "").toLowerCase().trim() === (prod.name || "").toLowerCase().trim()) || 
+                           prod;
           const prodId = liveProd.id || liveProd.name;
           const qty = Number(item.quantity || 0);
           const price = Number(prod.price || 0);
