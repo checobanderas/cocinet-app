@@ -112,7 +112,7 @@ import {
   checkmarkOutline,
 } from "ionicons/icons";
 
-import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport, WebBluetoothTransport, sendTestReceipt, getWindowsPrinters } from "./utils/printer";
+import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport, WebBluetoothTransport, sendTestReceipt, getWindowsPrinters, PrinterArea } from "./utils/printer";
 import {
   getLocalProducts,
   saveLocalProducts,
@@ -3459,9 +3459,9 @@ export default function App() {
         }
       }
 
-      const transport = new WindowsSpoolerTransport(printerName);
+      const transport = await createTransport(printerName as any);
       const driver = new EscPosDriver();
-      const job = new PosPrinterJob(driver, transport);
+      const job = new PosPrinterJob(driver, transport as any);
 
       job.initialize();
 
@@ -3851,7 +3851,29 @@ export default function App() {
   const [bluetoothTransportMode, setBluetoothTransportMode] = useState<string>(() => localStorage.getItem("bluetooth_transport_mode") || "webbluetooth");
   const [showBluetoothConfigModal, setShowBluetoothConfigModal] = useState<boolean>(false);
   const [connectedBtDeviceName, setConnectedBtDeviceName] = useState<string | null>(() => localStorage.getItem("bt_connected_device_name"));
+  const [systemPrintDestination, setSystemPrintDestination] = useState<string>(() => localStorage.getItem("system_print_destination") || "bluetooth");
+  const [windowsPrinterPort, setWindowsPrinterPort] = useState<string>(() => localStorage.getItem("windows_printer_port") || "3010");
   const [isScanningBt, setIsScanningBt] = useState<boolean>(false);
+  const [availableWindowsPrinters, setAvailableWindowsPrinters] = useState<string[]>([]);
+  const [isSentinelLoading, setIsSentinelLoading] = useState<boolean>(false);
+
+  const fetchWindowsPrinters = async () => {
+    setIsSentinelLoading(true);
+    try {
+      const printers = await getWindowsPrinters();
+      setAvailableWindowsPrinters(printers);
+    } catch (err) {
+      console.error("Error al cargar impresoras de Windows:", err);
+    } finally {
+      setIsSentinelLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showBluetoothConfigModal && systemPrintDestination === "windows") {
+      fetchWindowsPrinters();
+    }
+  }, [showBluetoothConfigModal, systemPrintDestination, windowsPrinterPort]);
 
 
   const [ticketBusinessName, setTicketBusinessName] = useState<string>(
@@ -5445,22 +5467,48 @@ export default function App() {
   };
 
   const handleScanBluetoothDevice = async (area: "cuentas" | "cocina" | "barra" = "cuentas") => {
+    if (!WebBluetoothTransport.isSupported()) {
+      const msg = `⚠️ Web Bluetooth no está soportado o requiere HTTPS.\n\n` +
+        `Como estás accediendo desde el celular por HTTP, la búsqueda automática de Bluetooth no es posible por razones de seguridad de Chrome.\n\n` +
+        `Para configurar tu impresora:\n` +
+        `1. Escribe el nombre exacto de la impresora Bluetooth en el cuadro de texto (ej. el nombre que tiene vinculada en tu teléfono).\n` +
+        `2. Selecciona la opción 'App RawBT (Android)' como tu Modo de Conexión Principal en la parte superior.`;
+      
+      window.alert(msg);
+      triggerAppNotification("⚠️ Bluetooth no soportado", msg, "warning");
+      return;
+    }
+
     setIsScanningBt(true);
     try {
       const res = await WebBluetoothTransport.scanAndConnect();
       if (res.success && res.deviceName) {
         setConnectedBtDeviceName(res.deviceName);
         localStorage.setItem("bt_connected_device_name", res.deviceName);
-        setMenuToastMessage(`Impresora Bluetooth conectada: ${res.deviceName} 🖨️`);
-        setShowMenuToast(true);
+
+        // Mapear y guardar al alias/impresora del área seleccionada
+        if (area === "cuentas") {
+          setBluetoothPrinterCuentas(res.deviceName);
+          localStorage.setItem("bluetooth_printer_cuentas", res.deviceName);
+        } else if (area === "cocina") {
+          setBluetoothPrinterCocina(res.deviceName);
+          localStorage.setItem("bluetooth_printer_cocina", res.deviceName);
+        } else if (area === "barra") {
+          setBluetoothPrinterBarra(res.deviceName);
+          localStorage.setItem("bluetooth_printer_barra", res.deviceName);
+        }
+
+        const msg = `Impresora Bluetooth vinculada a ${area === "cuentas" ? "Cuentas" : area === "cocina" ? "Cocina" : "Barra"}: ${res.deviceName} 🖨️`;
+        window.alert(`✅ ¡Éxito!\n\n${msg}`);
+        triggerAppNotification("🖨️ Impresora Vinculada", msg, "success");
       } else if (res.error) {
-        setMenuToastMessage(`Error Bluetooth: ${res.error}`);
-        setShowMenuToast(true);
+        window.alert(`⚠️ Error Bluetooth: ${res.error}`);
+        triggerAppNotification("⚠️ Error Bluetooth", res.error, "warning");
       }
     } catch (err: any) {
       console.error("Error al buscar dispositivo Bluetooth:", err);
-      setMenuToastMessage(`No se conectó impresora Bluetooth: ${err?.message || "Cancelado"}`);
-      setShowMenuToast(true);
+      const msg = `No se conectó impresora Bluetooth: ${err?.message || "Cancelado"}`;
+      window.alert(`❌ Error de Conexión\n\n${msg}`);
     } finally {
       setIsScanningBt(false);
     }
@@ -5469,12 +5517,14 @@ export default function App() {
   const handleTestPrinter = async (area: "cuentas" | "cocina" | "barra" = "cuentas", printerName?: string) => {
     try {
       await sendTestReceipt(area, printerName || "Impresora de Prueba");
-      setMenuToastMessage(`Ticket de prueba enviado a ${area} 📄`);
-      setShowMenuToast(true);
+      const msg = `Ticket de prueba enviado a ${area === "cuentas" ? "Cuentas" : area === "cocina" ? "Cocina" : "Barra"}`;
+      window.alert(`✅ ¡Éxito!\n\n${msg}`);
+      triggerAppNotification("📄 Ticket de Prueba", msg, "success");
     } catch (err: any) {
       console.error("Error al enviar prueba de impresión:", err);
-      setMenuToastMessage(`Error al imprimir prueba: ${err?.message || "Error de conexión"}`);
-      setShowMenuToast(true);
+      const msg = `Error al imprimir prueba: ${err?.message || "Error de conexión"}`;
+      window.alert(`❌ Error al Imprimir\n\n${msg}`);
+      triggerAppNotification("❌ Error al Imprimir", msg, "warning");
     }
   };
 
@@ -5551,26 +5601,86 @@ export default function App() {
             )}
 
             <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Mapeo de Nombre/Alias de Impresora
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Mapeo de Nombre/Alias de Impresora
+                </label>
+                {systemPrintDestination === "windows" && (
+                  <button
+                    type="button"
+                    onClick={fetchWindowsPrinters}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-none border-none p-0 cursor-pointer"
+                  >
+                    {isSentinelLoading ? "🌀 Buscando..." : "🔄 Recargar impresoras de Windows"}
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="w-24 text-xs font-bold text-slate-600">Caja / Cuentas:</span>
-                  <input
-                    type="text"
-                    value={bluetoothPrinterCuentas}
-                    onChange={(e) => {
-                      setBluetoothPrinterCuentas(e.target.value);
-                      localStorage.setItem("bluetooth_printer_cuentas", e.target.value);
-                    }}
-                    placeholder="Ej. cuentas o Nombre Bluetooth"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
-                  />
+                  {systemPrintDestination === "windows" ? (
+                    isSentinelLoading ? (
+                      <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-500 font-bold animate-pulse">
+                        🌀 Cargando impresoras...
+                      </div>
+                    ) : availableWindowsPrinters.length > 0 ? (
+                      <select
+                        value={bluetoothPrinterCuentas}
+                        onChange={(e) => {
+                          setBluetoothPrinterCuentas(e.target.value);
+                          localStorage.setItem("bluetooth_printer_cuentas", e.target.value);
+                        }}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      >
+                        <option value="">-- Seleccionar Impresora --</option>
+                        {bluetoothPrinterCuentas && !availableWindowsPrinters.includes(bluetoothPrinterCuentas) && (
+                          <option value={bluetoothPrinterCuentas}>{bluetoothPrinterCuentas} (Actual)</option>
+                        )}
+                        {availableWindowsPrinters.map((printer) => (
+                          <option key={printer} value={printer}>
+                            {printer}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={bluetoothPrinterCuentas}
+                        onChange={(e) => {
+                          setBluetoothPrinterCuentas(e.target.value);
+                          localStorage.setItem("bluetooth_printer_cuentas", e.target.value);
+                        }}
+                        placeholder="Ej. cuentas o Nombre de impresora"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      />
+                    )
+                  ) : (
+                    <input
+                      type="text"
+                      value={bluetoothPrinterCuentas}
+                      onChange={(e) => {
+                        setBluetoothPrinterCuentas(e.target.value);
+                        localStorage.setItem("bluetooth_printer_cuentas", e.target.value);
+                      }}
+                      placeholder="Ej. cuentas o Nombre Bluetooth"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                    />
+                  )}
+                  {systemPrintDestination === "windows" && availableWindowsPrinters.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={fetchWindowsPrinters}
+                      title="Intentar conectar con Sentinel y cargar impresoras"
+                      className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-2.5 py-2 rounded-xl text-xs flex items-center justify-center shrink-0"
+                    >
+                      🔄
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleTestPrinter("cuentas", bluetoothPrinterCuentas)}
-                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs shrink-0"
                   >
                     Prueba
                   </button>
@@ -5578,19 +5688,68 @@ export default function App() {
 
                 <div className="flex items-center gap-2">
                   <span className="w-24 text-xs font-bold text-slate-600">Cocina:</span>
-                  <input
-                    type="text"
-                    value={bluetoothPrinterCocina}
-                    onChange={(e) => {
-                      setBluetoothPrinterCocina(e.target.value);
-                      localStorage.setItem("bluetooth_printer_cocina", e.target.value);
-                    }}
-                    placeholder="Ej. cocina"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
-                  />
+                  {systemPrintDestination === "windows" ? (
+                    isSentinelLoading ? (
+                      <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-500 font-bold animate-pulse">
+                        🌀 Cargando impresoras...
+                      </div>
+                    ) : availableWindowsPrinters.length > 0 ? (
+                      <select
+                        value={bluetoothPrinterCocina}
+                        onChange={(e) => {
+                          setBluetoothPrinterCocina(e.target.value);
+                          localStorage.setItem("bluetooth_printer_cocina", e.target.value);
+                        }}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      >
+                        <option value="">-- Seleccionar Impresora --</option>
+                        {bluetoothPrinterCocina && !availableWindowsPrinters.includes(bluetoothPrinterCocina) && (
+                          <option value={bluetoothPrinterCocina}>{bluetoothPrinterCocina} (Actual)</option>
+                        )}
+                        {availableWindowsPrinters.map((printer) => (
+                          <option key={printer} value={printer}>
+                            {printer}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={bluetoothPrinterCocina}
+                        onChange={(e) => {
+                          setBluetoothPrinterCocina(e.target.value);
+                          localStorage.setItem("bluetooth_printer_cocina", e.target.value);
+                        }}
+                        placeholder="Ej. cocina o Nombre de impresora"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      />
+                    )
+                  ) : (
+                    <input
+                      type="text"
+                      value={bluetoothPrinterCocina}
+                      onChange={(e) => {
+                        setBluetoothPrinterCocina(e.target.value);
+                        localStorage.setItem("bluetooth_printer_cocina", e.target.value);
+                      }}
+                      placeholder="Ej. cocina"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                    />
+                  )}
+                  {systemPrintDestination === "windows" && availableWindowsPrinters.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={fetchWindowsPrinters}
+                      title="Intentar conectar con Sentinel y cargar impresoras"
+                      className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-2.5 py-2 rounded-xl text-xs flex items-center justify-center shrink-0"
+                    >
+                      🔄
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleTestPrinter("cocina", bluetoothPrinterCocina)}
-                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs shrink-0"
                   >
                     Prueba
                   </button>
@@ -5598,19 +5757,68 @@ export default function App() {
 
                 <div className="flex items-center gap-2">
                   <span className="w-24 text-xs font-bold text-slate-600">Barra / Bebidas:</span>
-                  <input
-                    type="text"
-                    value={bluetoothPrinterBarra}
-                    onChange={(e) => {
-                      setBluetoothPrinterBarra(e.target.value);
-                      localStorage.setItem("bluetooth_printer_barra", e.target.value);
-                    }}
-                    placeholder="Ej. barra"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
-                  />
+                  {systemPrintDestination === "windows" ? (
+                    isSentinelLoading ? (
+                      <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-500 font-bold animate-pulse">
+                        🌀 Cargando impresoras...
+                      </div>
+                    ) : availableWindowsPrinters.length > 0 ? (
+                      <select
+                        value={bluetoothPrinterBarra}
+                        onChange={(e) => {
+                          setBluetoothPrinterBarra(e.target.value);
+                          localStorage.setItem("bluetooth_printer_barra", e.target.value);
+                        }}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      >
+                        <option value="">-- Seleccionar Impresora --</option>
+                        {bluetoothPrinterBarra && !availableWindowsPrinters.includes(bluetoothPrinterBarra) && (
+                          <option value={bluetoothPrinterBarra}>{bluetoothPrinterBarra} (Actual)</option>
+                        )}
+                        {availableWindowsPrinters.map((printer) => (
+                          <option key={printer} value={printer}>
+                            {printer}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={bluetoothPrinterBarra}
+                        onChange={(e) => {
+                          setBluetoothPrinterBarra(e.target.value);
+                          localStorage.setItem("bluetooth_printer_barra", e.target.value);
+                        }}
+                        placeholder="Ej. barra o Nombre de impresora"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                      />
+                    )
+                  ) : (
+                    <input
+                      type="text"
+                      value={bluetoothPrinterBarra}
+                      onChange={(e) => {
+                        setBluetoothPrinterBarra(e.target.value);
+                        localStorage.setItem("bluetooth_printer_barra", e.target.value);
+                      }}
+                      placeholder="Ej. barra"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                    />
+                  )}
+                  {systemPrintDestination === "windows" && availableWindowsPrinters.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={fetchWindowsPrinters}
+                      title="Intentar conectar con Sentinel y cargar impresoras"
+                      className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-2.5 py-2 rounded-xl text-xs flex items-center justify-center shrink-0"
+                    >
+                      🔄
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleTestPrinter("barra", bluetoothPrinterBarra)}
-                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs"
+                    className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-3 py-2.5 rounded-xl text-xs shrink-0"
                   >
                     Prueba
                   </button>
@@ -5618,14 +5826,106 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-2">
-              <button
-                onClick={() => handleScanBluetoothDevice("cuentas")}
-                disabled={isScanningBt}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-2xl transition text-center text-xs shadow-md border-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <span>{isScanningBt ? "🌀 Buscando Dispositivos Bluetooth..." : "🔍 Vincular Nueva Impresora Bluetooth"}</span>
-              </button>
+            {/* DESTINO DE IMPRESIÓN DEL SISTEMA */}
+            <div className="border-t pt-4 space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                ¿Desea imprimir a IMPRESORAS BLUETOOTH o a el PUERTO DE WINDOWS?
+              </label>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPrintDestination("bluetooth");
+                    localStorage.setItem("system_print_destination", "bluetooth");
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
+                    systemPrintDestination === "bluetooth"
+                      ? "bg-blue-50 border-blue-500 text-blue-700 font-black shadow-md ring-2 ring-blue-500/20"
+                      : "bg-slate-50 border-slate-200 text-slate-500 font-bold hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="text-lg mb-1">📱</span>
+                  <span className="text-[11px]">IMPRESORAS BLUETOOTH</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPrintDestination("windows");
+                    localStorage.setItem("system_print_destination", "windows");
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
+                    systemPrintDestination === "windows"
+                      ? "bg-blue-50 border-blue-500 text-blue-700 font-black shadow-md ring-2 ring-blue-500/20"
+                      : "bg-slate-50 border-slate-200 text-slate-500 font-bold hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="text-lg mb-1">🖥️</span>
+                  <span className="text-[11px]">PUERTO DE WINDOWS (3010)</span>
+                </button>
+              </div>
+
+              {systemPrintDestination === "windows" && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 uppercase">
+                      Puerto de Impresión (Windows):
+                    </label>
+                    <input
+                      type="text"
+                      value={windowsPrinterPort}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        setWindowsPrinterPort(val);
+                        localStorage.setItem("windows_printer_port", val);
+                      }}
+                      placeholder="Ej. 3010"
+                      className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-slate-800 text-center"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-normal m-0">
+                    Ingresa el puerto donde corre el agente de impresión en Windows (por defecto es 3010).
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t pt-4 space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider text-center">
+                Vincular Nueva Impresora Bluetooth a:
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleScanBluetoothDevice("cuentas")}
+                  disabled={isScanningBt}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-2 rounded-2xl transition text-center text-[10px] shadow-sm border-none cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <span>💵 Cuentas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleScanBluetoothDevice("cocina")}
+                  disabled={isScanningBt}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-2 rounded-2xl transition text-center text-[10px] shadow-sm border-none cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <span>🍳 Cocina</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleScanBluetoothDevice("barra")}
+                  disabled={isScanningBt}
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-2 rounded-2xl transition text-center text-[10px] shadow-sm border-none cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <span>🍹 Barra</span>
+                </button>
+              </div>
+              {isScanningBt && (
+                <p className="text-[10px] text-blue-600 font-bold text-center animate-pulse m-0">
+                  🌀 Buscando e intentando conectar dispositivo Bluetooth...
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -6062,6 +6362,9 @@ export default function App() {
       localStorage.setItem("cocinet_active_owner_filter", selectedTenant.ownerKey);
     }
     
+    setIsMasterAdmin(false);
+    localStorage.removeItem("pos_master_admin");
+
     setIsSystemsMode(false);
     localStorage.setItem("cocinet_is_systems", "false");
     setRestrictedOwnerKey(null);
@@ -6776,7 +7079,7 @@ export default function App() {
     return t;
   };
 
-  const handlePrintPrecorte = () => {
+  const handlePrintPrecorte = async () => {
     if ((window as any)._isPrintingCorte) return;
     (window as any)._isPrintingCorte = true;
     setTimeout(() => {
@@ -6785,10 +7088,8 @@ export default function App() {
 
     try {
       const driver = new EscPosDriver();
-      const transport = isWindows()
-        ? new WindowsSpoolerTransport("cuentas")
-        : new RawBtTransport();
-      const job = new PosPrinterJob(driver, transport);
+      const transport = await createTransport("cuentas");
+      const job = new PosPrinterJob(driver, transport as any);
 
       const {
         subtotal,
@@ -6892,7 +7193,7 @@ export default function App() {
     }
   };
 
-  const handlePrintCorte = () => {
+  const handlePrintCorte = async () => {
     if ((window as any)._isPrintingCorte) return;
     (window as any)._isPrintingCorte = true;
     setTimeout(() => {
@@ -6901,10 +7202,8 @@ export default function App() {
 
     try {
       const driver = new EscPosDriver();
-      const transport = isWindows()
-        ? new WindowsSpoolerTransport("cuentas")
-        : new RawBtTransport();
-      const job = new PosPrinterJob(driver, transport);
+      const transport = await createTransport("cuentas");
+      const job = new PosPrinterJob(driver, transport as any);
 
       const {
         subtotal,
@@ -9831,15 +10130,10 @@ export default function App() {
           return;
         }
 
-        let printerName = undefined;
-        if (target === "kitchen") printerName = "cocina";
-        else if (target === "bar") printerName = "barra";
-
-        const transport = isWindows()
-          ? new WindowsSpoolerTransport(printerName ?? "cocina")
-          : new RawBtTransport(printerName);
+        const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
+        const transport = await createTransport(printerArea);
         const driver = new EscPosDriver();
-        const job = new PosPrinterJob(driver, transport);
+        const job = new PosPrinterJob(driver, transport as any);
 
         job.initialize();
 
@@ -10716,17 +11010,15 @@ export default function App() {
     }
   };
 
-  const reprintAccount = (account: ClosedAccount) => {
+  const reprintAccount = async (account: ClosedAccount) => {
     const allItems = (account.comandas || [])
       .flatMap((c) => c.items)
       .filter((i) => !i.isCancelled);
 
     try {
-      const transport = isWindows()
-        ? new WindowsSpoolerTransport("cuentas")
-        : new RawBtTransport();
+      const transport = await createTransport("cuentas");
       const driver = new EscPosDriver();
-      const job = new PosPrinterJob(driver, transport);
+      const job = new PosPrinterJob(driver, transport as any);
 
       job.initialize();
       job.center();
@@ -10823,7 +11115,7 @@ export default function App() {
     }
   };
 
-  const printTicket = (
+  const printTicket = async (
     table: TableData,
     view: "resumen" | "comandas" | "comensales" = "resumen",
   ) => {
@@ -10912,11 +11204,9 @@ export default function App() {
         return;
       }
 
-      const transport = isWindows()
-        ? new WindowsSpoolerTransport("cuentas")
-        : new RawBtTransport(); // Default printer for tickets
+      const transport = await createTransport("cuentas");
       const driver = new EscPosDriver();
-      const job = new PosPrinterJob(driver, transport);
+      const job = new PosPrinterJob(driver, transport as any);
 
       job.initialize();
       job.center();
@@ -18089,23 +18379,6 @@ Instrucciones:
                     >
                       ⚙️ Formulario y Configuración Bluetooth
                     </button>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => handleScanBluetoothDevice("cuentas")}
-                        disabled={isScanningBt || !WebBluetoothTransport.isSupported()}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold py-2.5 px-3 rounded-xl transition duration-200 cursor-pointer text-center text-[11px] border border-blue-200 disabled:opacity-50"
-                      >
-                        {isScanningBt ? "🌀 Buscando..." : "🔍 Buscar Impresora"}
-                      </button>
-
-                      <button
-                        onClick={() => handleTestPrinter("cuentas", bluetoothPrinterCuentas)}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-2.5 px-3 rounded-xl transition duration-200 cursor-pointer text-center text-[11px] border border-emerald-200"
-                      >
-                        📄 Imprimir Prueba
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -31446,10 +31719,8 @@ Instrucciones:
 
       try {
         const driver = new EscPosDriver();
-        const transport = isWindows()
-          ? new WindowsSpoolerTransport("cuentas")
-          : new RawBtTransport();
-        const job = new PosPrinterJob(driver, transport);
+        const transport = await createTransport("cuentas");
+        const job = new PosPrinterJob(driver, transport as any);
 
         const dateStr = new Date().toLocaleString("es-MX");
         
@@ -38213,6 +38484,21 @@ Instrucciones:
           </motion.div>
         )}
       </AnimatePresence>
+
+      <IonToast
+        isOpen={showMenuToast}
+        onDidDismiss={() => setShowMenuToast(false)}
+        message={menuToastMessage}
+        duration={4000}
+        position="bottom"
+        style={{
+          "--background": "#1e293b",
+          "--color": "#f8fafc",
+          "--border-radius": "16px",
+          "--button-color": "#38bdf8",
+          "fontWeight": "bold"
+        }}
+      />
     </IonApp>
   );
 }

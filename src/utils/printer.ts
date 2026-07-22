@@ -13,8 +13,11 @@
 
 // ─── Detección de plataforma ─────────────────────────────────────────────────
 
-/** URL base del sentinel de impresión en Windows */
-export const SENTINEL_URL = "http://localhost:3010";
+/** URL base del sentinel de impresión en Windows (puerto configurable) */
+export function getSentinelUrl(): string {
+  const port = localStorage.getItem("windows_printer_port") || "3010";
+  return `http://localhost:${port}`;
+}
 
 /** Devuelve true si el navegador corre en Windows */
 export function isWindows(): boolean {
@@ -36,7 +39,7 @@ export async function isSentinelOnline(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1000);
-    const res = await fetch(`${SENTINEL_URL}/status`, {
+    const res = await fetch(`${getSentinelUrl()}/status`, {
       method: "GET",
       signal: controller.signal,
     });
@@ -53,7 +56,7 @@ export async function isSentinelOnline(): Promise<boolean> {
  */
 export async function getWindowsPrinters(): Promise<string[]> {
   try {
-    const res = await fetch(`${SENTINEL_URL}/printers`);
+    const res = await fetch(`${getSentinelUrl()}/printers`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.printers ?? [];
@@ -77,22 +80,21 @@ export type PrinterArea = "cuentas" | "cocina" | "barra";
  */
 export async function createTransport(
   area: PrinterArea = "cuentas"
-): Promise<WebBluetoothTransport | WindowsSpoolerTransport | DatabaseQueueTransport | ConsoleMockTransport> {
-  // 1. Si Web Bluetooth está conectado activamente por GATT, usar directo Web Bluetooth (Nativo)
+): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
+  const destination = localStorage.getItem("system_print_destination") || "bluetooth";
+
+  if (destination === "windows") {
+    return new WindowsSpoolerTransport(area);
+  }
+
+  // Si se decide bluetooth:
+  // 1. Si Web Bluetooth está conectado por GATT, usar Web Bluetooth
   if (WebBluetoothTransport.isConnected()) {
     return new WebBluetoothTransport(area);
   }
 
-  // 2. En Windows, si el centinela local está activo, imprimir directo por Windows Spooler
-  if (isWindows()) {
-    const online = await isSentinelOnline();
-    if (online) {
-      return new WindowsSpoolerTransport(area);
-    }
-  }
-
-  // 3. Fallback general: registrar en la base de datos central para impresión remota por el centinela
-  return new DatabaseQueueTransport(area);
+  // 2. Si no, usar RawBtTransport
+  return new RawBtTransport(area);
 }
 
 // ─── Transports ───────────────────────────────────────────────────────────────
@@ -191,7 +193,7 @@ export class WindowsSpoolerTransport {
       raw_data: prn,
     };
 
-    fetch(`${SENTINEL_URL}/print`, {
+    fetch(`${getSentinelUrl()}/print`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -350,33 +352,37 @@ export class WebBluetoothTransport {
 // ─── Generador de Páginas de Prueba ──────────────────────────────────────────
 
 export function sendTestReceipt(logicalKey: string, customName: string) {
-  const mode = localStorage.getItem("bluetooth_transport_mode") || "webbluetooth";
+  const destination = localStorage.getItem("system_print_destination") || "bluetooth";
   const driver = new EscPosDriver();
 
-  if (WebBluetoothTransport.isConnected() || mode === "webbluetooth") {
-    const transport = new WebBluetoothTransport(customName);
-    const job = new PosPrinterJob(driver, transport as any);
-    buildTestJob(job, logicalKey, customName, "Web Bluetooth Directo (Nativo)").execute();
-    return {
-      success: true,
-      message: `Página de prueba enviada a '${customName}' vía Web Bluetooth Directo (Nativo).`,
-    };
-  } else if (mode === "sentinel") {
+  if (destination === "windows") {
     const transport = new WindowsSpoolerTransport(logicalKey);
     const job = new PosPrinterJob(driver, transport);
-    buildTestJob(job, logicalKey, customName, "Sentinel de Windows").execute();
+    const port = localStorage.getItem("windows_printer_port") || "3010";
+    buildTestJob(job, logicalKey, customName, `Puerto de Windows (Puerto ${port})`).execute();
     return {
       success: true,
-      message: `Página de prueba enviada a '${customName}' vía Sentinel de Windows.`,
+      message: `Página de prueba enviada a '${customName}' vía Puerto de Windows ${port}.`,
     };
   } else {
-    const transport = new DatabaseQueueTransport(logicalKey);
-    const job = new PosPrinterJob(driver, transport as any);
-    buildTestJob(job, logicalKey, customName, "Cola Central SQLite").execute();
-    return {
-      success: true,
-      message: `Ticket de prueba para '${customName}' encolado en servidor central.`,
-    };
+    // Bluetooth
+    if (WebBluetoothTransport.isConnected()) {
+      const transport = new WebBluetoothTransport(customName);
+      const job = new PosPrinterJob(driver, transport as any);
+      buildTestJob(job, logicalKey, customName, "Web Bluetooth Directo (Nativo)").execute();
+      return {
+        success: true,
+        message: `Página de prueba enviada a '${customName}' vía Web Bluetooth Directo (Nativo).`,
+      };
+    } else {
+      const transport = new RawBtTransport(logicalKey, true); // Force RawBT
+      const job = new PosPrinterJob(driver, transport as any);
+      buildTestJob(job, logicalKey, customName, "App RawBT (Bluetooth)").execute();
+      return {
+        success: true,
+        message: `Página de prueba enviada a '${customName}' vía App RawBT.`,
+      };
+    }
   }
 }
 
