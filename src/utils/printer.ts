@@ -88,8 +88,8 @@ export async function createTransport(
   }
 
   // Si se decide bluetooth:
-  // 1. Si Web Bluetooth está conectado por GATT, usar Web Bluetooth
-  if (WebBluetoothTransport.isConnected()) {
+  // 1. Si Web Bluetooth está conectado por GATT para esta área, usar Web Bluetooth
+  if (WebBluetoothTransport.isConnected(area)) {
     return new WebBluetoothTransport(area);
   }
 
@@ -229,9 +229,7 @@ export class ConsoleMockTransport {
  * Transporte para comunicación directa con impresoras térmicas vía Web Bluetooth API (GATT)
  */
 export class WebBluetoothTransport {
-  static activeDevice: any = null;
-  static gattServer: any = null;
-  static writeCharacteristic: any = null;
+  static activeConnections: Record<string, { device: any; server: any; writeCharacteristic: any }> = {};
   printerName?: string;
 
   constructor(printerName?: string) {
@@ -242,11 +240,17 @@ export class WebBluetoothTransport {
     return typeof navigator !== "undefined" && "bluetooth" in navigator;
   }
 
-  static isConnected(): boolean {
-    return !!(WebBluetoothTransport.activeDevice && WebBluetoothTransport.gattServer?.connected && WebBluetoothTransport.writeCharacteristic);
+  static isConnected(area?: string): boolean {
+    if (!area) {
+      return Object.values(WebBluetoothTransport.activeConnections).some(
+        c => c.device && c.server?.connected && c.writeCharacteristic
+      );
+    }
+    const conn = WebBluetoothTransport.activeConnections[area];
+    return !!(conn && conn.device && conn.server?.connected && conn.writeCharacteristic);
   }
 
-  static async scanAndConnect(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
+  static async scanAndConnect(area: string = "cuentas"): Promise<{ success: boolean; deviceName?: string; error?: string }> {
     if (!WebBluetoothTransport.isSupported()) {
       return { success: false, error: "Web Bluetooth API no está soportado en este navegador. Usa Chrome o Edge." };
     }
@@ -287,9 +291,11 @@ export class WebBluetoothTransport {
         return { success: false, error: `Se conectó con '${device.name || device.id}', pero no se encontró un servicio de escritura compatible.` };
       }
 
-      WebBluetoothTransport.activeDevice = device;
-      WebBluetoothTransport.gattServer = server;
-      WebBluetoothTransport.writeCharacteristic = charFound;
+      WebBluetoothTransport.activeConnections[area] = {
+        device,
+        server,
+        writeCharacteristic: charFound
+      };
 
       return { success: true, deviceName: device.name || device.id };
     } catch (err: any) {
@@ -301,21 +307,32 @@ export class WebBluetoothTransport {
     }
   }
 
-  static async disconnect(): Promise<void> {
-    if (WebBluetoothTransport.gattServer && WebBluetoothTransport.gattServer.connected) {
-      WebBluetoothTransport.gattServer.disconnect();
+  static async disconnect(area?: string): Promise<void> {
+    if (!area) {
+      for (const key of Object.keys(WebBluetoothTransport.activeConnections)) {
+        await WebBluetoothTransport.disconnect(key);
+      }
+      return;
     }
-    WebBluetoothTransport.activeDevice = null;
-    WebBluetoothTransport.gattServer = null;
-    WebBluetoothTransport.writeCharacteristic = null;
+    const conn = WebBluetoothTransport.activeConnections[area];
+    if (conn) {
+      if (conn.server && conn.server.connected) {
+        conn.server.disconnect();
+      }
+      delete WebBluetoothTransport.activeConnections[area];
+    }
   }
 
   async send(prn: string) {
-    if (!WebBluetoothTransport.isConnected()) {
-      console.warn("Web Bluetooth no está conectado activamente por GATT. Encolando para impresión en servidor...");
-      new DatabaseQueueTransport(this.printerName || "cuentas").send(prn);
+    const area = this.printerName || "cuentas";
+    if (!WebBluetoothTransport.isConnected(area)) {
+      console.warn(`Web Bluetooth no está conectado activamente por GATT para el área: ${area}. Encolando para impresión en servidor...`);
+      new DatabaseQueueTransport(area).send(prn);
       return;
     }
+
+    const conn = WebBluetoothTransport.activeConnections[area];
+    if (!conn) return;
 
     try {
       // Convertir raw string URL percent-encoded a Uint8Array
@@ -336,15 +353,15 @@ export class WebBluetoothTransport {
       const chunkSize = 100;
       for (let offset = 0; offset < buffer.length; offset += chunkSize) {
         const chunk = buffer.slice(offset, offset + chunkSize);
-        if (WebBluetoothTransport.writeCharacteristic.properties.writeWithoutResponse) {
-          await WebBluetoothTransport.writeCharacteristic.writeValueWithoutResponse(chunk);
+        if (conn.writeCharacteristic.properties.writeWithoutResponse) {
+          await conn.writeCharacteristic.writeValueWithoutResponse(chunk);
         } else {
-          await WebBluetoothTransport.writeCharacteristic.writeValueWithResponse(chunk);
+          await conn.writeCharacteristic.writeValueWithResponse(chunk);
         }
       }
     } catch (err) {
       console.error("Error al enviar datos por Web Bluetooth:", err);
-      new DatabaseQueueTransport(this.printerName || "cuentas").send(prn);
+      new DatabaseQueueTransport(area).send(prn);
     }
   }
 }
@@ -366,8 +383,8 @@ export function sendTestReceipt(logicalKey: string, customName: string) {
     };
   } else {
     // Bluetooth
-    if (WebBluetoothTransport.isConnected()) {
-      const transport = new WebBluetoothTransport(customName);
+    if (WebBluetoothTransport.isConnected(logicalKey)) {
+      const transport = new WebBluetoothTransport(logicalKey);
       const job = new PosPrinterJob(driver, transport as any);
       buildTestJob(job, logicalKey, customName, "Web Bluetooth Directo (Nativo)").execute();
       return {

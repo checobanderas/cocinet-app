@@ -3013,3 +3013,44 @@ export async function restoreTenantBackupSnapshot(
 
   return writeCount;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 👑 CUSTOM OWNERS & PINS SYNCHRONIZATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function subscribeToCustomOwnersFromFirebase(
+  callback: (data: { owners: any[]; pins: Record<string, string> } | null) => void
+) {
+  const ref = doc(db, "settings", "customOwners_global");
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        callback({
+          owners: data?.owners ?? [],
+          pins: data?.pins ?? {}
+        });
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, "settings/customOwners_global");
+    }
+  );
+}
+
+export async function saveCustomOwnersToFirebase(
+  owners: any[],
+  pins: Record<string, string>
+) {
+  const ref = doc(db, "settings", "customOwners_global");
+  await runWrite(
+    setDoc(ref, {
+      owners,
+      pins,
+      updatedAt: getMexicoISOString()
+    })
+  );
+}

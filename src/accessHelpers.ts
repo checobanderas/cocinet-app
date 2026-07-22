@@ -14,6 +14,25 @@ export function getMatchedOwnerKey(ownerParam: string | null | undefined): strin
   if (cleanParam.includes("levi") || cleanParam === "8") return "8";
   if (cleanParam.includes("tlacolula") || cleanParam === "9") return "9";
   if (cleanParam.includes("huayapam") || cleanParam === "10") return "10";
+
+  // Check dynamic custom owners from cached list
+  try {
+    const cached = localStorage.getItem("cocinet_custom_owners_v3");
+    if (cached) {
+      const customOwners = JSON.parse(cached);
+      if (Array.isArray(customOwners)) {
+        const found = customOwners.find(o => 
+          o.key === cleanParam || 
+          o.name?.toLowerCase().includes(cleanParam) || 
+          cleanParam.includes(o.name?.toLowerCase())
+        );
+        if (found) return found.key;
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
   return null;
 }
 
