@@ -95,33 +95,114 @@ export async function getWindowsPrinters(): Promise<string[]> {
 // ─── Factory de transporte ────────────────────────────────────────────────────
 
 export type PrinterArea = "cuentas" | "cocina" | "barra";
+export type PrinterMode = "windows" | "bluetooth" | "rawbt" | "disabled";
+
+export interface AreaPrinterSetting {
+  mode: PrinterMode;
+  printerName: string;
+  windowsPort: string;
+}
+
+export interface TenantPrinterSettings {
+  cuentas: AreaPrinterSetting;
+  cocina: AreaPrinterSetting;
+  barra: AreaPrinterSetting;
+}
+
+export function getDefaultTenantPrinterSettings(): TenantPrinterSettings {
+  return {
+    cuentas: { mode: "windows", printerName: "cuentas", windowsPort: "3010" },
+    cocina: { mode: "windows", printerName: "cocina", windowsPort: "3010" },
+    barra: { mode: "bluetooth", printerName: "barra", windowsPort: "3010" },
+  };
+}
+
+export function getTenantPrinterSettings(tenantId?: string): TenantPrinterSettings {
+  const tId = tenantId || getActiveTenantId();
+  try {
+    const raw = localStorage.getItem(`tenant_printer_config_${tId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.cuentas && parsed.cocina && parsed.barra) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+
+  const globalDest = getTenantPrintDestination();
+  const defaultPort = getTenantPrinterPort();
+
+  const bCuentas = localStorage.getItem(`bluetooth_printer_cuentas_${tId}`) || localStorage.getItem("bluetooth_printer_cuentas") || "cuentas";
+  const bCocina = localStorage.getItem(`bluetooth_printer_cocina_${tId}`) || localStorage.getItem("bluetooth_printer_cocina") || "cocina";
+  const bBarra = localStorage.getItem(`bluetooth_printer_barra_${tId}`) || localStorage.getItem("bluetooth_printer_barra") || "barra";
+
+  return {
+    cuentas: {
+      mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
+      printerName: bCuentas,
+      windowsPort: defaultPort,
+    },
+    cocina: {
+      mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
+      printerName: bCocina,
+      windowsPort: defaultPort,
+    },
+    barra: {
+      mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
+      printerName: bBarra,
+      windowsPort: defaultPort,
+    },
+  };
+}
+
+export function saveTenantPrinterSettingsToLocal(tenantId: string, settings: TenantPrinterSettings): void {
+  try {
+    localStorage.setItem(`tenant_printer_config_${tenantId}`, JSON.stringify(settings));
+    localStorage.setItem(`bluetooth_printer_cuentas_${tenantId}`, settings.cuentas?.printerName || "cuentas");
+    localStorage.setItem(`bluetooth_printer_cocina_${tenantId}`, settings.cocina?.printerName || "cocina");
+    localStorage.setItem(`bluetooth_printer_barra_${tenantId}`, settings.barra?.printerName || "barra");
+    if (settings.cuentas?.windowsPort) {
+      localStorage.setItem(`windows_printer_port_${tenantId}`, settings.cuentas.windowsPort);
+    }
+  } catch (e) {
+    console.error("Error saving tenant printer settings to localStorage:", e);
+  }
+}
 
 /**
- * Crea el transporte correcto según la plataforma:
- *   - Android con RawBT habilitado   → RawBtTransport
- *   - Android con RawBT deshabilitado → DatabaseQueueTransport (cola central)
- *   - Windows con sentinel activo     → WindowsSpoolerTransport
- *   - Fallback (o sentinel offline)   → DatabaseQueueTransport (remoto)
+ * Crea el transporte correcto según la configuración del tenant y del área:
+ *   - Windows (Puerto configurado por área) → WindowsSpoolerTransport
+ *   - Bluetooth Nativo (GATT / Web Bluetooth) → WebBluetoothTransport
+ *   - App RawBT (Android Intent)            → RawBtTransport
+ *   - Deshabilitado                         → ConsoleMockTransport
  *
- * @param area  Área de la impresora: "cuentas" | "cocina" | "barra"
+ * @param area      Área de la impresora: "cuentas" | "cocina" | "barra"
+ * @param tenantId  ID del inquilino opcional
  */
 export async function createTransport(
-  area: PrinterArea = "cuentas"
+  area: PrinterArea = "cuentas",
+  tenantId?: string
 ): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
-  const destination = getTenantPrintDestination();
+  const settings = getTenantPrinterSettings(tenantId);
+  const areaConfig = settings[area] || { mode: "windows", printerName: area, windowsPort: "3010" };
 
-  if (destination === "windows") {
-    return new WindowsSpoolerTransport(area);
+  if (areaConfig.mode === "disabled") {
+    return new ConsoleMockTransport(area);
   }
 
-  // Si se decide bluetooth:
-  // 1. Si Web Bluetooth está conectado por GATT para esta área, usar Web Bluetooth
+  if (areaConfig.mode === "windows") {
+    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area);
+  }
+
+  if (areaConfig.mode === "rawbt") {
+    return new RawBtTransport(areaConfig.printerName || area, true);
+  }
+
   if (WebBluetoothTransport.isConnected(area)) {
     return new WebBluetoothTransport(area);
   }
 
-  // 2. Si no, usar RawBtTransport
-  return new RawBtTransport(area);
+  return new RawBtTransport(areaConfig.printerName || area);
 }
 
 // ─── Transports ───────────────────────────────────────────────────────────────
@@ -170,13 +251,9 @@ export class RawBtTransport {
   }
 
   send(prn: string) {
-    // Determinar la clave lógica original (por defecto 'cuentas')
     const logicalKey = this.printerName || "cuentas";
-    
-    // Mapear la clave lógica a la impresora bluetooth configurada
     const mappedPrinter = localStorage.getItem(`bluetooth_printer_${logicalKey}`) || logicalKey;
 
-    // Comprobar si "Usar RAWBT" está explícitamente habilitado en localStorage o si se fuerza
     const useRawBt = this.forceRawBt || localStorage.getItem("system_use_rawbt") === "true";
     if (!useRawBt) {
       console.log(`🔌 [RawBtTransport] Redirigiendo impresión a DatabaseQueueTransport porque RAWBT está deshabilitado por default.`);
@@ -196,31 +273,35 @@ export class RawBtTransport {
 
 /**
  * Envía el trabajo al servidor Python local (sentinel_printer.py)
- * vía HTTP POST en localhost:3010
+ * vía HTTP POST en el puerto configurado (ej: 3010)
  */
 export class WindowsSpoolerTransport {
   printerKey: string;
+  customPort?: string;
+  customPrinterName?: string;
 
-  /** Mapa de áreas lógicas a claves que reconoce el sentinel */
   private static KEY_MAP: Record<string, string> = {
     cuentas: "cuentas",
     cocina:  "cocina",
     barra:   "barra",
   };
 
-  constructor(printerKey: string = "cuentas") {
+  constructor(printerKey: string = "cuentas", customPort?: string, customPrinterName?: string) {
     this.printerKey = printerKey;
+    this.customPort = customPort;
+    this.customPrinterName = customPrinterName;
   }
 
   send(prn: string) {
-    const key = WindowsSpoolerTransport.KEY_MAP[this.printerKey.toLowerCase()] ?? this.printerKey;
+    const key = this.customPrinterName || (WindowsSpoolerTransport.KEY_MAP[this.printerKey.toLowerCase()] ?? this.printerKey);
+    const port = this.customPort || getTenantPrinterPort();
 
     const payload = {
       printer: key,
       raw_data: prn,
     };
 
-    fetch(`${getSentinelUrl()}/print`, {
+    fetch(`http://localhost:${port}/print`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -395,36 +476,52 @@ export class WebBluetoothTransport {
 
 // ─── Generador de Páginas de Prueba ──────────────────────────────────────────
 
-export function sendTestReceipt(logicalKey: string, customName: string) {
-  const destination = getTenantPrintDestination();
+export function sendTestReceipt(logicalKey: string, customName: string, tenantId?: string) {
+  const area = (logicalKey.toLowerCase() as PrinterArea) || "cuentas";
+  const settings = getTenantPrinterSettings(tenantId);
+  const areaConfig = settings[area] || { mode: "windows", printerName: customName || area, windowsPort: "3010" };
   const driver = new EscPosDriver();
+  const targetPrinterName = areaConfig.printerName || customName || area;
 
-  if (destination === "windows") {
-    const transport = new WindowsSpoolerTransport(logicalKey);
-    const job = new PosPrinterJob(driver, transport);
-    const port = getTenantPrinterPort();
-    buildTestJob(job, logicalKey, customName, `Puerto de Windows (Puerto ${port})`).execute();
+  if (areaConfig.mode === "windows") {
+    const port = areaConfig.windowsPort || "3010";
+    const transport = new WindowsSpoolerTransport(area, port, targetPrinterName);
+    const job = new PosPrinterJob(driver, transport as any);
+    buildTestJob(job, area, targetPrinterName, `Puerto de Windows (Puerto ${port})`).execute();
     return {
       success: true,
-      message: `Página de prueba enviada a '${customName}' vía Puerto de Windows ${port}.`,
+      message: `Página de prueba enviada a '${targetPrinterName}' vía Puerto de Windows ${port}.`,
+    };
+  } else if (areaConfig.mode === "rawbt") {
+    const transport = new RawBtTransport(targetPrinterName, true);
+    const job = new PosPrinterJob(driver, transport as any);
+    buildTestJob(job, area, targetPrinterName, "App RawBT (Bluetooth)").execute();
+    return {
+      success: true,
+      message: `Página de prueba enviada a '${targetPrinterName}' vía App RawBT.`,
+    };
+  } else if (areaConfig.mode === "disabled") {
+    return {
+      success: false,
+      message: `Impresora deshabilitada para el área '${area}'.`,
     };
   } else {
-    // Bluetooth
-    if (WebBluetoothTransport.isConnected(logicalKey)) {
-      const transport = new WebBluetoothTransport(logicalKey);
+    // Bluetooth / GATT
+    if (WebBluetoothTransport.isConnected(area)) {
+      const transport = new WebBluetoothTransport(area);
       const job = new PosPrinterJob(driver, transport as any);
-      buildTestJob(job, logicalKey, customName, "Web Bluetooth Directo (Nativo)").execute();
+      buildTestJob(job, area, targetPrinterName, "Web Bluetooth Directo (Nativo)").execute();
       return {
         success: true,
-        message: `Página de prueba enviada a '${customName}' vía Web Bluetooth Directo (Nativo).`,
+        message: `Página de prueba enviada a '${targetPrinterName}' vía Web Bluetooth Directo (Nativo).`,
       };
     } else {
-      const transport = new RawBtTransport(logicalKey, true); // Force RawBT
+      const transport = new RawBtTransport(targetPrinterName, true);
       const job = new PosPrinterJob(driver, transport as any);
-      buildTestJob(job, logicalKey, customName, "App RawBT (Bluetooth)").execute();
+      buildTestJob(job, area, targetPrinterName, "App RawBT (Bluetooth)").execute();
       return {
         success: true,
-        message: `Página de prueba enviada a '${customName}' vía App RawBT.`,
+        message: `Página de prueba enviada a '${targetPrinterName}' vía App RawBT.`,
       };
     }
   }

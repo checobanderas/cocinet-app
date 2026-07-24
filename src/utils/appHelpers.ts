@@ -175,7 +175,9 @@ export const getDefaultUsersList = (): User[] => {
       return;
     }
 
-    const tenantNum = parseInt(tenant.id.replace("tenant-", ""), 10) || 1;
+    let parsedNum = parseInt(tenant.id.replace(/[^0-9]/g, ""), 10);
+    if (isNaN(parsedNum) || parsedNum <= 0) parsedNum = 1;
+    const tenantNum = (parsedNum % 100) || 1;
     const shortName = tenant.name
       .replace("Los Mas Buscados ", "")
       .replace("Los Sombrerudos ", "")
