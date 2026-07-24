@@ -94,37 +94,44 @@ export async function getWindowsPrinters(): Promise<string[]> {
 
 // ─── Factory de transporte ────────────────────────────────────────────────────
 
-export type PrinterArea = "cuentas" | "cocina" | "barra";
+// ─── Factory de transporte ────────────────────────────────────────────────────
+
+export type PrinterArea = "cuentas" | "cocina" | "barra" | string;
 export type PrinterMode = "windows" | "bluetooth" | "rawbt" | "disabled";
 
 export interface AreaPrinterSetting {
+  id: string;
+  name: string;
+  emoji?: string;
   mode: PrinterMode;
   printerName: string;
   windowsPort: string;
+  isCustom?: boolean;
 }
 
-export interface TenantPrinterSettings {
-  cuentas: AreaPrinterSetting;
-  cocina: AreaPrinterSetting;
-  barra: AreaPrinterSetting;
-}
+export type TenantPrinterSettings = Record<string, AreaPrinterSetting>;
 
 export function getDefaultTenantPrinterSettings(): TenantPrinterSettings {
   return {
-    cuentas: { mode: "windows", printerName: "cuentas", windowsPort: "3010" },
-    cocina: { mode: "windows", printerName: "cocina", windowsPort: "3010" },
-    barra: { mode: "bluetooth", printerName: "barra", windowsPort: "3010" },
+    cuentas: { id: "cuentas", name: "Cuentas (Tickets / Recibos)", emoji: "💵", mode: "windows", printerName: "cuentas", windowsPort: "3010" },
+    cocina: { id: "cocina", name: "Cocina (Comandas)", emoji: "🍳", mode: "windows", printerName: "cocina", windowsPort: "3010" },
+    barra: { id: "barra", name: "Barra (Bebidas)", emoji: "🍹", mode: "bluetooth", printerName: "barra", windowsPort: "3010" },
   };
 }
 
 export function getTenantPrinterSettings(tenantId?: string): TenantPrinterSettings {
   const tId = tenantId || getActiveTenantId();
+  const defaults = getDefaultTenantPrinterSettings();
+
   try {
     const raw = localStorage.getItem(`tenant_printer_config_${tId}`);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.cuentas && parsed.cocina && parsed.barra) {
-        return parsed;
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...defaults,
+          ...parsed,
+        };
       }
     }
   } catch (e) {}
@@ -138,16 +145,25 @@ export function getTenantPrinterSettings(tenantId?: string): TenantPrinterSettin
 
   return {
     cuentas: {
+      id: "cuentas",
+      name: "Cuentas (Tickets / Recibos)",
+      emoji: "💵",
       mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
       printerName: bCuentas,
       windowsPort: defaultPort,
     },
     cocina: {
+      id: "cocina",
+      name: "Cocina (Comandas)",
+      emoji: "🍳",
       mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
       printerName: bCocina,
       windowsPort: defaultPort,
     },
     barra: {
+      id: "barra",
+      name: "Barra (Bebidas)",
+      emoji: "🍹",
       mode: globalDest === "bluetooth" ? "bluetooth" : "windows",
       printerName: bBarra,
       windowsPort: defaultPort,
@@ -158,9 +174,15 @@ export function getTenantPrinterSettings(tenantId?: string): TenantPrinterSettin
 export function saveTenantPrinterSettingsToLocal(tenantId: string, settings: TenantPrinterSettings): void {
   try {
     localStorage.setItem(`tenant_printer_config_${tenantId}`, JSON.stringify(settings));
-    localStorage.setItem(`bluetooth_printer_cuentas_${tenantId}`, settings.cuentas?.printerName || "cuentas");
-    localStorage.setItem(`bluetooth_printer_cocina_${tenantId}`, settings.cocina?.printerName || "cocina");
-    localStorage.setItem(`bluetooth_printer_barra_${tenantId}`, settings.barra?.printerName || "barra");
+    if (settings.cuentas?.printerName) {
+      localStorage.setItem(`bluetooth_printer_cuentas_${tenantId}`, settings.cuentas.printerName);
+    }
+    if (settings.cocina?.printerName) {
+      localStorage.setItem(`bluetooth_printer_cocina_${tenantId}`, settings.cocina.printerName);
+    }
+    if (settings.barra?.printerName) {
+      localStorage.setItem(`bluetooth_printer_barra_${tenantId}`, settings.barra.printerName);
+    }
     if (settings.cuentas?.windowsPort) {
       localStorage.setItem(`windows_printer_port_${tenantId}`, settings.cuentas.windowsPort);
     }
@@ -530,6 +552,7 @@ export function sendTestReceipt(logicalKey: string, customName: string, tenantId
 function buildTestJob(job: PosPrinterJob, logicalKey: string, customName: string, modeName: string): PosPrinterJob {
   return job
     .initialize()
+    .beep(4)
     .center()
     .bold(true)
     .printLine("================================")
@@ -607,6 +630,19 @@ export class EscPosDriver {
   initialize() {
     return this.encodeByte(27) + "@";
   }
+
+  beep(times: number = 4) {
+    let s = "";
+    // BEL character (ASCII 7)
+    for (let i = 0; i < times; i++) {
+      s += this.encodeByte(7);
+    }
+    // ESC B n t (ESC 66 count duration)
+    s += this.encodeByte(27) + "B" + this.encodeByte(times) + this.encodeByte(2);
+    // ESC ( A tone/sound command
+    s += this.encodeByte(27) + this.encodeByte(40) + "A" + this.encodeByte(4) + this.encodeByte(0) + "04" + this.encodeByte(1) + this.encodeByte(1);
+    return s;
+  }
 }
 
 // ─── Job de impresión ─────────────────────────────────────────────────────────
@@ -649,6 +685,11 @@ export class PosPrinterJob {
     this.driver = driver;
     this.transport = transport;
     this.buffer = [];
+  }
+
+  beep(times: number = 4) {
+    this.buffer.push(this.driver.beep(times));
+    return this;
   }
 
   execute() {

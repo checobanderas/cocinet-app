@@ -3,8 +3,23 @@ import { getMatchedOwnerKey } from "../accessHelpers";
 
 export type TableStatus = "available" | "occupied" | "reserved" | "payment_pending";
 export type TableShape = "local" | "takeout" | "delivery";
-export type Destination = "kitchen" | "bar";
+export type Destination = "kitchen" | "bar" | string;
 export type UserRole = "mesero" | "cajero" | "admin";
+
+export interface ProductCategorySetting {
+  id: string;
+  name: string;
+  emoji: string;
+  destination: string;
+}
+
+export function getDefaultProductCategories(): ProductCategorySetting[] {
+  return [
+    { id: "food", name: "Alimentos", emoji: "🌮", destination: "kitchen" },
+    { id: "drinks", name: "Bebidas", emoji: "🥤", destination: "bar" },
+    { id: "desserts", name: "Postres", emoji: "🍰", destination: "kitchen" },
+  ];
+}
 
 export interface User {
   id: string;
@@ -19,7 +34,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
-  category: "food" | "drinks" | "desserts";
+  category: "food" | "drinks" | "desserts" | string;
   subcategory: string;
   subgroup?: string;
   drinkType?: "hot" | "cold";
