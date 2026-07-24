@@ -4056,7 +4056,7 @@ export default function App() {
     const cfgToSave = newConfig || tenantPrinterConfig;
     const catsToSave = newCategories || productCategories;
 
-    // 1. Guardar localmente por tenant
+    // 1. Guardar en almacenamiento local del dispositivo
     saveTenantPrinterSettingsToLocal(targetId, cfgToSave);
     setTenantPrinterConfig(cfgToSave);
     try {
@@ -4064,20 +4064,27 @@ export default function App() {
       setProductCategories(catsToSave);
     } catch (e) {}
 
-    // 2. Persistir en Firestore
+    // 2. Persistir en Firestore (en settings/companyConfig y en tenants/{id})
     try {
-      const currentCompanyConfig = await getCompanyConfig(targetId) || {};
       await saveCompanyConfigInFirebase(targetId, {
-        ...currentCompanyConfig,
         printerConfig: cfgToSave,
         productCategories: catsToSave,
       });
+
+      if (targetTenant?.id) {
+        await addTenantToFirebase({
+          ...targetTenant,
+          printerConfig: cfgToSave,
+          productCategories: catsToSave,
+        });
+      }
+
       triggerAppNotification(
         "🖨️ Configuración Guardada",
         `Se guardaron las impresoras y categorías para "${targetTenant?.name || targetId}".`,
         "success"
       );
-    } catch (err) {
+    } catch (err: any) {
       console.warn("No se pudo guardar la config en Firebase, guardado local:", err);
       triggerAppNotification(
         "💾 Guardado Local",
@@ -18834,6 +18841,8 @@ Instrucciones:
                               "¡Gracias por su visita! Vuelva pronto 🌮",
                             geminiApiKey: ticketGeminiApiKey.trim(),
                             useRawBt: systemUseRawBt,
+                            printerConfig: tenantPrinterConfig,
+                            productCategories: productCategories,
                           });
 
                           // Also update selectedTenant in tenants collection with geminiApiKey

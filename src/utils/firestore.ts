@@ -1682,10 +1682,14 @@ export function subscribeToTenants(callback: (data: any[]) => void) {
 export async function addTenantToFirebase(tenantData: any) {
   const ref = doc(db, "tenants", tenantData.id);
   await runWrite(
-    setDoc(ref, cleanUndefined({
-      ...tenantData,
-      updatedAt: getMexicoISOString(),
-    })),
+    setDoc(
+      ref,
+      cleanUndefined({
+        ...tenantData,
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    ),
   );
 }
 
@@ -1722,10 +1726,14 @@ export async function saveCompanyConfigInFirebase(
 ) {
   const docRef = doc(db, "settings", `companyConfig_${tenantId}`);
   await runWrite(
-    setDoc(docRef, {
-      ...config,
-      updatedAt: getMexicoISOString(),
-    }),
+    setDoc(
+      docRef,
+      {
+        ...config,
+        updatedAt: getMexicoISOString(),
+      },
+      { merge: true }
+    ),
   );
 }
 
