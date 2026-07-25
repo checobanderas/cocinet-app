@@ -1571,13 +1571,10 @@ export default function App() {
     };
   }, [selectedTenant?.id]);
 
-  // 📦 Subscribe to full tenant backup snapshots (real-time)
+  // 📦 Subscribe to full tenant backup snapshots (real-time) - Disabled as requested
   useEffect(() => {
     if (!selectedTenant?.id) return;
-    const unsub = subscribeToTenantBackupSnapshots(selectedTenant.id, (snapshots) => {
-      setTenantBackupSnapshots(snapshots);
-    });
-    return () => unsub();
+    setTenantBackupSnapshots([]);
   }, [selectedTenant?.id]);
 
   // Sincronización continua con la base de datos local (SQLite) para el Sentinel de Impresión ⚙️⚡
@@ -14213,24 +14210,7 @@ Instrucciones:
     if (!selectedTable || selectedTable.zone !== "Servicio a Domicilio") return null;
 
     if (!selectedDeliveryClient) {
-      return (
-        <div className="m-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 shadow-xs flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl animate-pulse">⚠️</span>
-            <div>
-              <h3 className="text-xs font-black text-amber-800 uppercase tracking-tight">Sin Cliente Asignado</h3>
-              <p className="text-[10px] text-amber-600 font-bold">Esta mesa de reparto a domicilio requiere registrar un cliente.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowDeliverySetupModal(true)}
-            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition cursor-pointer border-none shadow-xs active:scale-95"
-          >
-            Configurar Cliente 🛵
-          </button>
-        </div>
-      );
+      return null; // Removed upper banner as requested so it does not obstruct ordering
     }
 
     return (
@@ -15297,7 +15277,7 @@ Instrucciones:
 
 
         </IonContent>
-        {totalItems > 0 && (
+        {(totalItems > 0 || selectedTable?.zone === "Servicio a Domicilio") && (
           <IonFooter className="ion-no-border">
             <IonToolbar
               style={{
@@ -15305,32 +15285,67 @@ Instrucciones:
                 "--color": "white",
                 "--border-radius": "20px 20px 0 0",
               }}
-              className="ion-padding-horizontal"
+              className="ion-padding-horizontal py-1"
             >
-              <IonButton
-                expand="block"
-                fill="clear"
-                color="light"
-                onClick={() => {
-                  const firstComensal =
-                    cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
-                  setReviewComensal(firstComensal);
-                  setAppMode("review");
-                }}
-              >
-                <IonIcon icon={cartOutline} slot="start" />
-                <IonLabel
-                  style={{ flex: 1, textAlign: "left", fontWeight: "bold" }}
+              <div className="flex items-center justify-between gap-2 w-full px-1">
+                {/* Left: View Order */}
+                {totalItems > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstComensal =
+                        cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
+                      setReviewComensal(firstComensal);
+                      setAppMode("review");
+                    }}
+                    className="flex items-center gap-1.5 bg-transparent text-white font-black text-xs sm:text-sm border-none cursor-pointer py-1.5 hover:opacity-80 transition uppercase"
+                  >
+                    <IonIcon icon={cartOutline} style={{ fontSize: "1.3rem" }} />
+                    <span>VER PEDIDO ({totalItems})</span>
+                  </button>
+                ) : (
+                  <div className="text-xs text-slate-400 font-bold flex items-center gap-1">
+                    <IonIcon icon={cartOutline} style={{ fontSize: "1.2rem" }} />
+                    <span>Sin productos</span>
+                  </div>
+                )}
+
+                {/* Center: Floating Customer Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowDeliverySetupModal(true)}
+                  className={`px-3.5 py-1.5 text-xs font-black rounded-full flex items-center gap-1.5 border-none shadow-md cursor-pointer transition-all uppercase tracking-wider shrink-0 active:scale-95 ${
+                    selectedDeliveryClient
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                      : "bg-amber-400 hover:bg-amber-500 text-slate-900"
+                  }`}
+                  title="Registrar / Configurar Cliente"
                 >
-                  Ver Pedido ({totalItems})
-                </IonLabel>
-                <IonText
-                  slot="end"
-                  style={{ fontWeight: "black", fontSize: "1.2rem" }}
-                >
-                  ${totalPrice.toFixed(2)}
-                </IonText>
-              </IonButton>
+                  <span>👤</span>
+                  <span className="truncate max-w-[120px] sm:max-w-[180px]">
+                    {selectedDeliveryClient ? selectedDeliveryClient.name.split(" ")[0] : "Registrar Cliente"}
+                  </span>
+                </button>
+
+                {/* Right: Total Price */}
+                {totalItems > 0 ? (
+                  <div
+                    onClick={() => {
+                      const firstComensal =
+                        cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
+                      setReviewComensal(firstComensal);
+                      setAppMode("review");
+                    }}
+                    className="text-emerald-400 font-black text-base sm:text-lg cursor-pointer tracking-tight shrink-0"
+                  >
+                    ${totalPrice.toFixed(2)}
+                  </div>
+                ) : (
+                  <div className="text-slate-500 font-bold text-xs">
+                    $0.00
+                  </div>
+                )}
+              </div>
             </IonToolbar>
           </IonFooter>
         )}
