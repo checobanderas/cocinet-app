@@ -326,18 +326,66 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
 
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
+    const cleanCompany = (companyName || "Cocinet")
+      .replace(/[^a-zA-Z0-9\s_-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    // Helper to style worksheet headers & banners professionally
+    const formatWorksheet = (ws: XLSX.WorkSheet, headerRowIdx: number = 6) => {
+      Object.keys(ws).forEach((key) => {
+        if (key.startsWith("!")) return;
+        const col = key.replace(/[0-9]/g, "");
+        const row = parseInt(key.replace(/[^0-9]/g, ""), 10);
+        const cell = ws[key];
+        if (!cell) return;
+
+        if (!cell.s) cell.s = {};
+
+        // Row 1: Company / Branch Title Banner
+        if (row === 1) {
+          cell.s = {
+            fill: { fgColor: { rgb: "1E3A8A" } },
+            font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "FFFFFF" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+        // Row 2: Subtitle Banner
+        else if (row === 2) {
+          cell.s = {
+            fill: { fgColor: { rgb: "2563EB" } },
+            font: { name: "Calibri", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+        // Row 3 & 4: Date & Time Info
+        else if (row === 3 || row === 4) {
+          cell.s = {
+            fill: { fgColor: { rgb: "F1F5F9" } },
+            font: { name: "Calibri", sz: 10, italic: row === 4, color: { rgb: "334155" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+        // Header Row (Row 6)
+        else if (row === headerRowIdx) {
+          cell.s = {
+            fill: { fgColor: { rgb: "1E293B" } },
+            font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      });
+    };
     
-    // Accounts sheet (Cuentas)
+    // ==================== SHEET 1: CUENTAS ====================
     const accountsAOA: any[][] = [];
-    
-    // Title Blocks (merged columns)
-    accountsAOA.push([companyName.toUpperCase()]);
-    accountsAOA.push(["REPORTE DIARIO DE CUENTAS DETALLADO"]);
-    accountsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-    accountsAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
+    accountsAOA.push([`${companyName.toUpperCase()} - REPORTE DE OPERACIONES`]);
+    accountsAOA.push(["REPORTE DIARIO DE CUENTAS COBRADAS Y DESGLOSE"]);
+    accountsAOA.push([`FECHA DE OPERACIÓN: ${friendlyTitleDate}`]);
+    accountsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
     accountsAOA.push([]); // Empty row
     
-    // Header Row (Row index 5, which is Row 6 in Excel)
+    // Header Row (Row 6)
     accountsAOA.push([
       "CONSECUTIVO",
       "FOLIO",
@@ -351,7 +399,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
 
     const N = dailyHistory.length;
 
-    // Data Rows (Row index 6 to 6 + N - 1)
+    // Data Rows
     dailyHistory.forEach((h, index) => {
       const consecutive = dailyHistory.length - index;
       accountsAOA.push([
@@ -366,34 +414,34 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       ]);
     });
 
-    // Append blank row
+    // Blank row
     accountsAOA.push([]);
 
-    // Append payment breakdown totals
-    accountsAOA.push(["DESGLOSE POR FORMA DE PAGO", "", "", "", "", "", "", ""]);
-    accountsAOA.push(["💵 EFECTIVO", "", "", "", "", "", "", paymentBreakdown.cash]);
-    accountsAOA.push(["💳 TARJETA CRÉDITO/DÉBITO", "", "", "", "", "", "", paymentBreakdown.card]);
-    accountsAOA.push(["📲 TRANSFERENCIA INTERBANCARIA", "", "", "", "", "", "", paymentBreakdown.transfer]);
-    accountsAOA.push(["⚡ COBRO LUPAY", "", "", "", "", "", "", paymentBreakdown.lupay]);
-    accountsAOA.push(["💜 CORTESÍA / EMPLEADOS", "", "", "", "", "", "", paymentBreakdown.cortesia]);
-    accountsAOA.push(["🏷️ DESCUENTOS APLICADOS", "", "", "", "", "", "", paymentBreakdown.discount]);
+    // Payment breakdown (placed in adjacent columns A & B to eliminate 7-column gaps)
+    const desgloseStartRow = accountsAOA.length + 1;
+    accountsAOA.push(["SECTION_HEADER:DESGLOSE POR FORMA DE PAGO", "MONTO RECAUDADO"]);
+    accountsAOA.push(["💵 EFECTIVO", paymentBreakdown.cash]);
+    accountsAOA.push(["💳 TARJETA CRÉDITO / DÉBITO", paymentBreakdown.card]);
+    accountsAOA.push(["📲 TRANSFERENCIA INTERBANCARIA", paymentBreakdown.transfer]);
+    accountsAOA.push(["⚡ COBRO LUPAY", paymentBreakdown.lupay]);
+    accountsAOA.push(["💜 CORTESÍA / EMPLEADOS", paymentBreakdown.cortesia]);
+    accountsAOA.push(["🏷️ DESCUENTOS APLICADOS", paymentBreakdown.discount]);
 
-    // Append blank row
     accountsAOA.push([]);
 
-    // Append grand totals
-    accountsAOA.push(["TOTAL DE CUENTAS COBRADAS", "", "", "", "", "", "", { t: "n", f: `SUM(H7:H${6 + N})` }]);
-    accountsAOA.push(["TOTAL BRUTO DE PRODUCTOS", "", "", "", "", "", "", totalProducts]);
-    accountsAOA.push(["TOTAL DE CANCELACIONES", "", "", "", "", "", "", totalCancellations]);
-    
+    // Summary totals (placed in adjacent columns A & B)
+    const totalsStartRow = accountsAOA.length + 1;
+    accountsAOA.push(["SECTION_HEADER:RESUMEN Y TOTALES GENERALES", "MONTO TOTAL"]);
+    accountsAOA.push(["TOTAL DE CUENTAS COBRADAS", { t: "n", f: `SUM(H7:H${6 + N})` }]);
+    accountsAOA.push(["TOTAL BRUTO DE PRODUCTOS", totalProducts]);
+    accountsAOA.push(["TOTAL DE CANCELACIONES", totalCancellations]);
     if (paymentBreakdown.discount > 0) {
-      accountsAOA.push(["(-) DESCUENTOS APLICADOS", "", "", "", "", "", "", -paymentBreakdown.discount]);
-      accountsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", "", "", "", "", "", { t: "n", f: `H${6 + N + 12}+H${6 + N + 14}` }]);
+      accountsAOA.push(["(-) DESCUENTOS APLICADOS", -paymentBreakdown.discount]);
+      accountsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", { t: "n", f: `B${totalsStartRow + 2}+B${totalsStartRow + 4}` }]);
     }
 
     const wsAccounts = XLSX.utils.aoa_to_sheet(accountsAOA);
 
-    // Merge titles (A1:H1, A2:H2, A3:H3, A4:H4)
     wsAccounts['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
@@ -401,52 +449,55 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       { s: { r: 3, c: 0 }, e: { r: 3, c: 7 } }
     ];
 
-    // Set column widths
-    const colWidthsAccounts = [
-      { wch: 32 }, // Consecutivo / Forma de pago
-      { wch: 15 }, // Folio
+    wsAccounts['!cols'] = [
+      { wch: 35 }, // Consecutivo / Forma de pago
+      { wch: 22 }, // Folio / Monto
       { wch: 35 }, // Comandas
       { wch: 25 }, // Fecha
       { wch: 12 }, // Mesa
-      { wch: 18 }, // Pago
+      { wch: 20 }, // Pago
       { wch: 18 }, // Factura
-      { wch: 18 }  // Total
+      { wch: 20 }  // Total
     ];
-    wsAccounts['!cols'] = colWidthsAccounts;
 
-    // Apply currency format to Column H (index 7) for all data and total rows
     Object.keys(wsAccounts).forEach((key) => {
       if (key.startsWith('!')) return;
       const col = key.replace(/[0-9]/g, '');
       const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-      
-      // Skip title rows
       if (row <= 5) return;
-      
       const cell = wsAccounts[key];
       if (cell && (cell.t === 'n' || cell.f)) {
-        if (col === 'H') {
+        if (col === 'H' || col === 'B') {
           cell.z = '$#,##0.00';
         }
       }
+      // Style Section Headers in column A for desglose/totals
+      if (cell && typeof cell.v === 'string' && cell.v.startsWith('SECTION_HEADER:')) {
+        cell.v = cell.v.replace('SECTION_HEADER:', '');
+        cell.s = {
+          fill: { fgColor: { rgb: "E0E7FF" } },
+          font: { bold: true, color: { rgb: "1E1B4B" } }
+        };
+      }
     });
 
+    formatWorksheet(wsAccounts);
     XLSX.utils.book_append_sheet(wb, wsAccounts, "Cuentas");
 
-    // Products sheet (Productos)
+    // ==================== SHEET 2: PRODUCTOS ====================
     const productsAOA: any[][] = [];
-    productsAOA.push([companyName.toUpperCase()]);
-    productsAOA.push(["REPORTE DIARIO DE PRODUCTOS VENDIDOS"]);
+    productsAOA.push([`${companyName.toUpperCase()} - PRODUCTOS VENDIDOS`]);
+    productsAOA.push(["REPORTE DIARIO DE PRODUCTOS VENDIDOS POR SUBGRUPO"]);
     productsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-    productsAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
+    productsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
     productsAOA.push([]); // Empty row
 
     // Header (Row 6)
-    productsAOA.push(["PRODUCTO / PLATILLO", "CANTIDAD", "TOTAL RECAUDADO"]);
+    productsAOA.push(["PRODUCTO / PLATILLO", "CANTIDAD VENDIDA", "TOTAL RECAUDADO"]);
 
     groupedProducts.forEach(group => {
-      productsAOA.push([]); // Blank row
-      productsAOA.push([`📂 ${group.groupName.toUpperCase()}`, "", ""]); // Group Header
+      productsAOA.push([]);
+      productsAOA.push([`GROUP_HEADER:📂 ${group.groupName.toUpperCase()}`, "", ""]);
       group.items.forEach(p => {
         productsAOA.push([p.name, p.quantity, p.total]);
       });
@@ -454,17 +505,15 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
 
     const L = productsAOA.length;
 
-    productsAOA.push([]); // Row L + 1
-    productsAOA.push(["TOTAL BRUTO DE PRODUCTOS", "", { t: "n", f: `SUM(C7:C${L})` }]); // Row L + 2
+    productsAOA.push([]);
+    productsAOA.push(["TOTAL BRUTO DE PRODUCTOS", { t: "n", f: `SUM(B7:B${L})` }, { t: "n", f: `SUM(C7:C${L})` }]);
     
     if (paymentBreakdown.discount > 0) {
-      productsAOA.push(["(-) DESCUENTOS APLICADOS", "", -paymentBreakdown.discount]); // Row L + 3
-      productsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", { t: "n", f: `C${L + 2}+C${L + 3}` }]); // Row L + 4
+      productsAOA.push(["(-) DESCUENTOS APLICADOS", "", -paymentBreakdown.discount]);
+      productsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", { t: "n", f: `C${L + 2}+C${L + 3}` }]);
     }
 
     const wsProducts = XLSX.utils.aoa_to_sheet(productsAOA);
-
-    // Merge titles (A1:C1, A2:C2, A3:C3, A4:C4)
     wsProducts['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
@@ -472,22 +521,17 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } }
     ];
 
-    const colWidthsProducts = [
+    wsProducts['!cols'] = [
       { wch: 50 }, // Producto
-      { wch: 15 }, // Cantidad
-      { wch: 18 }  // Total
+      { wch: 20 }, // Cantidad
+      { wch: 20 }  // Total
     ];
-    wsProducts['!cols'] = colWidthsProducts;
 
-    // Apply currency format to Column C (index 2) and quantity format to Column B (index 1)
     Object.keys(wsProducts).forEach((key) => {
       if (key.startsWith('!')) return;
       const col = key.replace(/[0-9]/g, '');
       const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-      
-      // Skip title rows
       if (row <= 5) return;
-      
       const cell = wsProducts[key];
       if (cell) {
         if (cell.t === 'n' || cell.f) {
@@ -497,20 +541,27 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
             cell.z = '#,##0.0';
           }
         }
+        if (typeof cell.v === 'string' && cell.v.startsWith('GROUP_HEADER:')) {
+          cell.v = cell.v.replace('GROUP_HEADER:', '');
+          cell.s = {
+            fill: { fgColor: { rgb: "E0E7FF" } },
+            font: { bold: true, color: { rgb: "1E1B4B" } }
+          };
+        }
       }
     });
 
+    formatWorksheet(wsProducts);
     XLSX.utils.book_append_sheet(wb, wsProducts, "Productos");
 
-    // Sheet 3: Cancelaciones
+    // ==================== SHEET 3: CANCELACIONES ====================
     const cancellationsAOA: any[][] = [];
-    cancellationsAOA.push([companyName.toUpperCase()]);
-    cancellationsAOA.push(["REPORTE DIARIO DE CANCELACIONES"]);
+    cancellationsAOA.push([`${companyName.toUpperCase()} - CANCELACIONES`]);
+    cancellationsAOA.push(["REPORTE DIARIO DE CANCELACIONES Y ANULACIONES"]);
     cancellationsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-    cancellationsAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
-    cancellationsAOA.push([]); // Empty row
+    cancellationsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
+    cancellationsAOA.push([]);
 
-    // Header Row (Row 6)
     cancellationsAOA.push([
       "CONSECUTIVO",
       "FOLIO",
@@ -583,42 +634,59 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       }
     });
 
+    formatWorksheet(wsCancellations);
     XLSX.utils.book_append_sheet(wb, wsCancellations, "Cancelaciones");
 
-    // Sheet 4: Productos de Lista (Full Catalog)
+    // ==================== SHEET 4: PRODUCTOS DE LISTA (CATÁLOGO CON COLORES VENDIDO/NO VENDIDO) ====================
     const catalogAOA: any[][] = [];
-    catalogAOA.push([companyName.toUpperCase()]);
-    catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS DEL CATÁLOGO"]);
+    catalogAOA.push([`${companyName.toUpperCase()} - CATÁLOGO GENERAL DE PRODUCTOS`]);
+    catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS Y ESTADO DE VENTAS DEL DÍA"]);
     catalogAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-    catalogAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
+    catalogAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
     catalogAOA.push([]); // Empty row
 
     // Header Row (Row 6)
-    catalogAOA.push(["PRODUCTO / PLATILLO", "PRECIO LISTA", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
+    catalogAOA.push(["PRODUCTO / PLATILLO", "PRECIO LISTA", "ESTADO EN VENTAS", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
+
+    // Track rows that represent sold products vs unsold products for cell background color fill
+    const soldRowIndices: Set<number> = new Set();
+    const unsoldRowIndices: Set<number> = new Set();
+    const groupHeaderRowIndices: Set<number> = new Set();
 
     groupedFullCatalog.forEach(group => {
-      catalogAOA.push([]); // Blank row
-      catalogAOA.push([`📂 ${group.groupName.toUpperCase()}`, "", "", ""]); // Group Header
+      catalogAOA.push([]);
+      const groupRowIdx = catalogAOA.length;
+      groupHeaderRowIndices.add(groupRowIdx);
+      catalogAOA.push([`GROUP_HEADER:📂 ${group.groupName.toUpperCase()}`, "", "", "", ""]);
+      
       group.items.forEach(p => {
-        catalogAOA.push([p.name, p.price, p.quantitySold, p.totalSold]);
+        const itemRowIdx = catalogAOA.length + 1; // 1-indexed Excel row
+        if (p.quantitySold > 0) {
+          soldRowIndices.add(itemRowIdx);
+          catalogAOA.push([p.name, p.price, `🟢 SÍ VENDIDO (${p.quantitySold})`, p.quantitySold, p.totalSold]);
+        } else {
+          unsoldRowIndices.add(itemRowIdx);
+          catalogAOA.push([p.name, p.price, "⚪ SIN VENTAS (0)", 0, 0]);
+        }
       });
     });
 
     const M = catalogAOA.length;
 
-    catalogAOA.push([]); // Empty row
-    catalogAOA.push(["TOTAL VENDIDO DE CATÁLOGO", "", { t: "n", f: `SUM(C7:C${M})` }, { t: "n", f: `SUM(D7:D${M})` }]);
+    catalogAOA.push([]);
+    catalogAOA.push(["TOTAL GENERAL DEL CATÁLOGO", "", "", { t: "n", f: `SUM(D7:D${M})` }, { t: "n", f: `SUM(E7:E${M})` }]);
 
     const wsCatalog = XLSX.utils.aoa_to_sheet(catalogAOA);
     wsCatalog['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } }
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } }
     ];
     wsCatalog['!cols'] = [
-      { wch: 50 }, // Producto
+      { wch: 45 }, // Producto
       { wch: 16 }, // Precio Lista
+      { wch: 22 }, // Estado en Ventas
       { wch: 18 }, // Cant Vendida
       { wch: 20 }  // Total Recaudado
     ];
@@ -629,18 +697,47 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
       if (row <= 5) return;
       const cell = wsCatalog[key];
-      if (cell && (cell.t === 'n' || cell.f)) {
-        if (col === 'B' || col === 'D') {
+      if (!cell) return;
+
+      if (!cell.s) cell.s = {};
+
+      if (cell.t === 'n' || cell.f) {
+        if (col === 'B' || col === 'E') {
           cell.z = '$#,##0.00';
-        } else if (col === 'C') {
+        } else if (col === 'D') {
           cell.z = '#,##0.0';
         }
       }
+
+      // Format Group Headers
+      if (typeof cell.v === 'string' && cell.v.startsWith('GROUP_HEADER:')) {
+        cell.v = cell.v.replace('GROUP_HEADER:', '');
+        cell.s = {
+          fill: { fgColor: { rgb: "E0E7FF" } },
+          font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1E1B4B" } }
+        };
+      }
+      // Format Sold Rows (Soft Light Green Fill)
+      else if (soldRowIndices.has(row)) {
+        cell.s = {
+          fill: { fgColor: { rgb: "D1FAE5" } }, // Emerald light green background
+          font: { name: "Calibri", sz: 10, color: { rgb: "065F46" }, bold: col === 'A' || col === 'C' }
+        };
+      }
+      // Format Unsold Rows (Soft Light Gray Fill)
+      else if (unsoldRowIndices.has(row)) {
+        cell.s = {
+          fill: { fgColor: { rgb: "F3F4F6" } }, // Neutral light gray background
+          font: { name: "Calibri", sz: 10, color: { rgb: "6B7280" } }
+        };
+      }
     });
 
+    formatWorksheet(wsCatalog);
     XLSX.utils.book_append_sheet(wb, wsCatalog, "Productos de Lista");
 
-    XLSX.writeFile(wb, `ReporteDiario_${todayOperatingDay}.xlsx`);
+    const exportFilename = `ReporteDiario_${cleanCompany}_${todayOperatingDay}.xlsx`;
+    XLSX.writeFile(wb, exportFilename);
   };
 
   const sendToWhatsApp = () => {
