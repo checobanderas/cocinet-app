@@ -3665,7 +3665,22 @@ export default function App() {
           job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
           if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
           if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
-          if (pedido.deliveryAddress) job.printLine(`DIR: ${pedido.deliveryAddress.toUpperCase()}`);
+          
+          if (pedido.deliveryAddress) {
+            let cleanAddr = pedido.deliveryAddress;
+            let refText = "";
+            if (pedido.deliveryAddress.includes("(Ref:")) {
+              const parts = pedido.deliveryAddress.split("(Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].replace(")", "").trim();
+            } else if (pedido.deliveryAddress.includes("| Ref:")) {
+              const parts = pedido.deliveryAddress.split("| Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].trim();
+            }
+            job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
+            if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
+          }
           if (pedido.deliveryNotes) job.printLine(`NOTAS: ${pedido.deliveryNotes.toUpperCase()}`);
         }
         
@@ -3786,6 +3801,9 @@ export default function App() {
   const [newDeliveryClientName, setNewDeliveryClientName] = useState("");
   const [newDeliveryClientPhone, setNewDeliveryClientPhone] = useState("");
   const [newDeliveryClientAddress, setNewDeliveryClientAddress] = useState("");
+  const [newDeliveryClientAddressRef, setNewDeliveryClientAddressRef] = useState("");
+  const [onTheFlyAddressInput, setOnTheFlyAddressInput] = useState("");
+  const [onTheFlyAddressRefInput, setOnTheFlyAddressRefInput] = useState("");
   const [selectedDeliveryClient, setSelectedDeliveryClient] = useState<any | null>(null);
   const [selectedDeliveryAddress, setSelectedDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
@@ -3793,8 +3811,19 @@ export default function App() {
 
   const handleSelectDeliveryClient = (client: any) => {
     setSelectedDeliveryClient(client);
-    setSelectedDeliveryAddress(client.addresses?.[0] || "");
+    const firstAddr = client.addresses?.[0] || "";
+    setSelectedDeliveryAddress(firstAddr);
     setDeliverySearchQuery("");
+
+    if (firstAddr.includes("(Ref:")) {
+      const parts = firstAddr.split("(Ref:");
+      const ref = parts[1].replace(")", "").trim();
+      if (ref) setDeliveryNotes(ref);
+    } else if (firstAddr.includes("| Ref:")) {
+      const parts = firstAddr.split("| Ref:");
+      const ref = parts[1].trim();
+      if (ref) setDeliveryNotes(ref);
+    }
   };
 
   const handleRegisterAndSelectDeliveryClient = async () => {
@@ -3804,7 +3833,12 @@ export default function App() {
     }
 
     try {
-      const initialAddresses = newDeliveryClientAddress.trim() ? [newDeliveryClientAddress.trim()] : [];
+      let finalAddr = newDeliveryClientAddress.trim();
+      if (finalAddr && newDeliveryClientAddressRef.trim()) {
+        finalAddr = `${finalAddr} (Ref: ${newDeliveryClientAddressRef.trim()})`;
+      }
+
+      const initialAddresses = finalAddr ? [finalAddr] : [];
       const newCust = {
         name: newDeliveryClientName.trim(),
         phone: newDeliveryClientPhone.trim(),
@@ -3818,11 +3852,15 @@ export default function App() {
       const fullCust = { ...newCust, id: newId, uid: newId };
       
       setSelectedDeliveryClient(fullCust);
-      setSelectedDeliveryAddress(initialAddresses[0] || "");
+      setSelectedDeliveryAddress(finalAddr);
+      if (newDeliveryClientAddressRef.trim()) {
+        setDeliveryNotes(newDeliveryClientAddressRef.trim());
+      }
       setIsRegisteringDeliveryClient(false);
       setNewDeliveryClientName("");
       setNewDeliveryClientPhone("");
       setNewDeliveryClientAddress("");
+      setNewDeliveryClientAddressRef("");
       triggerAppNotification("👥 CLIENTE REGISTRADO", `Se guardó a ${newCust.name} en el catálogo de clientes.`, "success");
     } catch (err) {
       console.error("Error al registrar cliente express:", err);
@@ -3830,9 +3868,12 @@ export default function App() {
     }
   };
 
-  const handleAddNewDeliveryAddressOnTheFly = async (addrStr: string) => {
+  const handleAddNewDeliveryAddressOnTheFly = async (addrStr: string, refStr: string = "") => {
     if (!addrStr.trim() || !selectedDeliveryClient) return;
-    const cleanAddr = addrStr.trim();
+    let cleanAddr = addrStr.trim();
+    if (refStr.trim()) {
+      cleanAddr = `${cleanAddr} (Ref: ${refStr.trim()})`;
+    }
     
     const updatedAddresses = [...(selectedDeliveryClient.addresses || []), cleanAddr];
     const updatedClient = {
@@ -3847,6 +3888,11 @@ export default function App() {
       });
       setSelectedDeliveryClient(updatedClient);
       setSelectedDeliveryAddress(cleanAddr);
+      if (refStr.trim()) {
+        setDeliveryNotes(refStr.trim());
+      }
+      setOnTheFlyAddressInput("");
+      setOnTheFlyAddressRefInput("");
       triggerAppNotification("📍 DIRECCIÓN AGREGADA", `Se añadió nueva dirección a ${selectedDeliveryClient.name}`, "success");
     } catch (err) {
       console.error("Error adding address on-the-fly:", err);
@@ -3869,12 +3915,22 @@ export default function App() {
     }
 
     try {
-      await updateTableDeliveryInfoInFirebase(selectedTable.id, {
+      const deliveryData = {
         deliveryClientName: selectedDeliveryClient.name,
         deliveryClientPhone: selectedDeliveryClient.phone,
         deliveryAddress: selectedDeliveryAddress,
         deliveryNotes: deliveryNotes
-      });
+      };
+
+      await updateTableDeliveryInfoInFirebase(selectedTable.id, deliveryData);
+
+      const updatedTable = {
+        ...selectedTable,
+        ...deliveryData
+      };
+
+      setSelectedTable(updatedTable);
+      setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
 
       triggerAppNotification(
         "🛵 ENVÍO CONFIGURADO",
@@ -3882,7 +3938,6 @@ export default function App() {
         "success"
       );
 
-      // Close the modal upon successful configuration
       setShowDeliverySetupModal(false);
     } catch (err) {
       console.error("Error saving delivery info to table:", err);
@@ -5957,14 +6012,27 @@ export default function App() {
 
                         <div>
                           <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                            📍 Dirección Principal de Entrega
+                            📍 Calle, Número y Colonia
                           </label>
-                          <textarea
-                            rows={2}
+                          <input
+                            type="text"
                             value={newDeliveryClientAddress}
                             onChange={(e) => setNewDeliveryClientAddress(e.target.value)}
-                            placeholder="Calle, Número, Colonia o Referencia..."
-                            className="w-full bg-white border border-slate-250 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all resize-none"
+                            placeholder="Ej. Calle Hidalgo #123, Col. Centro"
+                            className="w-full bg-white border border-slate-250 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                            📝 Referencia de esta Dirección (Opcional)
+                          </label>
+                          <input
+                            type="text"
+                            value={newDeliveryClientAddressRef}
+                            onChange={(e) => setNewDeliveryClientAddressRef(e.target.value)}
+                            placeholder="Ej. Portón blanco, entre Reforma y Juárez, frente al parque"
+                            className="w-full bg-white border border-slate-250 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
                           />
                         </div>
 
@@ -6080,60 +6148,90 @@ export default function App() {
                         {/* SELECCIÓN DE DIRECCIÓN */}
                         <div>
                           <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2">
-                            📍 Dirección de Entrega Destino *
+                            📍 Selección de Dirección de Entrega *
                           </label>
 
                           <div className="space-y-2 mb-3">
-                            {(selectedDeliveryClient.addresses || []).map((addr: string, idx: number) => (
-                              <label
-                                key={idx}
-                                className={`flex items-start gap-2.5 p-3 rounded-xl border-2 transition cursor-pointer ${
-                                  selectedDeliveryAddress === addr
-                                    ? "border-indigo-600 bg-indigo-50/50"
-                                    : "border-slate-200 hover:border-slate-300 bg-slate-50/50"
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name="deliveryAddress"
-                                  checked={selectedDeliveryAddress === addr}
-                                  onChange={() => setSelectedDeliveryAddress(addr)}
-                                  className="mt-0.5 accent-indigo-600"
-                                />
-                                <span className="text-xs font-bold text-slate-800 leading-snug">{addr}</span>
-                              </label>
-                            ))}
+                            {(selectedDeliveryClient.addresses || []).map((addrItem: string, idx: number) => {
+                              let addrText = addrItem;
+                              let refText = "";
+                              if (addrItem.includes("(Ref:")) {
+                                const parts = addrItem.split("(Ref:");
+                                addrText = parts[0].trim();
+                                refText = parts[1].replace(")", "").trim();
+                              } else if (addrItem.includes("| Ref:")) {
+                                const parts = addrItem.split("| Ref:");
+                                addrText = parts[0].trim();
+                                refText = parts[1].trim();
+                              }
+
+                              const isChecked = selectedDeliveryAddress === addrItem;
+
+                              return (
+                                <label
+                                  key={idx}
+                                  onClick={() => {
+                                    setSelectedDeliveryAddress(addrItem);
+                                    if (refText) setDeliveryNotes(refText);
+                                  }}
+                                  className={`flex items-start gap-2.5 p-3 rounded-xl border-2 transition cursor-pointer ${
+                                    isChecked
+                                      ? "border-indigo-600 bg-indigo-50/50 shadow-xs"
+                                      : "border-slate-200 hover:border-slate-300 bg-slate-50/50"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="deliveryAddress"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setSelectedDeliveryAddress(addrItem);
+                                      if (refText) setDeliveryNotes(refText);
+                                    }}
+                                    className="mt-1 accent-indigo-600"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-bold text-slate-800 leading-snug">📍 {addrText}</p>
+                                    {refText && (
+                                      <p className="text-[11px] font-semibold text-amber-700 mt-0.5 leading-tight">
+                                        📝 <span className="font-bold">Ref:</span> {refText}
+                                      </p>
+                                    )}
+                                  </div>
+                                </label>
+                              );
+                            })}
                           </div>
 
-                          {/* AGREGAR OTRA DIRECCIÓN */}
-                          <div className="flex gap-2">
+                          {/* AGREGAR OTRA DIRECCIÓN CON REFERENCIA */}
+                          <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200 space-y-2">
+                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                              ➕ Añadir Otra Dirección a este Cliente
+                            </span>
                             <input
                               type="text"
-                              id="newAddrInput"
-                              placeholder="➕ Añadir otra dirección..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const val = (e.target as HTMLInputElement).value;
-                                  if (val.trim()) {
-                                    handleAddNewDeliveryAddressOnTheFly(val);
-                                    (e.target as HTMLInputElement).value = "";
-                                  }
-                                }
-                              }}
-                              className="flex-1 bg-slate-50 border border-slate-250 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+                              value={onTheFlyAddressInput}
+                              onChange={(e) => setOnTheFlyAddressInput(e.target.value)}
+                              placeholder="📍 Dirección (Calle, Número, Col)"
+                              className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+                            />
+                            <input
+                              type="text"
+                              value={onTheFlyAddressRefInput}
+                              onChange={(e) => setOnTheFlyAddressRefInput(e.target.value)}
+                              placeholder="📝 Referencia (Fachada, portón, entre calles)"
+                              className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
                             />
                             <button
                               type="button"
                               onClick={() => {
-                                const input = document.getElementById("newAddrInput") as HTMLInputElement;
-                                if (input && input.value.trim()) {
-                                  handleAddNewDeliveryAddressOnTheFly(input.value);
-                                  input.value = "";
+                                if (onTheFlyAddressInput.trim()) {
+                                  handleAddNewDeliveryAddressOnTheFly(onTheFlyAddressInput, onTheFlyAddressRefInput);
                                 }
                               }}
-                              className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black px-3 py-2 rounded-xl transition cursor-pointer border-none"
+                              className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-black py-2 rounded-xl transition cursor-pointer border-none shadow-xs uppercase tracking-wider"
                             >
-                              Agregar
+                              ➕ Agregar Dirección con Referencia
                             </button>
                           </div>
                         </div>
@@ -10821,6 +10919,11 @@ export default function App() {
       try {
         // Parallel sync with Firestore Printer Queue (Centinela) 🖨️
         if (selectedTenant) {
+          const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null;
+          const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null;
+          const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null;
+          const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || null;
+
           addPedidoToPrinter(selectedTenant.id, {
             folio: comanda.folio,
             mesa: tableLabel,
@@ -10834,6 +10937,10 @@ export default function App() {
             area: target || "general",
             timestamp: getMexicoISOString(),
             mesero: comanda.createdBy?.name || "S/M",
+            deliveryClientName: dClient,
+            deliveryClientPhone: dPhone,
+            deliveryAddress: dAddr,
+            deliveryNotes: dNotes,
           }).catch((err) => console.warn("Centinela Sync Error:", err));
         }
 
@@ -10870,7 +10977,7 @@ export default function App() {
           `HORA: ${new Date(comanda.timestamp).toLocaleTimeString()}`,
         );
 
-        const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName;
+        const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
         if (isDelivery) {
           const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
           const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
@@ -10880,7 +10987,22 @@ export default function App() {
           job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
           if (dClient) job.printLine(`CLIENTE: ${dClient.toUpperCase()}`);
           if (dPhone) job.printLine(`TEL: ${dPhone}`);
-          if (dAddr) job.printLine(`DIR: ${dAddr.toUpperCase()}`);
+          
+          if (dAddr) {
+            let cleanAddr = dAddr;
+            let refText = "";
+            if (dAddr.includes("(Ref:")) {
+              const parts = dAddr.split("(Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].replace(")", "").trim();
+            } else if (dAddr.includes("| Ref:")) {
+              const parts = dAddr.split("| Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].trim();
+            }
+            job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
+            if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
+          }
           if (dNotes) job.printLine(`NOTAS: ${dNotes.toUpperCase()}`);
         }
 
@@ -26724,51 +26846,73 @@ Instrucciones:
                       Ninguna dirección registrada aún.
                     </div>
                   ) : (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                      {customerModalAddresses.map((addr, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-100 shadow-xs">
-                          <span className="text-xs text-slate-700 font-medium truncate">{addr}</span>
-                          <button
-                            type="button"
-                            onClick={() => setCustomerModalAddresses(prev => prev.filter((_, i) => i !== idx))}
-                            className="text-rose-500 hover:text-rose-700 text-xs font-black p-1 transition cursor-pointer border-none bg-transparent"
-                            title="Eliminar Dirección"
-                          >
-                            ❌
-                          </button>
-                        </div>
-                      ))}
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {customerModalAddresses.map((addr, idx) => {
+                        let addrText = addr;
+                        let refText = "";
+                        if (addr.includes("(Ref:")) {
+                          const parts = addr.split("(Ref:");
+                          addrText = parts[0].trim();
+                          refText = parts[1].replace(")", "").trim();
+                        } else if (addr.includes("| Ref:")) {
+                          const parts = addr.split("| Ref:");
+                          addrText = parts[0].trim();
+                          refText = parts[1].trim();
+                        }
+
+                        return (
+                          <div key={idx} className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-100 shadow-xs">
+                            <div className="flex-1 truncate">
+                              <p className="text-xs text-slate-800 font-bold truncate">📍 {addrText}</p>
+                              {refText && (
+                                <p className="text-[11px] text-amber-700 font-semibold truncate">📝 <span className="font-bold">Ref:</span> {refText}</p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCustomerModalAddresses(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-rose-500 hover:text-rose-700 text-xs font-black p-1 transition cursor-pointer border-none bg-transparent shrink-0"
+                              title="Eliminar Dirección"
+                            >
+                              ❌
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="space-y-2 pt-1 border-t border-slate-200/60">
                     <input
                       type="text"
                       value={newAddressInput}
                       onChange={(e) => setNewAddressInput(e.target.value)}
-                      placeholder="Calle Falsa 123, Col. Centro"
-                      className="flex-1 text-xs p-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          if (newAddressInput.trim()) {
-                            setCustomerModalAddresses(prev => [...prev, newAddressInput.trim()]);
-                            setNewAddressInput("");
-                          }
-                        }
-                      }}
+                      placeholder="📍 Calle, Número y Colonia..."
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500"
+                    />
+                    <input
+                      type="text"
+                      value={newAddressRefInput}
+                      onChange={(e) => setNewAddressRefInput(e.target.value)}
+                      placeholder="📝 Referencia de la dirección (Fachada, portón, entre calles)..."
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500"
                     />
                     <button
                       type="button"
                       onClick={() => {
                         if (newAddressInput.trim()) {
-                          setCustomerModalAddresses(prev => [...prev, newAddressInput.trim()]);
+                          let formatted = newAddressInput.trim();
+                          if (newAddressRefInput.trim()) {
+                            formatted = `${formatted} (Ref: ${newAddressRefInput.trim()})`;
+                          }
+                          setCustomerModalAddresses(prev => [...prev, formatted]);
                           setNewAddressInput("");
+                          setNewAddressRefInput("");
                         }
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-black transition cursor-pointer border-none shadow-sm"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-black transition cursor-pointer border-none shadow-sm uppercase tracking-wider"
                     >
-                      ➕ Agregar
+                      ➕ Agregar Dirección con Referencia
                     </button>
                   </div>
                 </div>
