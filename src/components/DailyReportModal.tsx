@@ -17,7 +17,7 @@ import {
   IonFooter,
   IonButtons
 } from '@ionic/react';
-import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhatsapp } from 'ionicons/icons';
+import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhatsapp, closeCircleOutline } from 'ionicons/icons';
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER } from '../utils/appHelpers';
 
@@ -48,7 +48,7 @@ const getRowClass = (h: any) => {
 };
 
 export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onClose, history, targetDate, companyName = "Cocinet App", products = [] }) => {
-  const [tab, setTab] = useState<'cuentas' | 'productos'>('cuentas');
+  const [tab, setTab] = useState<'cuentas' | 'productos' | 'cancelaciones'>('cuentas');
   
   const todayOperatingDay = useMemo(() => targetDate || getOperatingDay(new Date()), [targetDate]);
 
@@ -84,6 +84,82 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     });
   }, [history, todayOperatingDay]);
 
+  const dailyCancellations = useMemo(() => {
+    const list: Array<{
+      id: string;
+      folio: string | number;
+      timestamp: any;
+      tableLabel: string;
+      description: string;
+      quantity: number;
+      reason: string;
+      user: string;
+      total: number;
+      type: 'cuenta' | 'producto';
+    }> = [];
+
+    history.forEach(h => {
+      const accountDate = h.timestamp instanceof Date ? h.timestamp : new Date(h.timestamp);
+      if (getOperatingDay(accountDate) !== todayOperatingDay) return;
+
+      if (h.status === "cancelled") {
+        let calcTotal = Number(h.total || 0);
+        if (!calcTotal || calcTotal === 0) {
+          (h.comandas || []).forEach((c: any) => {
+            (c.items || []).forEach((item: any) => {
+              calcTotal += (item.quantity || 1) * (item.product?.price || item.price || 0);
+            });
+          });
+        }
+        list.push({
+          id: `account-${h.id || h.folio}-${h.timestamp}`,
+          folio: h.folio || "N/A",
+          timestamp: h.timestamp,
+          tableLabel: h.tableLabel || "N/A",
+          description: "Cuenta Completa Cancelada",
+          quantity: 1,
+          reason: h.cancellationReason || "No especificada",
+          user: h.cancelledBy?.name || "Administrador/Cajero",
+          total: calcTotal,
+          type: 'cuenta'
+        });
+      } else {
+        (h.comandas || []).forEach((c: any) => {
+          (c.items || []).forEach((item: any, idx: number) => {
+            if (item.isCancelled) {
+              const liveProduct = products.find(p => String(p.id) === String(item.product?.id)) || 
+                                  products.find(p => (p.name || "").toLowerCase().trim() === (item.product?.name || "").toLowerCase().trim()) || 
+                                  item.product;
+              const itemPrice = item.product?.price || item.price || liveProduct?.price || 0;
+              list.push({
+                id: `item-${h.id || h.folio}-${c.id || idx}-${idx}`,
+                folio: h.folio || "N/A",
+                timestamp: c.timestamp || h.timestamp,
+                tableLabel: h.tableLabel || "N/A",
+                description: getProductReportName(liveProduct),
+                quantity: item.quantity || 1,
+                reason: item.cancellationReason || "No especificada",
+                user: item.cancelledBy?.name || "Mesero/Cajero",
+                total: (item.quantity || 1) * itemPrice,
+                type: 'producto'
+              });
+            }
+          });
+        });
+      }
+    });
+
+    return list.sort((a, b) => {
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
+      return dateB - dateA;
+    });
+  }, [history, todayOperatingDay, products]);
+
+  const totalCancellations = useMemo(() => {
+    return dailyCancellations.reduce((sum, item) => sum + item.total, 0);
+  }, [dailyCancellations]);
+
   const productSummary = useMemo(() => {
     const summary: Record<string, { name: string, quantity: number, total: number, product: any }> = {};
     dailyHistory.forEach(account => {
@@ -110,17 +186,88 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     });
   }, [dailyHistory, products]);
 
+  const groupedFullCatalog = useMemo(() => {
+    const soldMap: Record<string, { quantity: number, total: number }> = {};
+    productSummary.forEach(p => {
+      if (p.product?.id) soldMap[String(p.product.id)] = { quantity: p.quantity, total: p.total };
+      soldMap[(p.name || "").toLowerCase().trim()] = { quantity: p.quantity, total: p.total };
+    });
+
+    const groups: Record<string, Array<{
+      name: string;
+      price: number;
+      quantitySold: number;
+      totalSold: number;
+      product: any;
+    }>> = {};
+
+    (products || []).forEach(prod => {
+      const groupKey = (prod.subgroup || prod.subcategory || "OTROS").toUpperCase().trim();
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      const liveName = getProductReportName(prod);
+      const sold = soldMap[String(prod.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(prod.name || "").toLowerCase().trim()] || { quantity: 0, total: 0 };
+      groups[groupKey].push({
+        name: liveName,
+        price: Number(prod.price || 0),
+        quantitySold: sold.quantity,
+        totalSold: sold.total,
+        product: prod
+      });
+    });
+
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => {
+        const scoreA = getProductSortScore(a.product);
+        const scoreB = getProductSortScore(b.product);
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return a.name.localeCompare(b.name);
+      });
+    });
+
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const minScoreA = Math.min(...groups[a].map(p => getProductSortScore(p.product)));
+      const minScoreB = Math.min(...groups[b].map(p => getProductSortScore(p.product)));
+
+      if (minScoreA !== minScoreB) {
+        return minScoreA - minScoreB;
+      }
+
+      const idxA = SUBCATEGORY_ORDER.findIndex(target => a.toLowerCase().includes(target) || target.includes(a.toLowerCase()));
+      const idxB = SUBCATEGORY_ORDER.findIndex(target => b.toLowerCase().includes(target) || target.includes(b.toLowerCase()));
+      const scoreA = idxA === -1 ? 999 : idxA;
+      const scoreB = idxB === -1 ? 999 : idxB;
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      return a.localeCompare(b);
+    });
+
+    return sortedKeys.map(key => ({
+      groupName: key,
+      items: groups[key]
+    }));
+  }, [products, productSummary]);
+
   const totalAccounts = useMemo(() => dailyHistory.reduce((sum, h) => sum + (h.total || 0), 0), [dailyHistory]);
   const totalProducts = useMemo(() => productSummary.reduce((sum, p) => sum + p.total, 0), [productSummary]);
 
   const groupedProducts = useMemo(() => {
     const groups: Record<string, typeof productSummary> = {};
     productSummary.forEach(p => {
-      const subcat = (p.product.subcategory || "OTROS").toUpperCase().trim();
-      if (!groups[subcat]) {
-        groups[subcat] = [];
+      const groupKey = (p.product?.subgroup || p.product?.subcategory || "OTROS").toUpperCase().trim();
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
       }
-      groups[subcat].push(p);
+      groups[groupKey].push(p);
+    });
+
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => {
+        const scoreA = getProductSortScore(a.product);
+        const scoreB = getProductSortScore(b.product);
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return a.name.localeCompare(b.name);
+      });
     });
 
     const sortedKeys = Object.keys(groups).sort((a, b) => {
@@ -237,10 +384,11 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     // Append grand totals
     accountsAOA.push(["TOTAL DE CUENTAS COBRADAS", "", "", "", "", "", "", { t: "n", f: `SUM(H7:H${6 + N})` }]);
     accountsAOA.push(["TOTAL BRUTO DE PRODUCTOS", "", "", "", "", "", "", totalProducts]);
+    accountsAOA.push(["TOTAL DE CANCELACIONES", "", "", "", "", "", "", totalCancellations]);
     
     if (paymentBreakdown.discount > 0) {
       accountsAOA.push(["(-) DESCUENTOS APLICADOS", "", "", "", "", "", "", -paymentBreakdown.discount]);
-      accountsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", "", "", "", "", "", { t: "n", f: `H${6 + N + 12}+H${6 + N + 13}` }]);
+      accountsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", "", "", "", "", "", { t: "n", f: `H${6 + N + 12}+H${6 + N + 14}` }]);
     }
 
     const wsAccounts = XLSX.utils.aoa_to_sheet(accountsAOA);
@@ -354,6 +502,144 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
 
     XLSX.utils.book_append_sheet(wb, wsProducts, "Productos");
 
+    // Sheet 3: Cancelaciones
+    const cancellationsAOA: any[][] = [];
+    cancellationsAOA.push([companyName.toUpperCase()]);
+    cancellationsAOA.push(["REPORTE DIARIO DE CANCELACIONES"]);
+    cancellationsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
+    cancellationsAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
+    cancellationsAOA.push([]); // Empty row
+
+    // Header Row (Row 6)
+    cancellationsAOA.push([
+      "CONSECUTIVO",
+      "FOLIO",
+      "TIPO",
+      "FECHA / HORA",
+      "MESA",
+      "PRODUCTO / CONCEPTO",
+      "CANTIDAD",
+      "MOTIVO DE CANCELACIÓN",
+      "AUTORIZADO POR",
+      "TOTAL CANCELADO"
+    ]);
+
+    const numCancels = dailyCancellations.length;
+    dailyCancellations.forEach((item, index) => {
+      const consecutive = numCancels - index;
+      cancellationsAOA.push([
+        `#${consecutive}`,
+        item.folio,
+        item.type === 'cuenta' ? "Cuenta Completa" : "Producto",
+        item.timestamp instanceof Date ? item.timestamp.toLocaleString() : new Date(item.timestamp).toLocaleString(),
+        item.tableLabel,
+        item.description,
+        item.quantity,
+        item.reason,
+        item.user,
+        item.total
+      ]);
+    });
+
+    cancellationsAOA.push([]);
+    cancellationsAOA.push([
+      "TOTAL DE CANCELACIONES",
+      "", "", "", "", "", "", "", "",
+      { t: "n", f: `SUM(J7:J${6 + numCancels})` }
+    ]);
+
+    const wsCancellations = XLSX.utils.aoa_to_sheet(cancellationsAOA);
+    wsCancellations['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 9 } }
+    ];
+    wsCancellations['!cols'] = [
+      { wch: 14 }, // Consecutivo
+      { wch: 14 }, // Folio
+      { wch: 18 }, // Tipo
+      { wch: 22 }, // Fecha
+      { wch: 12 }, // Mesa
+      { wch: 35 }, // Producto/Concepto
+      { wch: 12 }, // Cantidad
+      { wch: 30 }, // Motivo
+      { wch: 22 }, // Autorizado
+      { wch: 18 }  // Total
+    ];
+
+    Object.keys(wsCancellations).forEach((key) => {
+      if (key.startsWith('!')) return;
+      const col = key.replace(/[0-9]/g, '');
+      const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
+      if (row <= 5) return;
+      const cell = wsCancellations[key];
+      if (cell && (cell.t === 'n' || cell.f)) {
+        if (col === 'J') {
+          cell.z = '$#,##0.00';
+        } else if (col === 'G') {
+          cell.z = '#,##0.0';
+        }
+      }
+    });
+
+    XLSX.utils.book_append_sheet(wb, wsCancellations, "Cancelaciones");
+
+    // Sheet 4: Productos de Lista (Full Catalog)
+    const catalogAOA: any[][] = [];
+    catalogAOA.push([companyName.toUpperCase()]);
+    catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS DEL CATÁLOGO"]);
+    catalogAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
+    catalogAOA.push([`EMITIDO POR: COCINET APP - HORA: ${new Date().toLocaleTimeString()}`]);
+    catalogAOA.push([]); // Empty row
+
+    // Header Row (Row 6)
+    catalogAOA.push(["PRODUCTO / PLATILLO", "PRECIO LISTA", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
+
+    groupedFullCatalog.forEach(group => {
+      catalogAOA.push([]); // Blank row
+      catalogAOA.push([`📂 ${group.groupName.toUpperCase()}`, "", "", ""]); // Group Header
+      group.items.forEach(p => {
+        catalogAOA.push([p.name, p.price, p.quantitySold, p.totalSold]);
+      });
+    });
+
+    const M = catalogAOA.length;
+
+    catalogAOA.push([]); // Empty row
+    catalogAOA.push(["TOTAL VENDIDO DE CATÁLOGO", "", { t: "n", f: `SUM(C7:C${M})` }, { t: "n", f: `SUM(D7:D${M})` }]);
+
+    const wsCatalog = XLSX.utils.aoa_to_sheet(catalogAOA);
+    wsCatalog['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } }
+    ];
+    wsCatalog['!cols'] = [
+      { wch: 50 }, // Producto
+      { wch: 16 }, // Precio Lista
+      { wch: 18 }, // Cant Vendida
+      { wch: 20 }  // Total Recaudado
+    ];
+
+    Object.keys(wsCatalog).forEach((key) => {
+      if (key.startsWith('!')) return;
+      const col = key.replace(/[0-9]/g, '');
+      const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
+      if (row <= 5) return;
+      const cell = wsCatalog[key];
+      if (cell && (cell.t === 'n' || cell.f)) {
+        if (col === 'B' || col === 'D') {
+          cell.z = '$#,##0.00';
+        } else if (col === 'C') {
+          cell.z = '#,##0.0';
+        }
+      }
+    });
+
+    XLSX.utils.book_append_sheet(wb, wsCatalog, "Productos de Lista");
+
     XLSX.writeFile(wb, `ReporteDiario_${todayOperatingDay}.xlsx`);
   };
 
@@ -374,6 +660,12 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     text += `• Cort/Emp: *$${paymentBreakdown.cortesia.toFixed(2)}*\n`;
     text += `• Descuentos: *-$${paymentBreakdown.discount.toFixed(2)}*\n\n`;
 
+    if (dailyCancellations.length > 0) {
+      text += `❌ *CANCELACIONES:*\n`;
+      text += `• Total Registros: *${dailyCancellations.length}*\n`;
+      text += `• Total Cancelado: *$${totalCancellations.toFixed(2)}*\n\n`;
+    }
+
     text += `🍔 *PRODUCTOS VENDIDOS:*\n`;
     groupedProducts.forEach(group => {
       text += `\n*${group.groupName}*\n`;
@@ -386,6 +678,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     text += `📈 *TOTALES FINALES:*\n`;
     text += `• Total Cuentas: *$${totalAccounts.toFixed(2)}*\n`;
     text += `• Total Productos: *$${totalProducts.toFixed(2)}*\n`;
+    text += `• Total Cancelaciones: *$${totalCancellations.toFixed(2)}*\n`;
     if (paymentBreakdown.discount > 0) {
       text += `• (-) Descuentos: *-$${paymentBreakdown.discount.toFixed(2)}*\n`;
       text += `• Total Prod. (Ajustado): *$${(totalProducts - paymentBreakdown.discount).toFixed(2)}*\n`;
@@ -420,6 +713,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
           <IonSegment value={tab} onIonChange={e => setTab(e.detail.value as any)}>
             <IonSegmentButton value="cuentas"><IonIcon icon={listOutline} /> Cuentas</IonSegmentButton>
             <IonSegmentButton value="productos"><IonIcon icon={restaurantOutline} /> Productos</IonSegmentButton>
+            <IonSegmentButton value="cancelaciones"><IonIcon icon={closeCircleOutline} /> Cancelaciones ({dailyCancellations.length})</IonSegmentButton>
           </IonSegment>
         </IonToolbar>
       </IonHeader>
@@ -454,7 +748,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
               );
             })}
           </IonGrid>
-        ) : (
+        ) : tab === 'productos' ? (
           <IonGrid className="w-full">
             <IonRow className="sticky top-0 z-10 border-b font-bold bg-slate-100 p-2">
               <IonCol>Producto</IonCol>
@@ -475,6 +769,51 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
                 ))}
               </React.Fragment>
             ))}
+          </IonGrid>
+        ) : (
+          <IonGrid className="w-full">
+            <IonRow className="sticky top-0 z-10 border-b font-bold bg-rose-100 p-2 text-rose-900">
+              <IonCol size="2">Folio / Tipo</IonCol>
+              <IonCol size="2">Hora / Mesa</IonCol>
+              <IonCol size="3">Descripción / Producto</IonCol>
+              <IonCol size="1" className="text-center">Cant.</IonCol>
+              <IonCol size="2">Motivo / Por</IonCol>
+              <IonCol size="2" className="text-right">Total</IonCol>
+            </IonRow>
+            {dailyCancellations.length === 0 ? (
+              <IonRow className="p-6 text-center text-slate-500 font-medium">
+                <IonCol size="12">✨ No hay cancelaciones registradas en este día.</IonCol>
+              </IonRow>
+            ) : (
+              dailyCancellations.map((c, index) => {
+                const consecutive = dailyCancellations.length - index;
+                return (
+                  <IonRow key={c.id} className="border-b p-2 bg-rose-50/50 hover:bg-rose-50 text-xs">
+                    <IonCol size="2">
+                      <div className="font-bold text-rose-800">#{consecutive} - Folio: {c.folio}</div>
+                      <div className="text-[10px] text-rose-600 font-semibold uppercase">{c.type === 'cuenta' ? 'Cuenta Completa' : 'Producto'}</div>
+                    </IonCol>
+                    <IonCol size="2">
+                      <div>{formatTime(c.timestamp)}</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{c.tableLabel}</div>
+                    </IonCol>
+                    <IonCol size="3" className="font-semibold text-slate-800">
+                      {c.description}
+                    </IonCol>
+                    <IonCol size="1" className="text-center font-bold">
+                      {c.quantity}
+                    </IonCol>
+                    <IonCol size="2">
+                      <div className="italic text-slate-600">{c.reason}</div>
+                      <div className="text-[10px] text-slate-400">Por: {c.user}</div>
+                    </IonCol>
+                    <IonCol size="2" className="text-right font-bold text-rose-700 text-sm">
+                      ${c.total.toFixed(2)}
+                    </IonCol>
+                  </IonRow>
+                );
+              })
+            )}
           </IonGrid>
         )}
       </IonContent>
@@ -523,6 +862,14 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
                 <IonLabel style={{ fontWeight: "bold" }}>Total Cuentas: ${totalAccounts.toFixed(2)}</IonLabel>
                 <br />
                 <IonLabel style={{ fontWeight: "bold" }}>Total Productos: ${totalProducts.toFixed(2)}</IonLabel>
+                {dailyCancellations.length > 0 && (
+                  <>
+                    <br />
+                    <IonLabel className="text-rose-600 font-extrabold" style={{ fontSize: "0.9rem" }}>
+                      ❌ Total Cancelaciones ({dailyCancellations.length}): ${totalCancellations.toFixed(2)}
+                    </IonLabel>
+                  </>
+                )}
                 {paymentBreakdown.discount > 0 && (
                   <>
                     <br />
