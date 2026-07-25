@@ -1958,6 +1958,16 @@ export default function App() {
 
       const { owners, pins } = data;
       
+      // Read local cached custom owners to prevent overwriting locally created entries
+      let cachedLocalOwners: any[] = [];
+      let cachedLocalPins: Record<string, string> = {};
+      try {
+        const cO = localStorage.getItem("cocinet_custom_owners_v3");
+        if (cO) cachedLocalOwners = JSON.parse(cO);
+        const cP = localStorage.getItem("cocinet_custom_owner_pins_v3");
+        if (cP) cachedLocalPins = JSON.parse(cP);
+      } catch (e) {}
+
       const mergedOwners = [
         { key: "1", name: "SORAYA & JORGE", avatar: "🤠", company: 'Cadena "Los Sombrerudos"', accentColor: "red" },
         { key: "2", name: "EVELIN", avatar: "👒", company: 'Taquerías "Los Sombrerudos"', accentColor: "purple" },
@@ -1971,12 +1981,21 @@ export default function App() {
         { key: "10", name: "HUAYAPAM", avatar: "🌿", company: 'Crucero Huayapam', accentColor: "cyan" }
       ];
 
+      // Merge local custom owners first
+      cachedLocalOwners.forEach((o: any) => {
+        if (o && o.key) {
+          const idx = mergedOwners.findIndex(mo => mo.key === o.key);
+          if (idx !== -1) mergedOwners[idx] = o;
+          else mergedOwners.push(o);
+        }
+      });
+
+      // Merge Firestore owners (authoritative)
       owners.forEach((o: any) => {
-        const idx = mergedOwners.findIndex(mo => mo.key === o.key);
-        if (idx !== -1) {
-          mergedOwners[idx] = o;
-        } else {
-          mergedOwners.push(o);
+        if (o && o.key) {
+          const idx = mergedOwners.findIndex(mo => mo.key === o.key);
+          if (idx !== -1) mergedOwners[idx] = o;
+          else mergedOwners.push(o);
         }
       });
 
@@ -1991,6 +2010,7 @@ export default function App() {
         "8": "2080",
         "9": "2090",
         "10": "2100",
+        ...cachedLocalPins,
         ...pins
       };
 
@@ -2008,8 +2028,20 @@ export default function App() {
 
   const [ownersVersion, setOwnersVersion] = useState(0);
 
-  const [customOwners, setCustomOwners] = useState<any[]>(() => UNIQUE_OWNERS);
-  const [customOwnerPins, setCustomOwnerPins] = useState<Record<string, string>>(() => OWNER_PINS);
+  const [customOwners, setCustomOwners] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem("cocinet_custom_owners_v3");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return UNIQUE_OWNERS;
+  });
+  const [customOwnerPins, setCustomOwnerPins] = useState<Record<string, string>>(() => {
+    try {
+      const cached = localStorage.getItem("cocinet_custom_owner_pins_v3");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return OWNER_PINS;
+  });
 
   const [showOwnerCrudModal, setShowOwnerCrudModal] = useState(false);
   const [editingOwner, setEditingOwner] = useState<any | null>(null);
