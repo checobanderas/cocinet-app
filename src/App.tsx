@@ -3660,6 +3660,15 @@ export default function App() {
         
         const timeStr = pedido.timestamp ? new Date(pedido.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
         job.printLine(`HORA: ${timeStr}`);
+        
+        if (pedido.deliveryClientName || pedido.deliveryAddress) {
+          job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
+          if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
+          if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
+          if (pedido.deliveryAddress) job.printLine(`DIR: ${pedido.deliveryAddress.toUpperCase()}`);
+          if (pedido.deliveryNotes) job.printLine(`NOTAS: ${pedido.deliveryNotes.toUpperCase()}`);
+        }
+        
         job.bold(false).printLine("--------------------------------");
 
         job.left();
@@ -10860,6 +10869,21 @@ export default function App() {
         job.printLine(
           `HORA: ${new Date(comanda.timestamp).toLocaleTimeString()}`,
         );
+
+        const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName;
+        if (isDelivery) {
+          const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
+          const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
+          const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
+          const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
+          
+          job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
+          if (dClient) job.printLine(`CLIENTE: ${dClient.toUpperCase()}`);
+          if (dPhone) job.printLine(`TEL: ${dPhone}`);
+          if (dAddr) job.printLine(`DIR: ${dAddr.toUpperCase()}`);
+          if (dNotes) job.printLine(`NOTAS: ${dNotes.toUpperCase()}`);
+        }
+
         job.printLine("--------------------------------");
 
         job.left();
@@ -10995,6 +11019,10 @@ export default function App() {
             tipo: "comanda",
             folio: folio,
             mesa: tableLabel,
+            deliveryClientName: selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null,
+            deliveryClientPhone: selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null,
+            deliveryAddress: selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null,
+            deliveryNotes: deliveryNotes || (selectedTable as any)?.deliveryNotes || null,
             items: comandaItems.map((i: any) => ({
                 nombre: getFormattedProductName(i.product),
                 cantidad: i.quantity,
@@ -15617,7 +15645,7 @@ Instrucciones:
 
 
         </IonContent>
-        {(totalItems > 0 || selectedTable?.zone === "Servicio a Domicilio") && (
+        {totalItems > 0 && (
           <IonFooter className="ion-no-border">
             <IonToolbar
               style={{
@@ -15627,64 +15655,25 @@ Instrucciones:
               }}
               className="ion-padding-horizontal py-1"
             >
-              <div className="flex items-center justify-between gap-2 w-full px-1">
+              <div
+                onClick={() => {
+                  const firstComensal =
+                    cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
+                  setReviewComensal(firstComensal);
+                  setAppMode("review");
+                }}
+                className="flex items-center justify-between gap-2 w-full px-2 py-1 cursor-pointer hover:opacity-90 transition"
+              >
                 {/* Left: View Order */}
-                {totalItems > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const firstComensal =
-                        cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
-                      setReviewComensal(firstComensal);
-                      setAppMode("review");
-                    }}
-                    className="flex items-center gap-1.5 bg-transparent text-white font-black text-xs sm:text-sm border-none cursor-pointer py-1.5 hover:opacity-80 transition uppercase"
-                  >
-                    <IonIcon icon={cartOutline} style={{ fontSize: "1.3rem" }} />
-                    <span>VER PEDIDO ({totalItems})</span>
-                  </button>
-                ) : (
-                  <div className="text-xs text-slate-400 font-bold flex items-center gap-1">
-                    <IonIcon icon={cartOutline} style={{ fontSize: "1.2rem" }} />
-                    <span>Sin productos</span>
-                  </div>
-                )}
-
-                {/* Center: Floating Customer Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowDeliverySetupModal(true)}
-                  className={`px-3.5 py-1.5 text-xs font-black rounded-full flex items-center gap-1.5 border-none shadow-md cursor-pointer transition-all uppercase tracking-wider shrink-0 active:scale-95 ${
-                    selectedDeliveryClient
-                      ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                      : "bg-amber-400 hover:bg-amber-500 text-slate-900"
-                  }`}
-                  title="Registrar / Configurar Cliente"
-                >
-                  <span>👤</span>
-                  <span className="truncate max-w-[120px] sm:max-w-[180px]">
-                    {selectedDeliveryClient ? selectedDeliveryClient.name.split(" ")[0] : "Registrar Cliente"}
-                  </span>
-                </button>
+                <div className="flex items-center gap-2 text-white font-black text-sm uppercase tracking-tight">
+                  <IonIcon icon={cartOutline} style={{ fontSize: "1.4rem" }} />
+                  <span>VER PEDIDO ({totalItems})</span>
+                </div>
 
                 {/* Right: Total Price */}
-                {totalItems > 0 ? (
-                  <div
-                    onClick={() => {
-                      const firstComensal =
-                        cart.length > 0 ? Math.min(...cart.map((i) => i.plate)) : 1;
-                      setReviewComensal(firstComensal);
-                      setAppMode("review");
-                    }}
-                    className="text-emerald-400 font-black text-base sm:text-lg cursor-pointer tracking-tight shrink-0"
-                  >
-                    ${totalPrice.toFixed(2)}
-                  </div>
-                ) : (
-                  <div className="text-slate-500 font-bold text-xs">
-                    $0.00
-                  </div>
-                )}
+                <div className="text-emerald-400 font-black text-base sm:text-lg tracking-tight">
+                  ${totalPrice.toFixed(2)}
+                </div>
               </div>
             </IonToolbar>
           </IonFooter>
