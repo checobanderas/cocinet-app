@@ -8811,6 +8811,7 @@ export default function App() {
                     bottom: "10px",
                     border: "2px solid #8c7c68",
                     opacity: 0.5,
+                    pointerEvents: "none",
                   }}
                 ></div>
                 <h1
@@ -8861,7 +8862,7 @@ export default function App() {
 
                 {/* 📞💬🎬 FILA DE EMOJIS DE SOPORTE DIRECTO DEBAJO DEL CANDADO */}
                 <div 
-                  className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger"
+                  className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger relative z-20"
                   onClick={(e) => e.stopPropagation()} // Para que hacer clic en los emojis no abra el panel del PIN
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchEnd={(e) => e.stopPropagation()}
@@ -8878,7 +8879,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
+                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Llamar al 951-127-3796"
                     >
                       📞
@@ -8891,7 +8892,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
+                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Enviar WhatsApp al 951-127-3796"
                     >
                       💬
@@ -8904,7 +8905,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none"
+                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Video Tutorial y Preguntas Frecuentes"
                     >
                       🎬
