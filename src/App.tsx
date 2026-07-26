@@ -25126,6 +25126,32 @@ Instrucciones:
                           >
                             🔠 Alternar Letra
                           </button>
+
+                          {/* Botón de Guardar en la Barra Superior */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              saveRelationChanges(false, false);
+                            }}
+                            style={{
+                              background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "8px",
+                              padding: "6px 14px",
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.3)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginLeft: "auto"
+                            }}
+                            title="Guardar todos los cambios de subgrupos, secciones y nombres a la base de datos de inmediato"
+                          >
+                            💾 Guardar Cambios BD
+                          </button>
                         </div>
                       </div>
                     )}
@@ -25741,41 +25767,66 @@ Instrucciones:
                     </div>
                   )}
 
-                    <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                      <button
-                        onClick={() => {
-                          setRelationMatches([]);
-                          setRelationSearch("");
-                          setRelationLog([]);
-                        }}
-                        style={{
-                          background: "#94a3b8",
-                          color: "white",
-                          border: "none",
-                          padding: "10px 20px",
-                          borderRadius: "10px",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={() => saveRelationChanges(false)}
-                        style={{
-                          background: "#0284c7",
-                          color: "white",
-                          border: "none",
-                          padding: "10px 24px",
-                          borderRadius: "10px",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                          boxShadow: "0 4px 6px rgba(2, 132, 199, 0.2)",
-                        }}
-                        title="Guarda la configuración de nombres y orden en la base de datos"
-                      >
-                        💾 Guardar Cambios en Reportes
-                      </button>
+                    <div style={{
+                      position: "sticky",
+                      bottom: "16px",
+                      zIndex: 90,
+                      background: "rgba(15, 23, 42, 0.94)",
+                      backdropFilter: "blur(8px)",
+                      padding: "12px 20px",
+                      borderRadius: "16px",
+                      boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "16px",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      marginTop: "16px"
+                    }}>
+                      <span style={{ color: "white", fontSize: "0.85rem", fontWeight: "bold" }}>
+                        ✏️ Modificaciones de catálogo: <strong style={{ color: "#38bdf8" }}>{relationMatches.length} productos</strong>
+                      </span>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <button
+                          onClick={() => {
+                            setRelationMatches([]);
+                            setRelationSearch("");
+                            setRelationLog([]);
+                          }}
+                          style={{
+                            background: "rgba(255, 255, 255, 0.15)",
+                            color: "white",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "10px",
+                            fontSize: "0.8rem",
+                            fontWeight: "bold",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => saveRelationChanges(false, true)}
+                          style={{
+                            background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 24px",
+                            borderRadius: "10px",
+                            fontSize: "0.85rem",
+                            fontWeight: "bold",
+                            cursor: "pointer",
+                            boxShadow: "0 4px 12px rgba(16, 185, 129, 0.4)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px"
+                          }}
+                          title="Guarda la configuración de nombres, subgrupos, secciones y orden en la base de datos"
+                        >
+                          💾 Guardar Cambios en Base de Datos
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -26154,24 +26205,50 @@ Instrucciones:
     if (!confirm) return;
 
     try {
-      let count = 0;
-      for (const match of relationMatches) {
-        if (onlyMatched && !match.matched) continue;
-        await updateProductInFirebase(match.productId, {
-          reportName: match.proposedReportName.trim(),
-          sortOrder: Number(match.proposedSortOrder),
-          description: (match.proposedDescription || "").trim(),
-          subgroup: (match.proposedSubgroup || "").trim(),
-          subcategory: (match.proposedSubcategory || "").trim()
+      const targets = relationMatches.filter(m => !onlyMatched || m.matched);
+
+      // Fast local update & localStorage cache update 🚀
+      setProducts(prev => {
+        const map = new globalThis.Map(prev.map(p => [p.id, { ...p }]));
+        targets.forEach(m => {
+          const existing = map.get(m.productId);
+          if (existing) {
+            existing.reportName = m.proposedReportName.trim();
+            existing.sortOrder = Number(m.proposedSortOrder);
+            existing.description = (m.proposedDescription || "").trim();
+            existing.subgroup = (m.proposedSubgroup || "").trim();
+            existing.subcategory = (m.proposedSubcategory || "").trim();
+          }
         });
-        count++;
+        const updatedList = Array.from(map.values());
+        try {
+          localStorage.setItem("pos_products", JSON.stringify(updatedList));
+        } catch (e) {}
+        return updatedList;
+      });
+
+      // Fast parallel chunking for Firestore updates ⚡
+      const CHUNK_SIZE = 20;
+      for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
+        const chunk = targets.slice(i, i + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(match =>
+            updateProductInFirebase(match.productId, {
+              reportName: match.proposedReportName.trim(),
+              sortOrder: Number(match.proposedSortOrder),
+              description: (match.proposedDescription || "").trim(),
+              subgroup: (match.proposedSubgroup || "").trim(),
+              subcategory: (match.proposedSubcategory || "").trim()
+            })
+          )
+        );
       }
 
-      alert(`✅ ¡Éxito! Se guardaron los cambios para ${count} productos correctamente.`);
+      alert(`✅ ¡Éxito! Se guardaron los cambios para ${targets.length} productos correctamente.`);
 
       triggerAppNotification(
         "📋 Catálogo Sincronizado",
-        `Se han actualizado ${count} productos con nombres de reporte, subgrupos, subcategorías, descripciones y orden secuencial con éxito.`,
+        `Se han actualizado ${targets.length} productos con nombres de reporte, subgrupos, subcategorías, descripciones y orden secuencial con éxito.`,
         "success"
       );
 
