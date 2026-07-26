@@ -25092,17 +25092,18 @@ Instrucciones:
                     {manageMenuViewMode === "tree" ? (
                       <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         {(() => {
-                          const secMap = new Map<string, Map<string, typeof relationMatches>>();
+                          const secObj: Record<string, Record<string, typeof relationMatches>> = {};
                           filteredMatches.forEach(match => {
                             const sec = (match.proposedSubcategory || "Sin Sección").trim() || "Sin Sección";
                             const sub = (match.proposedSubgroup || "Sin Subgrupo").trim() || "Sin Subgrupo";
-                            if (!secMap.has(sec)) secMap.set(sec, new Map());
-                            const subMap = secMap.get(sec)!;
-                            if (!subMap.has(sub)) subMap.set(sub, []);
-                            subMap.get(sub)!.push(match);
+                            if (!secObj[sec]) secObj[sec] = {};
+                            if (!secObj[sec][sub]) secObj[sec][sub] = [];
+                            secObj[sec][sub].push(match);
                           });
 
-                          if (secMap.size === 0) {
+                          const sectionKeys = Object.keys(secObj);
+
+                          if (sectionKeys.length === 0) {
                             return (
                               <div style={{ textAlign: "center", padding: "30px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
                                 No se encontraron productos coincidentes con la búsqueda.
@@ -25110,11 +25111,13 @@ Instrucciones:
                             );
                           }
 
-                          return Array.from(secMap.entries()).map(([secName, subMap]) => {
+                          return sectionKeys.map((secName) => {
+                            const subObj = secObj[secName];
                             const isSecCollapsed = !!collapsedTreeSections[secName];
                             const secKey = `sec_${secName}`;
                             const isSecDragOver = treeDragOverTargetKey === secKey;
-                            const totalSecProducts = Array.from(subMap.values()).reduce((acc, arr) => acc + arr.length, 0);
+                            const subKeys = Object.keys(subObj);
+                            const totalSecProducts = subKeys.reduce((acc, k) => acc + subObj[k].length, 0);
 
                             return (
                               <div
@@ -25183,7 +25186,8 @@ Instrucciones:
                                 {/* Subgrupos y Productos de la Sección */}
                                 {!isSecCollapsed && (
                                   <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                                    {Array.from(subMap.entries()).map(([subName, items]) => {
+                                    {subKeys.map((subName) => {
+                                      const items = subObj[subName];
                                       const subKey = `sub_${secName}_${subName}`;
                                       const fullSubKey = `${secName}___${subName}`;
                                       const isSubCollapsed = !!collapsedTreeSubgroups[fullSubKey];
