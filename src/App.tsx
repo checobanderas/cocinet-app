@@ -12826,15 +12826,18 @@ function createDefault30TablesList(tenantId: string) {
     (sum, item) => sum + item.quantity * item.product.price,
     0,
   );
+  const effectiveTables = tables && tables.length > 0
+    ? tables
+    : createDefault30TablesList(selectedTenant?.id || "default-tenant");
+
   const zonesOrder: Record<string, number> = {
     "Salón Principal": 1,
     "Para Llevar": 2,
     "Servicio a Domicilio": 3,
   };
-  const zones = Array.from(
-    new Set(tables.map((t) => t.zone || "Salón Principal")),
-  )
-    .filter(Boolean)
+  const zones = effectiveTables
+    .map((t) => t.zone || "Salón Principal")
+    .filter((v, i, a) => Boolean(v) && a.indexOf(v) === i)
     .sort((a, b) => {
       const orderA = zonesOrder[a as string] || 99;
       const orderB = zonesOrder[b as string] || 99;
@@ -12971,27 +12974,6 @@ function createDefault30TablesList(tenantId: string) {
           "--background": "linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%)",
         }}
       >
-        {mainTab === "mesas" && tables.length === 0 && (
-          <div className="flex flex-col items-center justify-center p-8 bg-white/80 backdrop-blur-md border border-slate-100 rounded-3xl shadow-xl max-w-md mx-auto my-12 text-center">
-            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mb-4 text-3xl shadow-inner animate-pulse">
-              ⚠️
-            </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">
-              No se encontraron mesas
-            </h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              La base de datos de mesas está vacía actualmente. Esto ocurre tras
-              restablecer el sistema. Pulsa el botón de abajo para inicializar
-              de fábrica el menú estándar y las 30 mesas de inmediato.
-            </p>
-            <button
-              onClick={handleResetAllSystems}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-6 rounded-2xl shadow-lg shadow-indigo-200 transition-all duration-200 hover:-translate-y-0.5"
-            >
-              🔄 Inicializar Mesas y Menú Sólido
-            </button>
-          </div>
-        )}
         {mainTab === "mesas" &&
           zones.map((zone) => (
             <div key={zone} className="ion-margin-bottom">
@@ -13011,7 +12993,7 @@ function createDefault30TablesList(tenantId: string) {
               </IonText>
               <IonGrid>
                 <IonRow>
-                  {tables
+                  {effectiveTables
                     .filter((t) => t.zone === zone)
                     .sort((a, b) => {
                       const numA =
