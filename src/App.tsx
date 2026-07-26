@@ -1259,16 +1259,69 @@ export default function App() {
       setBackups(data || []);
     });
 
+function createDefault30TablesList(tenantId: string) {
+  const list: any[] = [];
+  for (let i = 1; i <= 20; i++) {
+    list.push({
+      id: `table-${tenantId}-salon-${i}`,
+      uid: `table-${tenantId}-salon-${i}`,
+      label: `${i}`,
+      shape: "local",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Salón Principal",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  for (let i = 1; i <= 5; i++) {
+    list.push({
+      id: `table-${tenantId}-takeout-${i}`,
+      uid: `table-${tenantId}-takeout-${i}`,
+      label: `P${i}`,
+      shape: "takeout",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Para Llevar",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  for (let i = 1; i <= 5; i++) {
+    list.push({
+      id: `table-${tenantId}-delivery-${i}`,
+      uid: `table-${tenantId}-delivery-${i}`,
+      label: `D${i}`,
+      shape: "delivery",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Servicio a Domicilio",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return list;
+}
+
     const unsubTables = subscribeToTables(tenantId, (data) => {
-      // If tables are empty or incomplete for selected tenant, seed them automatically
-      if (data && data.length < 30 && selectedTenant) {
-        initializeDefaultTablesForTenant(selectedTenant.id).catch((err) => {
+      // If tables are empty or incomplete for selected tenant, seed Firestore & generate local fallback immediately
+      let rawTables = data;
+      if (!rawTables || rawTables.length === 0) {
+        rawTables = createDefault30TablesList(tenantId);
+        initializeDefaultTablesForTenant(tenantId).catch((err) => {
+          console.warn("Error seeding tables for tenant:", err);
+        });
+      } else if (rawTables.length < 30) {
+        initializeDefaultTablesForTenant(tenantId).catch((err) => {
           console.warn("Error seeding tables for tenant:", err);
         });
       }
 
       // Parse dates and normalize legacy zones/labels to prevent crashes and jumbled groups
-      const parsedServerTables = (data || []).map((t: any) => {
+      const parsedServerTables = rawTables.map((t: any) => {
         let zone = t.zone || "Salón Principal";
         if (zone === "A Domicilio") {
           zone = "Servicio a Domicilio";
@@ -2321,6 +2374,13 @@ export default function App() {
       }
     } else {
       COMPANY_CATALOG.push(tenantData);
+      // Auto-seed default 30 tables and standard products for new sucursal / tenant 🏢🌮
+      initializeDefaultTablesForTenant(tenantData.id).catch((err) => {
+        console.warn("Could not seed tables for new tenant:", err);
+      });
+      initializeDefaultProductsForTenant(tenantData.id).catch((err) => {
+        console.warn("Could not seed products for new tenant:", err);
+      });
     }
 
     // Persist to Firestore as the source of truth 🏢🔥
