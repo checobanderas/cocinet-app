@@ -555,6 +555,53 @@ const toggleTextCase = (text: string): string => {
   }
 };
 
+function createDefault30TablesList(tenantId: string) {
+  const list: any[] = [];
+  for (let i = 1; i <= 20; i++) {
+    list.push({
+      id: `table-${tenantId}-salon-${i}`,
+      uid: `table-${tenantId}-salon-${i}`,
+      label: `${i}`,
+      shape: "local",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Salón Principal",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  for (let i = 1; i <= 5; i++) {
+    list.push({
+      id: `table-${tenantId}-takeout-${i}`,
+      uid: `table-${tenantId}-takeout-${i}`,
+      label: `P${i}`,
+      shape: "takeout",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Para Llevar",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  for (let i = 1; i <= 5; i++) {
+    list.push({
+      id: `table-${tenantId}-delivery-${i}`,
+      uid: `table-${tenantId}-delivery-${i}`,
+      label: `D${i}`,
+      shape: "delivery",
+      status: "available",
+      waiterId: null,
+      comandas: [],
+      zone: "Servicio a Domicilio",
+      tenantId: tenantId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return list;
+}
+
 export default function App() {
   const [selectedTenant, setSelectedTenant] = useState<CompanyTenant>(() => {
     try {
@@ -1258,53 +1305,6 @@ export default function App() {
     const unsubBackups = subscribeToMenuBackups(tenantId, (data) => {
       setBackups(data || []);
     });
-
-function createDefault30TablesList(tenantId: string) {
-  const list: any[] = [];
-  for (let i = 1; i <= 20; i++) {
-    list.push({
-      id: `table-${tenantId}-salon-${i}`,
-      uid: `table-${tenantId}-salon-${i}`,
-      label: `${i}`,
-      shape: "local",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Salón Principal",
-      tenantId: tenantId,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  for (let i = 1; i <= 5; i++) {
-    list.push({
-      id: `table-${tenantId}-takeout-${i}`,
-      uid: `table-${tenantId}-takeout-${i}`,
-      label: `P${i}`,
-      shape: "takeout",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Para Llevar",
-      tenantId: tenantId,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  for (let i = 1; i <= 5; i++) {
-    list.push({
-      id: `table-${tenantId}-delivery-${i}`,
-      uid: `table-${tenantId}-delivery-${i}`,
-      label: `D${i}`,
-      shape: "delivery",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Servicio a Domicilio",
-      tenantId: tenantId,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  return list;
-}
 
     const unsubTables = subscribeToTables(tenantId, (data) => {
       // If tables are empty or incomplete for selected tenant, seed Firestore & generate local fallback immediately
