@@ -1902,8 +1902,8 @@ export async function initializeDefaultTablesForTenant(tenantId: string) {
   // Now, create the 30 default tables
   const batch = writeBatch(db);
 
-  // 1. Salón Principal (Tables 1 - 20)
-  for (let i = 1; i <= 20; i++) {
+  // 1. Salón Principal (Tables 1 - 25)
+  for (let i = 1; i <= 25; i++) {
     const ref = doc(db, "tables", `table-${tenantId}-salon-${i}`);
     batch.set(ref, {
       id: `table-${tenantId}-salon-${i}`,

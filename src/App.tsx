@@ -557,7 +557,7 @@ const toggleTextCase = (text: string): string => {
 
 function createDefault30TablesList(tenantId: string) {
   const list: any[] = [];
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= 25; i++) {
     list.push({
       id: `table-${tenantId}-salon-${i}`,
       uid: `table-${tenantId}-salon-${i}`,
