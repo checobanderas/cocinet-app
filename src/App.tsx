@@ -10920,7 +10920,14 @@ export default function App() {
   const cancelPendingVoiceRef = useRef<boolean>(false);
   const feedbackTimerRef = useRef<any>(null);
 
-  const selectedTable = tables.find((t) => t.id === selectedTableId);
+  const effectiveTables = useMemo(() => {
+    if (tables && tables.length > 0) return tables;
+    return createDefault30TablesList(selectedTenant?.id || "default-tenant");
+  }, [tables, selectedTenant?.id]);
+
+  const selectedTable = useMemo(() => {
+    return effectiveTables.find((t) => t.id === selectedTableId);
+  }, [effectiveTables, selectedTableId]);
 
   useEffect(() => {
     const subs = Array.from(
@@ -11686,7 +11693,7 @@ export default function App() {
 
     try {
       const sourceId = selectedTable.id;
-      const targetTable = tables.find(t => t.id === transferTargetTableId);
+      const targetTable = effectiveTables.find(t => t.id === transferTargetTableId);
       if (!targetTable) return;
 
       const sourceComandas = JSON.parse(JSON.stringify(selectedTable.comandas || []));
@@ -11728,7 +11735,7 @@ export default function App() {
 
     try {
        const sourceId = selectedTable.id;
-       const targetTable = tables.find(t => t.id === moveTargetTableId);
+       const targetTable = effectiveTables.find(t => t.id === moveTargetTableId);
        if (!targetTable) return;
 
        const sourceComandas = JSON.parse(JSON.stringify(selectedTable.comandas));
@@ -12826,9 +12833,6 @@ export default function App() {
     (sum, item) => sum + item.quantity * item.product.price,
     0,
   );
-  const effectiveTables = tables && tables.length > 0
-    ? tables
-    : createDefault30TablesList(selectedTenant?.id || "default-tenant");
 
   const zonesOrder: Record<string, number> = {
     "Salón Principal": 1,
