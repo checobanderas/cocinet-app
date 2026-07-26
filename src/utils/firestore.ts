@@ -712,14 +712,19 @@ export async function updateInvoiceRequirementInFirebase(
 
 export async function updateClosedAccountDeliveryStatusInFirebase(
   accountId: string,
-  deliveryStatus: "en_camino" | "entregado" | "no_entregado"
+  deliveryStatus: "en_camino" | "entregado" | "no_entregado",
+  isPaid?: boolean
 ) {
   const accountRef = doc(db, "history", accountId);
+  const payload: any = {
+    deliveryStatus,
+    updatedAt: getMexicoISOString(),
+  };
+  if (typeof isPaid === "boolean") {
+    payload.isPaid = isPaid;
+  }
   await runWrite(
-    updateDoc(accountRef, {
-      deliveryStatus,
-      updatedAt: getMexicoISOString(),
-    })
+    updateDoc(accountRef, payload)
   );
 }
 
@@ -3027,7 +3032,7 @@ export async function restoreTenantBackupSnapshot(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function subscribeToCustomOwnersFromFirebase(
-  callback: (data: { owners: any[]; pins: Record<string, string> } | null) => void
+  callback: (data: { owners: any[]; pins: Record<string, string>; supervisorPins: Record<string, string> } | null) => void
 ) {
   const ref = doc(db, "settings", "customOwners_global");
   return onSnapshot(
@@ -3037,7 +3042,8 @@ export function subscribeToCustomOwnersFromFirebase(
         const data = snap.data();
         callback({
           owners: data?.owners ?? [],
-          pins: data?.pins ?? {}
+          pins: data?.pins ?? {},
+          supervisorPins: data?.supervisorPins ?? {}
         });
       } else {
         callback(null);
@@ -3051,13 +3057,15 @@ export function subscribeToCustomOwnersFromFirebase(
 
 export async function saveCustomOwnersToFirebase(
   owners: any[],
-  pins: Record<string, string>
+  pins: Record<string, string>,
+  supervisorPins?: Record<string, string>
 ) {
   const ref = doc(db, "settings", "customOwners_global");
   await runWrite(
     setDoc(ref, {
       owners,
       pins,
+      supervisorPins: supervisorPins ?? {},
       updatedAt: getMexicoISOString()
     })
   );

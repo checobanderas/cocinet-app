@@ -468,6 +468,25 @@ let OWNER_PINS: Record<string, string> = (() => {
   };
 })();
 
+let OWNER_SUPERVISOR_PINS: Record<string, string> = (() => {
+  try {
+    const cached = localStorage.getItem("cocinet_custom_supervisor_pins_v3");
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+  return {
+    "1": "2011",
+    "2": "2021",
+    "3": "2031",
+    "4": "2041",
+    "5": "2051",
+    "6": "2061",
+    "7": "2071",
+    "8": "2081",
+    "9": "2091",
+    "10": "2101"
+  };
+})();
+
 const MAPS_API_KEY =
   process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
@@ -1953,16 +1972,19 @@ export default function App() {
         return;
       }
 
-      const { owners, pins } = data;
+      const { owners, pins, supervisorPins } = data;
       
       // Read local cached custom owners to prevent overwriting locally created entries
       let cachedLocalOwners: any[] = [];
       let cachedLocalPins: Record<string, string> = {};
+      let cachedLocalSupervisorPins: Record<string, string> = {};
       try {
         const cO = localStorage.getItem("cocinet_custom_owners_v3");
         if (cO) cachedLocalOwners = JSON.parse(cO);
         const cP = localStorage.getItem("cocinet_custom_owner_pins_v3");
         if (cP) cachedLocalPins = JSON.parse(cP);
+        const cSP = localStorage.getItem("cocinet_custom_supervisor_pins_v3");
+        if (cSP) cachedLocalSupervisorPins = JSON.parse(cSP);
       } catch (e) {}
 
       const mergedOwners = [
@@ -2011,19 +2033,39 @@ export default function App() {
         ...pins
       };
 
+      const mergedSupervisorPins = {
+        "1": "2011",
+        "2": "2021",
+        "3": "2031",
+        "4": "2041",
+        "5": "2051",
+        "6": "2061",
+        "7": "2071",
+        "8": "2081",
+        "9": "2091",
+        "10": "2101",
+        ...cachedLocalSupervisorPins,
+        ...supervisorPins
+      };
+
       setCustomOwners(mergedOwners);
       setCustomOwnerPins(mergedPins);
+      setCustomOwnerSupervisorPins(mergedSupervisorPins);
       UNIQUE_OWNERS = mergedOwners;
       OWNER_PINS = mergedPins;
+      OWNER_SUPERVISOR_PINS = mergedSupervisorPins;
 
       localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(mergedOwners));
       localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(mergedPins));
+      localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(mergedSupervisorPins));
       setOwnersVersion((v) => v + 1);
     });
     return () => unsub();
   }, []);
 
   const [ownersVersion, setOwnersVersion] = useState(0);
+  const [isSwitchingTenant, setIsSwitchingTenant] = useState<boolean>(false);
+  const [switchingTenantName, setSwitchingTenantName] = useState<string>("");
 
   const [customOwners, setCustomOwners] = useState<any[]>(() => {
     try {
@@ -2039,6 +2081,13 @@ export default function App() {
     } catch (e) {}
     return OWNER_PINS;
   });
+  const [customOwnerSupervisorPins, setCustomOwnerSupervisorPins] = useState<Record<string, string>>(() => {
+    try {
+      const cached = localStorage.getItem("cocinet_custom_supervisor_pins_v3");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return OWNER_SUPERVISOR_PINS;
+  });
 
   const [showOwnerCrudModal, setShowOwnerCrudModal] = useState(false);
   const [editingOwner, setEditingOwner] = useState<any | null>(null);
@@ -2046,6 +2095,7 @@ export default function App() {
   const [formOwnerAvatar, setFormOwnerAvatar] = useState("🤠");
   const [formOwnerAccent, setFormOwnerAccent] = useState("indigo");
   const [formOwnerPin, setFormOwnerPin] = useState("");
+  const [formOwnerSupervisorPin, setFormOwnerSupervisorPin] = useState("");
   const [formOwnerLogo, setFormOwnerLogo] = useState("");
 
   const handleSaveOwner = async () => {
@@ -2056,6 +2106,7 @@ export default function App() {
 
     let updatedOwners = [...customOwners];
     let updatedPins = { ...customOwnerPins };
+    let updatedSupervisorPins = { ...customOwnerSupervisorPins };
 
     if (editingOwner) {
       // Edit existing
@@ -2067,6 +2118,9 @@ export default function App() {
       });
       if (formOwnerPin) {
         updatedPins[editingOwner.key] = formOwnerPin;
+      }
+      if (formOwnerSupervisorPin) {
+        updatedSupervisorPins[editingOwner.key] = formOwnerSupervisorPin;
       }
       triggerAppNotification("💾 Propietario Actualizado", `Se guardaron los cambios para ${formOwnerName}`, "success");
     } else {
@@ -2082,21 +2136,25 @@ export default function App() {
       };
       updatedOwners.push(newOwner);
       updatedPins[nextKey] = formOwnerPin || (2000 + parseInt(nextKey) * 10).toString();
-      triggerAppNotification("👑 Propietario Registrado", `Se creó el propietario ${formOwnerName} con PIN ${updatedPins[nextKey]}`, "success");
+      updatedSupervisorPins[nextKey] = formOwnerSupervisorPin || (2001 + parseInt(nextKey) * 10).toString();
+      triggerAppNotification("👑 Propietario Registrado", `Se creó el propietario ${formOwnerName} (PIN Owner: ${updatedPins[nextKey]}, Supervisor: ${updatedSupervisorPins[nextKey]})`, "success");
     }
 
     setCustomOwners(updatedOwners);
     setCustomOwnerPins(updatedPins);
+    setCustomOwnerSupervisorPins(updatedSupervisorPins);
     UNIQUE_OWNERS = updatedOwners;
     OWNER_PINS = updatedPins;
+    OWNER_SUPERVISOR_PINS = updatedSupervisorPins;
     localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(updatedOwners));
     localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(updatedPins));
+    localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(updatedSupervisorPins));
     setOwnersVersion(prev => prev + 1);
     setShowOwnerCrudModal(false);
     setEditingOwner(null);
 
     try {
-      await saveCustomOwnersToFirebase(updatedOwners, updatedPins);
+      await saveCustomOwnersToFirebase(updatedOwners, updatedPins, updatedSupervisorPins);
     } catch (err) {
       console.error("Error al guardar propietarios en Firebase:", err);
     }
@@ -2105,19 +2163,24 @@ export default function App() {
   const handleDeleteOwner = async (ownerKey: string) => {
     const updatedOwners = customOwners.filter(o => o.key !== ownerKey);
     const updatedPins = { ...customOwnerPins };
+    const updatedSupervisorPins = { ...customOwnerSupervisorPins };
     delete updatedPins[ownerKey];
+    delete updatedSupervisorPins[ownerKey];
 
     setCustomOwners(updatedOwners);
     setCustomOwnerPins(updatedPins);
+    setCustomOwnerSupervisorPins(updatedSupervisorPins);
     UNIQUE_OWNERS = updatedOwners;
     OWNER_PINS = updatedPins;
+    OWNER_SUPERVISOR_PINS = updatedSupervisorPins;
     localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(updatedOwners));
     localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(updatedPins));
+    localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(updatedSupervisorPins));
     setOwnersVersion(prev => prev + 1);
     triggerAppNotification("🗑️ Propietario Eliminado", "El propietario ha sido eliminado de la red de sucursales.", "warning");
 
     try {
-      await saveCustomOwnersToFirebase(updatedOwners, updatedPins);
+      await saveCustomOwnersToFirebase(updatedOwners, updatedPins, updatedSupervisorPins);
     } catch (err) {
       console.error("Error al guardar eliminación de propietario en Firebase:", err);
     }
@@ -2348,9 +2411,28 @@ export default function App() {
       
       const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
       triggerAppNotification(
-        "🔑 Acceso Autorizado",
+        "🔑 Acceso Propietario Autorizado",
         `Bienvenido al grupo de empresas de ${ownerName}.`,
         "success"
+      );
+      setOwnerPasswordInput("");
+      setPinAttempts(0);
+      return;
+    }
+
+    const matchedSupervisorEntry = Object.entries(OWNER_SUPERVISOR_PINS).find(([key, pin]) => pin === enteredPin);
+    if (matchedSupervisorEntry) {
+      const ownerKey = matchedSupervisorEntry[0];
+      setIsOwnerUnlocked(true);
+      setActiveOwnerFilter(ownerKey);
+      localStorage.setItem("cocinet_is_owner_unlocked", "true");
+      localStorage.setItem("cocinet_active_owner_filter", ownerKey);
+      
+      const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
+      triggerAppNotification(
+        "📋 Acceso Supervisor Autorizado",
+        `Acceso en rol de SUPERVISOR a las sucursales de ${ownerName}.`,
+        "info"
       );
       setOwnerPasswordInput("");
       setPinAttempts(0);
@@ -3754,6 +3836,31 @@ export default function App() {
           job.printLine(line + padding + price);
         });
 
+        if (pedido.deliveryClientName || pedido.deliveryAddress) {
+          job.printLine(" ");
+          job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
+          if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
+          if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
+          
+          if (pedido.deliveryAddress) {
+            let cleanAddr = pedido.deliveryAddress;
+            let refText = "";
+            if (pedido.deliveryAddress.includes("(Ref:")) {
+              const parts = pedido.deliveryAddress.split("(Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].replace(")", "").trim();
+            } else if (pedido.deliveryAddress.includes("| Ref:")) {
+              const parts = pedido.deliveryAddress.split("| Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].trim();
+            }
+            job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
+            if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
+          }
+          if (pedido.deliveryNotes) job.printLine(`NOTAS: ${pedido.deliveryNotes.toUpperCase()}`);
+          job.printLine("--------------------------------");
+        }
+
         job.right().printLine("--------------------------------");
         job.printLine(`SUBTOTAL: $${(pedido.subtotal || 0).toFixed(2)}`);
         if (pedido.propina > 0) job.printLine(`PROPINA: $${pedido.propina.toFixed(2)}`);
@@ -3929,7 +4036,6 @@ export default function App() {
         ...deliveryData
       };
 
-      setSelectedTable(updatedTable);
       setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
 
       triggerAppNotification(
@@ -4485,10 +4591,43 @@ export default function App() {
     }
   };
 
+  const handleReturnToSucursalesCatalog = () => {
+    setIsSwitchingTenant(true);
+    setSwitchingTenantName("Catálogo de Sucursales");
+    
+    setTables([]);
+    setComandas([]);
+    setHistory([]);
+    setInventory([]);
+    setSelectedTableId(null);
+    
+    setSelectedTenant(null as any);
+    setCurrentUser(null as any);
+    setLoginSubStep("tenant");
+    
+    setTimeout(() => {
+      setIsSwitchingTenant(false);
+    }, 450);
+
+    triggerAppNotification(
+      "🏠 Regreso a Sucursales",
+      "Selecciona la sucursal que deseas consultar o supervisar.",
+      "info"
+    );
+  };
+
   const handleSelectCompanyWithPinCheck = (
     company: CompanyTenant,
     context: "login" | "admin",
   ) => {
+    setIsSwitchingTenant(true);
+    setSwitchingTenantName(company.name);
+    setTables([]);
+    setComandas([]);
+    setHistory([]);
+    setInventory([]);
+    setSelectedTableId(null);
+
     if (isOwnerUnlocked) {
       setSelectedTenant(company);
       if (context === "login") {
@@ -4507,7 +4646,7 @@ export default function App() {
         setAppMode("corte-tabla");
         triggerAppNotification(
           "🏢 Acceso Autorizado",
-          `Conectado de manera directa a la sucursal: ${company.name} ⭐ (Usuario Propietario Autorizado)`,
+          `Conectado a la sucursal: ${company.name} ⭐ (Cargando datos en vivo)`,
           "success",
         );
         const newWsEvent = {
@@ -4516,13 +4655,13 @@ export default function App() {
           event: "TENANT_SWITCH",
           topic: `sync:auth_isolate`,
           timestamp: getMexicoISOString(),
-          details: `🔌 Acceso directo de propietario autorizado para la sucursal [${company.name}] | Base de datos sincronizada continuamente.`,
+          details: `🔌 Acceso directo de propietario/supervisor para la sucursal [${company.name}] | Base de datos sincronizada continuamente.`,
         };
         setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
       } else {
         triggerAppNotification(
           "🏢 Matriz Conectada - Panel Administrativo",
-          `Has ingresado de forma directa al panel de administración para: ${company.name} ⭐`,
+          `Has ingresado al panel de administración para: ${company.name} ⭐`,
           "success",
         );
         const newWsEvent = {
@@ -4531,12 +4670,18 @@ export default function App() {
           event: "ADMIN_TENANT_SWITCH",
           topic: `sync:auth_isolate`,
           timestamp: getMexicoISOString(),
-          details: `🔌 Panel administrativo de propietario accedido para: [${company.name}]`,
+          details: `🔌 Panel administrativo accedido para: [${company.name}]`,
         };
         setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
       }
+
+      setTimeout(() => {
+        setIsSwitchingTenant(false);
+      }, 900);
       return;
     }
+
+    setIsSwitchingTenant(false);
     setPendingTenant(company);
     setPendingTenantContext(context);
     setTypedPin("");
@@ -4595,12 +4740,20 @@ export default function App() {
 
         if (isValidPin) {
           if (pendingTenant) {
+            setIsSwitchingTenant(true);
+            setSwitchingTenantName(pendingTenant.name);
+            setTables([]);
+            setComandas([]);
+            setHistory([]);
+            setInventory([]);
+            setSelectedTableId(null);
+
             setSelectedTenant(pendingTenant);
             if (pendingTenantContext === "login") {
               setLoginSubStep("user");
               triggerAppNotification(
-                "🏢 Acceso Autorizado - PIN Sincronizado",
-                `Conectado a ${pendingTenant.name} como [${matchedRole}] (Sincronización via WebSockets activa) ⚡.`,
+                "🏢 Acceso Autorizado",
+                `Conectado a ${pendingTenant.name} como [${matchedRole}]. Sincronizando datos...`,
                 "success",
               );
               const newWsEvent = {
@@ -4609,13 +4762,13 @@ export default function App() {
                 event: "TENANT_SWITCH",
                 topic: `sync:auth_isolate`,
                 timestamp: getMexicoISOString(),
-                details: `🔌 Handshake WebSockets completado para [${matchedRole}]: [${pendingTenant.ownerEmail}] | Base de datos de la empresa sincronizada de manera continua.`,
+                details: `🔌 Handshake completado para [${matchedRole}]: [${pendingTenant.ownerEmail}] | Base de datos sincronizada.`,
               };
               setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
             } else {
               triggerAppNotification(
-                "🏢 Matriz Conectada - Acceso Sincronizado",
-                `Has cambiado con éxito el panel de administración a la matriz de: ${pendingTenant.name} ⭐ (Acceso como ${matchedRole})`,
+                "🏢 Matriz Conectada",
+                `Has cambiado a: ${pendingTenant.name} ⭐ (Acceso como ${matchedRole})`,
                 "success",
               );
               const newWsEvent = {
@@ -4624,10 +4777,14 @@ export default function App() {
                 event: "ADMIN_TENANT_SWITCH",
                 topic: `sync:auth_isolate`,
                 timestamp: getMexicoISOString(),
-                details: `🔌 Cambio de entorno administrativo autorizandose como [${matchedRole}] para: [${pendingTenant.name}] | Sincronizando base de datos.`,
+                details: `🔌 Cambio de entorno administrativo autorizandose como [${matchedRole}] para: [${pendingTenant.name}].`,
               };
               setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
             }
+
+            setTimeout(() => {
+              setIsSwitchingTenant(false);
+            }, 900);
           }
           setShowTenantPinModal(false);
           setPendingTenant(null);
@@ -4647,12 +4804,20 @@ export default function App() {
   };
 
   const handleSwitchBranch = (company: CompanyTenant) => {
+    setIsSwitchingTenant(true);
+    setSwitchingTenantName(company.name);
+    setTables([]);
+    setComandas([]);
+    setHistory([]);
+    setInventory([]);
+    setSelectedTableId(null);
+
     setSelectedTenant(company);
     localStorage.setItem("pos_selected_tenant", JSON.stringify(company));
 
     if (currentUser) {
       const isSistemas = currentUser.id.endsWith("-sistemas");
-      const isPropietario = currentUser.id.endsWith("-admin");
+      const isPropietario = currentUser.id.endsWith("-admin") || currentUser.role === "owner" || currentUser.role === "supervisor";
 
       if (isSistemas) {
         setCurrentUser({
@@ -4668,16 +4833,23 @@ export default function App() {
         else if (company.ownerKey === "5") ownerDisplayName = "San Sebastián";
         else ownerDisplayName = company.propietario;
 
+        const isSuper = currentUser.role === "supervisor";
         setCurrentUser({
           ...currentUser,
-          id: `${company.id}-admin`,
-          name: `Propietario: ${ownerDisplayName} 👑`,
-          avatar: company.avatar === "🤠" ? "fa-solid fa-hat-cowboy" : "fa-solid fa-user-shield",
+          id: `${company.id}-${isSuper ? 'supervisor' : 'admin'}`,
+          name: isSuper ? `Supervisor: ${ownerDisplayName} 📋` : `Propietario: ${ownerDisplayName} 👑`,
+          role: isSuper ? "supervisor" : "owner",
+          avatar: isSuper ? "fa-solid fa-user-gear" : (company.avatar === "🤠" ? "fa-solid fa-hat-cowboy" : "fa-solid fa-user-shield"),
         });
       }
     }
 
     setShowBranchSwitcherModal(false);
+
+    setTimeout(() => {
+      setIsSwitchingTenant(false);
+    }, 900);
+
     triggerAppNotification(
       "🏢 Sucursal Cambiada",
       `Te has cambiado con éxito a la sucursal: ${company.name}`,
@@ -5454,10 +5626,10 @@ export default function App() {
                 />
               </div>
 
-              {/* PIN code */}
+              {/* Owner PIN code */}
               <div>
                 <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                  PIN de Acceso (4 dígitos)
+                  PIN de Acceso Propietario (4 dígitos)
                 </label>
                 <input
                   type="text"
@@ -5467,6 +5639,25 @@ export default function App() {
                   onChange={(e) => setFormOwnerPin(e.target.value.replace(/\D/g, ""))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold font-mono text-slate-700 focus:outline-none focus:border-indigo-500 transition-all tracking-widest"
                 />
+              </div>
+
+              {/* Supervisor PIN code */}
+              <div>
+                <label className="block text-[11px] font-black text-indigo-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>📋 PIN Supervisor (Acceso a Sucursales)</span>
+                  <span className="text-[9.5px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-extrabold">Rol Supervisor</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={4}
+                  placeholder="Ej: 2011"
+                  value={formOwnerSupervisorPin}
+                  onChange={(e) => setFormOwnerSupervisorPin(e.target.value.replace(/\D/g, ""))}
+                  className="w-full bg-indigo-50/50 border border-indigo-200 rounded-xl px-4 py-3 text-xs font-bold font-mono text-indigo-900 focus:outline-none focus:border-indigo-500 transition-all tracking-widest"
+                />
+                <span className="text-[10.5px] text-slate-500 font-semibold mt-1 block">
+                  Permite al supervisor acceder y consultar las sucursales y matrices de este grupo.
+                </span>
               </div>
 
               {/* Avatar Emoji */}
@@ -8423,12 +8614,27 @@ export default function App() {
                 </motion.button>
               )}
 
-              {/* User badge */}
+              {/* Branch indicator & Switcher button */}
               {selectedTenant && (
-                <div className="hidden sm:flex items-center px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
-                    🏢 {selectedTenant.name}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="hidden sm:flex items-center px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
+                      🏢 {selectedTenant.name}
+                    </span>
+                  </div>
+
+                  {(isOwnerUnlocked || currentUser?.role === "owner" || currentUser?.role === "supervisor" || isMasterAdmin) && (
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowBranchSwitcherModal(true)}
+                      className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] uppercase flex items-center gap-1 shadow-md border border-indigo-400/40 cursor-pointer"
+                      title="Cambiar de Sucursal (Patrón / Supervisor)"
+                    >
+                      <span>🚪</span>
+                      <span className="hidden xs:inline">Cambiar Sucursal</span>
+                    </motion.button>
+                  )}
                 </div>
               )}
 
@@ -9891,11 +10097,12 @@ export default function App() {
                                             setFormOwnerAvatar(owner.avatar);
                                             setFormOwnerAccent(owner.accentColor);
                                             setFormOwnerPin(pin);
+                                            setFormOwnerSupervisorPin(customOwnerSupervisorPins[owner.key] || "");
                                             setFormOwnerLogo(owner.logo || "");
                                             setShowOwnerCrudModal(true);
                                           }}
                                           className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-250 text-slate-600 flex items-center justify-center transition-all cursor-pointer shadow-xs border-none font-bold"
-                                          title="Modificar Propietario"
+                                          title="Modificar Propietario / PIN Supervisor"
                                         >
                                           ✏️
                                         </button>
@@ -11120,14 +11327,45 @@ export default function App() {
         selectedTable,
       );
 
+      const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
+      const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
+      const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
+      const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
+      
+      let deliverySubStr = "";
+      if (dClient || dAddr) {
+        deliverySubStr = ` | 🛵 CLIENTE: ${dClient.toUpperCase()}`;
+        if (dPhone) deliverySubStr += ` (Tel: ${dPhone})`;
+        if (dAddr) {
+          let cleanA = dAddr;
+          let refT = "";
+          if (dAddr.includes("(Ref:")) {
+            const parts = dAddr.split("(Ref:");
+            cleanA = parts[0].trim();
+            refT = parts[1].replace(")", "").trim();
+          } else if (dAddr.includes("| Ref:")) {
+            const parts = dAddr.split("| Ref:");
+            cleanA = parts[0].trim();
+            refT = parts[1].trim();
+          }
+          deliverySubStr += ` | Dir: ${cleanA}`;
+          if (refT) deliverySubStr += ` | Ref: ${refT}`;
+        }
+        if (dNotes) deliverySubStr += ` | Notas: ${dNotes}`;
+      }
+
       triggerAppNotification(
         "🍳 COMANDA ENVIADA",
-        `Mesa ${tableLabel} | Folio: #${folio} | ${comandaItems.length} productos registrados. ${!navigator.onLine ? "📴 Guardado Offline (Modo Híbrido)" : "⚡ Sincronizado con Éxito"}`,
+        `Mesa ${tableLabel} | Folio: #${folio} | ${comandaItems.length} productos.${deliverySubStr}`,
         "success",
         {
           isComandaNotification: true,
           comandaFolio: folio,
           tableLabel: tableLabel,
+          deliveryClientName: dClient || null,
+          deliveryClientPhone: dPhone || null,
+          deliveryAddress: dAddr || null,
+          deliveryNotes: dNotes || null,
           items: comandaItems.map((i: any) => ({
             nombre: getFormattedProductName(i.product),
             cantidad: i.quantity,
@@ -11141,10 +11379,10 @@ export default function App() {
             tipo: "comanda",
             folio: folio,
             mesa: tableLabel,
-            deliveryClientName: selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null,
-            deliveryClientPhone: selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null,
-            deliveryAddress: selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null,
-            deliveryNotes: deliveryNotes || (selectedTable as any)?.deliveryNotes || null,
+            deliveryClientName: dClient || null,
+            deliveryClientPhone: dPhone || null,
+            deliveryAddress: dAddr || null,
+            deliveryNotes: dNotes || null,
             items: comandaItems.map((i: any) => ({
                 nombre: getFormattedProductName(i.product),
                 cantidad: i.quantity,
@@ -11498,6 +11736,57 @@ export default function App() {
       setPaymentMethod("cash");
       setRequiresInvoice(account.requiresInvoice || false);
       setShowPaymentModal(true);
+    }
+  };
+
+  const handleQuickChangeAccountStatus = async (
+    account: any,
+    newStatus: "en_camino" | "entregado" | "pagado" | "no_entregado"
+  ) => {
+    try {
+      let delStatus: "en_camino" | "entregado" | "no_entregado" = "entregado";
+      let paidState: boolean = true;
+
+      if (newStatus === "en_camino") {
+        delStatus = "en_camino";
+        paidState = false;
+      } else if (newStatus === "entregado" || newStatus === "pagado") {
+        delStatus = "entregado";
+        paidState = true;
+      } else if (newStatus === "no_entregado") {
+        delStatus = "no_entregado";
+        paidState = false;
+      }
+
+      await updateClosedAccountDeliveryStatusInFirebase(account.id, delStatus, paidState);
+
+      setHistory((prev) =>
+        prev.map((acc) =>
+          acc.id === account.id
+            ? {
+                ...acc,
+                deliveryStatus: delStatus,
+                isPaid: paidState,
+              }
+            : acc
+        )
+      );
+
+      const labelMap: Record<string, string> = {
+        en_camino: "🛵 EN CAMINO",
+        entregado: "✅ ENTREGADO / PAGADO",
+        pagado: "💵 PAGADO",
+        no_entregado: "⚠️ NO ENTREGADO",
+      };
+
+      triggerAppNotification(
+        "🔄 ESTATUS DE CUENTA ACTUALIZADO",
+        `La cuenta ${account.tableLabel} fue marcada como: ${labelMap[newStatus] || newStatus}`,
+        "success"
+      );
+    } catch (err) {
+      console.error("Error updating account status:", err);
+      triggerAppNotification("⚠️ Error", "No se pudo actualizar el estatus de la cuenta.", "warning");
     }
   };
 
@@ -11989,6 +12278,11 @@ export default function App() {
       // Parallel sync with Firestore Printer Queue (Centinela) for Tickets 🖨️
       if (selectedTenant) {
         const preFolio = "PRE-" + table.label + "-" + Date.now().toString().slice(-4);
+        const dClient = selectedDeliveryClient?.name || (table as any).deliveryClientName || null;
+        const dPhone = selectedDeliveryClient?.phone || (table as any).deliveryClientPhone || null;
+        const dAddr = selectedDeliveryAddress || (table as any).deliveryAddress || null;
+        const dNotes = deliveryNotes || (table as any).deliveryNotes || null;
+
         addPedidoToPrinter(selectedTenant.id, {
           folio: preFolio,
           mesa: table.label,
@@ -12008,11 +12302,37 @@ export default function App() {
           area: "caja",
           timestamp: getMexicoISOString(),
           atendidoPor: currentUser?.name || "S/M",
+          deliveryClientName: dClient,
+          deliveryClientPhone: dPhone,
+          deliveryAddress: dAddr,
+          deliveryNotes: dNotes,
         }).catch((err: any) => console.warn("Centinela Ticket Sync Error:", err));
+
+        let deliverySubStr = "";
+        if (dClient || dAddr) {
+          deliverySubStr = ` | 🛵 CLIENTE: ${String(dClient).toUpperCase()}`;
+          if (dPhone) deliverySubStr += ` (Tel: ${dPhone})`;
+          if (dAddr) {
+            let cleanA = dAddr;
+            let refT = "";
+            if (dAddr.includes("(Ref:")) {
+              const parts = dAddr.split("(Ref:");
+              cleanA = parts[0].trim();
+              refT = parts[1].replace(")", "").trim();
+            } else if (dAddr.includes("| Ref:")) {
+              const parts = dAddr.split("| Ref:");
+              cleanA = parts[0].trim();
+              refT = parts[1].trim();
+            }
+            deliverySubStr += ` | Dir: ${cleanA}`;
+            if (refT) deliverySubStr += ` | Ref: ${refT}`;
+          }
+          if (dNotes) deliverySubStr += ` | Notas: ${dNotes}`;
+        }
 
         triggerAppNotification(
           "💰 PRECUENTA SOLICITADA",
-          `Mesa: ${table.label} | Total: $${currentTotal.toFixed(2)} | Atendido por: ${currentUser?.name || "S/M"}`,
+          `Mesa: ${table.label} | Total: $${currentTotal.toFixed(2)}${deliverySubStr} | Atendido por: ${currentUser?.name || "S/M"}`,
           "success",
           {
             isCuentaNotification: true,
@@ -12022,6 +12342,10 @@ export default function App() {
             propina: paymentTipValue,
             descuento: currentDiscountAmount,
             total: currentTotal,
+            deliveryClientName: dClient,
+            deliveryClientPhone: dPhone,
+            deliveryAddress: dAddr,
+            deliveryNotes: dNotes,
             items: allItems
               .filter((i) => !i.isCancelled)
               .map((i) => ({
@@ -12039,6 +12363,10 @@ export default function App() {
                 propina: paymentTipValue,
                 descuento: currentDiscountAmount,
                 total: currentTotal,
+                deliveryClientName: dClient,
+                deliveryClientPhone: dPhone,
+                deliveryAddress: dAddr,
+                deliveryNotes: dNotes,
                 items: allItems
                   .filter((i) => !i.isCancelled)
                   .map((i) => ({
@@ -12182,20 +12510,37 @@ export default function App() {
         });
       }
 
-      if (table.zone === "Servicio a Domicilio") {
+      const dClientEsc = selectedDeliveryClient?.name || (table as any).deliveryClientName || "";
+      const dPhoneEsc = selectedDeliveryClient?.phone || (table as any).deliveryClientPhone || "";
+      const dAddrEsc = selectedDeliveryAddress || (table as any).deliveryAddress || "";
+      const dNotesEsc = deliveryNotes || (table as any).deliveryNotes || "";
+
+      if (table.zone === "Servicio a Domicilio" || dClientEsc || dAddrEsc) {
         job.printLine(" ");
         job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
-        if ((table as any).deliveryClientName) {
-          job.printLine(`CLIENTE: ${(table as any).deliveryClientName.toUpperCase()}`);
+        if (dClientEsc) {
+          job.printLine(`CLIENTE: ${dClientEsc.toUpperCase()}`);
         }
-        if ((table as any).deliveryClientPhone) {
-          job.printLine(`TEL: ${(table as any).deliveryClientPhone}`);
+        if (dPhoneEsc) {
+          job.printLine(`TEL: ${dPhoneEsc}`);
         }
-        if ((table as any).deliveryAddress) {
-          job.printLine(`DIR: ${(table as any).deliveryAddress.toUpperCase()}`);
+        if (dAddrEsc) {
+          let cleanAddr = dAddrEsc;
+          let refText = "";
+          if (dAddrEsc.includes("(Ref:")) {
+            const parts = dAddrEsc.split("(Ref:");
+            cleanAddr = parts[0].trim();
+            refText = parts[1].replace(")", "").trim();
+          } else if (dAddrEsc.includes("| Ref:")) {
+            const parts = dAddrEsc.split("| Ref:");
+            cleanAddr = parts[0].trim();
+            refText = parts[1].trim();
+          }
+          job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
+          if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
         }
-        if ((table as any).deliveryNotes) {
-          job.printLine(`NOTAS: ${(table as any).deliveryNotes.toUpperCase()}`);
+        if (dNotesEsc) {
+          job.printLine(`NOTAS: ${dNotesEsc.toUpperCase()}`);
         }
         job.printLine("--------------------------------");
       }
@@ -12328,13 +12673,28 @@ export default function App() {
           </div>
           <div class="divider"></div>
           ${
-            table.zone === "Servicio a Domicilio" ? `
+            table.zone === "Servicio a Domicilio" || (table as any).deliveryClientName || selectedDeliveryClient?.name || selectedDeliveryAddress ? `
               <div style="font-size: 11px; margin-top: 5px; margin-bottom: 5px; padding: 6px; border: 1px dashed #000; border-radius: 4px;">
                 <div style="font-weight: bold; text-align: center; margin-bottom: 4px;">-- DATOS DE ENVÍO --</div>
-                ${(table as any).deliveryClientName ? `<div><strong>CLIENTE:</strong> ${(table as any).deliveryClientName.toUpperCase()}</div>` : ""}
-                ${(table as any).deliveryClientPhone ? `<div><strong>TEL:</strong> ${(table as any).deliveryClientPhone}</div>` : ""}
-                ${(table as any).deliveryAddress ? `<div><strong>DIR:</strong> ${(table as any).deliveryAddress.toUpperCase()}</div>` : ""}
-                ${(table as any).deliveryNotes ? `<div><strong>NOTAS:</strong> ${(table as any).deliveryNotes.toUpperCase()}</div>` : ""}
+                ${selectedDeliveryClient?.name || (table as any).deliveryClientName ? `<div><strong>CLIENTE:</strong> ${(selectedDeliveryClient?.name || (table as any).deliveryClientName).toUpperCase()}</div>` : ""}
+                ${selectedDeliveryClient?.phone || (table as any).deliveryClientPhone ? `<div><strong>TEL:</strong> ${selectedDeliveryClient?.phone || (table as any).deliveryClientPhone}</div>` : ""}
+                ${selectedDeliveryAddress || (table as any).deliveryAddress ? (() => {
+                  const dAddr = selectedDeliveryAddress || (table as any).deliveryAddress;
+                  let cleanAddr = dAddr;
+                  let refText = "";
+                  if (dAddr.includes("(Ref:")) {
+                    const parts = dAddr.split("(Ref:");
+                    cleanAddr = parts[0].trim();
+                    refText = parts[1].replace(")", "").trim();
+                  } else if (dAddr.includes("| Ref:")) {
+                    const parts = dAddr.split("| Ref:");
+                    cleanAddr = parts[0].trim();
+                    refText = parts[1].trim();
+                  }
+                  return `<div><strong>DIR:</strong> ${cleanAddr.toUpperCase()}</div>` +
+                    (refText ? `<div><strong>REF:</strong> ${refText.toUpperCase()}</div>` : "");
+                })() : ""}
+                ${deliveryNotes || (table as any).deliveryNotes ? `<div><strong>NOTAS:</strong> ${(deliveryNotes || (table as any).deliveryNotes).toUpperCase()}</div>` : ""}
               </div>
               <div class="divider"></div>
             ` : ""
@@ -13601,26 +13961,32 @@ export default function App() {
                               <td style={{ padding: "12px 16px" }}>
                                 {account.status === "cancelled" ? (
                                   <IonBadge color="danger">Cancelada ❌</IonBadge>
-                                ) : account.zone === "Servicio a Domicilio" ? (
-                                  <>
-                                    {account.deliveryStatus === "entregado" ? (
-                                      <IonBadge color="success" style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                                        ✅ Entregado
-                                      </IonBadge>
-                                    ) : account.deliveryStatus === "no_entregado" ? (
-                                      <IonBadge color="danger" style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                                        ⚠️ No Entregado
-                                      </IonBadge>
-                                    ) : (
-                                      <IonBadge color="warning" style={{ display: "inline-flex", alignItems: "center", gap: "3px", animation: "pulse 1.5s infinite" }}>
-                                        🛵 En Camino
-                                      </IonBadge>
-                                    )}
-                                  </>
-                                ) : account.isPaid ? (
-                                  <IonBadge color="success">Pagado</IonBadge>
                                 ) : (
-                                  <IonBadge color="warning">Pendiente</IonBadge>
+                                  <select
+                                    value={
+                                      account.zone === "Servicio a Domicilio" || account.deliveryStatus
+                                        ? (account.deliveryStatus || (account.isPaid ? "entregado" : "en_camino"))
+                                        : (account.isPaid ? "pagado" : "en_camino")
+                                    }
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      const val = e.target.value as "en_camino" | "entregado" | "pagado" | "no_entregado";
+                                      handleQuickChangeAccountStatus(account, val);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={`text-xs font-black px-3 py-1.5 rounded-xl border cursor-pointer shadow-sm outline-none transition-all ${
+                                      account.deliveryStatus === "entregado" || (account.isPaid && account.deliveryStatus !== "en_camino" && account.deliveryStatus !== "no_entregado")
+                                        ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                        : account.deliveryStatus === "no_entregado"
+                                        ? "bg-red-100 text-red-800 border-red-300 hover:bg-red-200"
+                                        : "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 animate-pulse"
+                                    }`}
+                                  >
+                                    <option value="en_camino">🛵 En Camino</option>
+                                    <option value="entregado">✅ Entregado</option>
+                                    <option value="pagado">💵 Pagado</option>
+                                    <option value="no_entregado">⚠️ No Entregado</option>
+                                  </select>
                                 )}
                               </td>
                           </tr>
@@ -13812,6 +14178,36 @@ export default function App() {
                                         Cancelar Cuenta 🚫
                                       </IonButton>
                                     )}
+                                    {account.status !== "cancelled" && (
+                                       <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             handleQuickChangeAccountStatus(account, "en_camino");
+                                           }}
+                                           className={`px-2 py-1 text-[11px] font-black rounded-lg transition-all cursor-pointer ${
+                                             (account.deliveryStatus === "en_camino" || (!account.deliveryStatus && !account.isPaid))
+                                               ? "bg-amber-500 text-white shadow-sm"
+                                               : "bg-white text-slate-700 hover:bg-amber-50"
+                                           }`}
+                                         >
+                                           🛵 En Camino
+                                         </button>
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             handleQuickChangeAccountStatus(account, "entregado");
+                                           }}
+                                           className={`px-2 py-1 text-[11px] font-black rounded-lg transition-all cursor-pointer ${
+                                             (account.deliveryStatus === "entregado" || (account.isPaid && account.deliveryStatus !== "en_camino"))
+                                               ? "bg-emerald-600 text-white shadow-sm"
+                                               : "bg-white text-slate-700 hover:bg-emerald-50"
+                                           }`}
+                                         >
+                                           ✅ Entregado / Pagado
+                                         </button>
+                                       </div>
+                                     )}
                                     {account.isPendingCancellation && (
                                       <div className="flex items-center gap-2">
                                         <IonBadge color="warning" className="font-black px-3 py-1.5 rounded-xl">EN ESPERA ⏳</IonBadge>
@@ -38262,6 +38658,7 @@ Instrucciones:
         onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
         activeSessionOpenedAt={activeSessionForCorte?.openedAt}
       />
+      {isSwitchingTenant && renderSwitchingTenantOverlay()}
       {showTenantPinModal && renderPinModalOverlay()}
       {showBranchSwitcherModal && renderBranchSwitcherModal()}
       {showBluetoothConfigModal && renderBluetoothConfigModal()}
