@@ -24715,10 +24715,85 @@ Instrucciones:
                           📋 Tabla de Modificaciones Propuestas
                         </h3>
                         <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
-                          Revisa y edita los nombres y el orden de los productos en tus reportes.
+                          Revisa y edita los nombres y el orden de los productos en tus reportes. Usa la vista de árbol para arrastrar y reordenar fácilmente.
                         </p>
                       </div>
-                      <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                      <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                        {/* Selector de Modo de Vista */}
+                        <div style={{ display: "flex", background: "#f1f5f9", padding: "3px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
+                          <button
+                            type="button"
+                            onClick={() => setManageMenuViewMode("tree")}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "8px",
+                              fontSize: "0.78rem",
+                              fontWeight: "bold",
+                              border: "none",
+                              cursor: "pointer",
+                              background: manageMenuViewMode === "tree" ? "#4f46e5" : "transparent",
+                              color: manageMenuViewMode === "tree" ? "white" : "#64748b",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            🌳 Vista de Árbol (Drag & Drop)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setManageMenuViewMode("table")}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "8px",
+                              fontSize: "0.78rem",
+                              fontWeight: "bold",
+                              border: "none",
+                              cursor: "pointer",
+                              background: manageMenuViewMode === "table" ? "#4f46e5" : "transparent",
+                              color: manageMenuViewMode === "table" ? "white" : "#64748b",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            📋 Vista de Tabla
+                          </button>
+                        </div>
+
+                        {manageMenuViewMode === "tree" && (
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={expandAllTreeNodes}
+                              style={{
+                                background: "white",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "8px",
+                                padding: "6px 10px",
+                                fontSize: "0.75rem",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                                color: "#334155"
+                              }}
+                            >
+                              📖 Desplegar Todo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => collapseAllTreeNodes(relationMatches)}
+                              style={{
+                                background: "white",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "8px",
+                                padding: "6px 10px",
+                                fontSize: "0.75rem",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                                color: "#334155"
+                              }}
+                            >
+                              📕 Colapsar Todo
+                            </button>
+                          </div>
+                        )}
+
                         <input
                           type="text"
                           placeholder="Buscar producto..."
@@ -24729,7 +24804,7 @@ Instrucciones:
                             border: "1px solid #cbd5e1",
                             borderRadius: "8px",
                             fontSize: "0.85rem",
-                            width: "220px",
+                            width: "200px",
                             background: "white"
                           }}
                         />
@@ -24987,6 +25062,325 @@ Instrucciones:
                       </div>
                     )}
 
+                    {/* VISTA DE ÁRBOLES O TABLA */}
+                    {manageMenuViewMode === "tree" ? (
+                      <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {(() => {
+                          const secMap = new Map<string, Map<string, typeof relationMatches>>();
+                          filteredMatches.forEach(match => {
+                            const sec = (match.proposedSubcategory || "Sin Sección").trim() || "Sin Sección";
+                            const sub = (match.proposedSubgroup || "Sin Subgrupo").trim() || "Sin Subgrupo";
+                            if (!secMap.has(sec)) secMap.set(sec, new Map());
+                            const subMap = secMap.get(sec)!;
+                            if (!subMap.has(sub)) subMap.set(sub, []);
+                            subMap.get(sub)!.push(match);
+                          });
+
+                          if (secMap.size === 0) {
+                            return (
+                              <div style={{ textAlign: "center", padding: "30px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
+                                No se encontraron productos coincidentes con la búsqueda.
+                              </div>
+                            );
+                          }
+
+                          return Array.from(secMap.entries()).map(([secName, subMap]) => {
+                            const isSecCollapsed = !!collapsedTreeSections[secName];
+                            const secKey = `sec_${secName}`;
+                            const isSecDragOver = treeDragOverTargetKey === secKey;
+                            const totalSecProducts = Array.from(subMap.values()).reduce((acc, arr) => acc + arr.length, 0);
+
+                            return (
+                              <div
+                                key={secName}
+                                draggable={true}
+                                onDragStart={(e) => handleTreeDragStart(e, "section", secName)}
+                                onDragOver={(e) => handleTreeDragOver(e, secKey)}
+                                onDrop={(e) => handleTreeDrop(e, "section", secName)}
+                                style={{
+                                  border: isSecDragOver ? "3px solid #6366f1" : "2px solid #cbd5e1",
+                                  borderRadius: "14px",
+                                  background: isSecDragOver ? "#eef2ff" : "#f8fafc",
+                                  boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+                                  overflow: "hidden",
+                                  transition: "all 0.2s ease"
+                                }}
+                              >
+                                {/* Header de Sección */}
+                                <div
+                                  style={{
+                                    padding: "12px 16px",
+                                    background: "linear-gradient(90deg, #1e293b 0%, #334155 100%)",
+                                    color: "white",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    cursor: "grab",
+                                    userSelect: "none"
+                                  }}
+                                  title="Arrastra desde aquí para reordenar esta Sección entera"
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <span style={{ fontSize: "1.2rem", fontWeight: "900", color: "#93c5fd" }}>⋮⋮ 🪢 📂</span>
+                                    <span style={{ fontWeight: "800", fontSize: "1rem", letterSpacing: "0.5px" }}>
+                                      SECCIÓN: {secName.toUpperCase()}
+                                    </span>
+                                    <span style={{ background: "rgba(255,255,255,0.2)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: "bold" }}>
+                                      {totalSecProducts} {totalSecProducts === 1 ? "producto" : "productos"}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleTreeSectionCollapse(secName);
+                                    }}
+                                    style={{
+                                      background: "rgba(255,255,255,0.15)",
+                                      border: "1px solid rgba(255,255,255,0.3)",
+                                      color: "white",
+                                      borderRadius: "8px",
+                                      padding: "4px 10px",
+                                      fontSize: "0.75rem",
+                                      fontWeight: "bold",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px"
+                                    }}
+                                  >
+                                    <span>{isSecCollapsed ? "Desplegar ▶" : "Colapsar ▼"}</span>
+                                  </button>
+                                </div>
+
+                                {/* Subgrupos y Productos de la Sección */}
+                                {!isSecCollapsed && (
+                                  <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                                    {Array.from(subMap.entries()).map(([subName, items]) => {
+                                      const subKey = `sub_${secName}_${subName}`;
+                                      const fullSubKey = `${secName}___${subName}`;
+                                      const isSubCollapsed = !!collapsedTreeSubgroups[fullSubKey];
+                                      const isSubDragOver = treeDragOverTargetKey === subKey;
+
+                                      return (
+                                        <div
+                                          key={subName}
+                                          draggable={true}
+                                          onDragStart={(e) => handleTreeDragStart(e, "subgroup", secName, subName)}
+                                          onDragOver={(e) => handleTreeDragOver(e, subKey)}
+                                          onDrop={(e) => handleTreeDrop(e, "subgroup", secName, subName)}
+                                          style={{
+                                            border: isSubDragOver ? "2.5px solid #6366f1" : "1.5px solid #cbd5e1",
+                                            borderRadius: "12px",
+                                            background: isSubDragOver ? "#e0e7ff" : "white",
+                                            boxShadow: "0 2px 4px rgba(0,0,0,0.03)",
+                                            overflow: "hidden",
+                                            transition: "all 0.2s ease"
+                                          }}
+                                        >
+                                          {/* Header de Subgrupo */}
+                                          <div
+                                            style={{
+                                              padding: "10px 14px",
+                                              background: "#f1f5f9",
+                                              borderBottom: isSubCollapsed ? "none" : "1px solid #e2e8f0",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "space-between",
+                                              cursor: "grab",
+                                              userSelect: "none"
+                                            }}
+                                            title="Arrastra desde aquí para mover el Subgrupo"
+                                          >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                              <span style={{ fontSize: "1.1rem", color: "#6366f1", fontWeight: "bold" }}>⋮⋮ 🪢 📁</span>
+                                              <span style={{ fontWeight: "800", fontSize: "0.9rem", color: "#1e293b" }}>
+                                                SUBGRUPO: {subName}
+                                              </span>
+                                              <span style={{ background: "#e2e8f0", color: "#475569", padding: "2px 8px", borderRadius: "10px", fontSize: "0.7rem", fontWeight: "700" }}>
+                                                {items.length} productos
+                                              </span>
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleTreeSubgroupCollapse(fullSubKey);
+                                              }}
+                                              style={{
+                                                background: "white",
+                                                border: "1px solid #cbd5e1",
+                                                color: "#475569",
+                                                borderRadius: "6px",
+                                                padding: "3px 8px",
+                                                fontSize: "0.7rem",
+                                                fontWeight: "bold",
+                                                cursor: "pointer"
+                                              }}
+                                            >
+                                              {isSubCollapsed ? "▶" : "▼"}
+                                            </button>
+                                          </div>
+
+                                          {/* Lista de Productos del Subgrupo */}
+                                          {!isSubCollapsed && (
+                                            <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                              {items.map((match) => {
+                                                const pObj = products.find(p => p.id === match.productId);
+                                                if (!pObj) return null;
+                                                const prodKey = `prod_${match.productId}`;
+                                                const isProdDragOver = treeDragOverTargetKey === prodKey;
+                                                const idx = relationMatches.findIndex(m => m.productId === match.productId);
+
+                                                return (
+                                                  <div
+                                                    key={match.productId}
+                                                    draggable={true}
+                                                    onDragStart={(e) => handleTreeDragStart(e, "product", secName, subName, match.productId)}
+                                                    onDragOver={(e) => handleTreeDragOver(e, prodKey)}
+                                                    onDrop={(e) => handleTreeDrop(e, "product", secName, subName, match.productId)}
+                                                    style={{
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      justifyContent: "space-between",
+                                                      padding: "8px 12px",
+                                                      borderRadius: "10px",
+                                                      border: isProdDragOver ? "2px solid #6366f1" : "1px solid #e2e8f0",
+                                                      background: selectedRelationProductIds.includes(match.productId)
+                                                        ? "#f0fdf4"
+                                                        : isProdDragOver
+                                                        ? "#eef2ff"
+                                                        : "#fafafa",
+                                                      transition: "all 0.15s ease",
+                                                      gap: "10px",
+                                                      flexWrap: "wrap"
+                                                    }}
+                                                  >
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "220px" }}>
+                                                      {/* Checkbox */}
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={selectedRelationProductIds.includes(match.productId)}
+                                                        onChange={() => {
+                                                          const isSelected = selectedRelationProductIds.includes(match.productId);
+                                                          if (isSelected) {
+                                                            setSelectedRelationProductIds(prev => prev.filter(id => id !== match.productId));
+                                                          } else {
+                                                            setSelectedRelationProductIds(prev => [...prev, match.productId]);
+                                                          }
+                                                        }}
+                                                        style={{ transform: "scale(1.2)", cursor: "pointer" }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      />
+
+                                                      {/* Grip handle emoji */}
+                                                      <span
+                                                        style={{
+                                                          cursor: "grab",
+                                                          userSelect: "none",
+                                                          fontSize: "1.1rem",
+                                                          color: "#6366f1",
+                                                          fontWeight: "900"
+                                                        }}
+                                                        title="Arrastra para mover este producto"
+                                                      >
+                                                        ⋮⋮ 🪢 📦
+                                                      </span>
+
+                                                      {/* Product info */}
+                                                      <div style={{ flex: 1 }}>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                          <span style={{ fontWeight: "800", color: "#0f172a", fontSize: "0.9rem" }}>
+                                                            {match.proposedReportName}
+                                                          </span>
+                                                        </div>
+                                                        <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: "2px" }}>
+                                                          Original: <strong style={{ color: "#334155" }}>{match.originalName}</strong>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+
+                                                    {/* Orden input & Actions */}
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                                        <span style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: "800" }}>ORDEN:</span>
+                                                        <input
+                                                          type="number"
+                                                          value={match.proposedSortOrder === 9999 ? "" : match.proposedSortOrder}
+                                                          placeholder="9999"
+                                                          onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedSortOrder: val } : m));
+                                                          }}
+                                                          style={{
+                                                            width: "60px",
+                                                            padding: "4px 6px",
+                                                            border: "1px solid #cbd5e1",
+                                                            borderRadius: "6px",
+                                                            fontSize: "0.8rem",
+                                                            textAlign: "center",
+                                                            fontWeight: "bold",
+                                                            background: "white"
+                                                          }}
+                                                        />
+                                                      </div>
+
+                                                      <button
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          const nextText = toggleTextCase(match.proposedReportName);
+                                                          setRelationMatches(prev => prev.map((m, i) => i === idx ? { ...m, proposedReportName: nextText } : m));
+                                                        }}
+                                                        style={{
+                                                          background: "#f1f5f9",
+                                                          border: "1px solid #cbd5e1",
+                                                          borderRadius: "6px",
+                                                          padding: "4px 8px",
+                                                          cursor: "pointer",
+                                                          fontSize: "0.8rem"
+                                                        }}
+                                                        title="Alternar Mayúsculas"
+                                                      >
+                                                        🔠
+                                                      </button>
+
+                                                      <button
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          setProductCrudModal({ isOpen: true, product: pObj });
+                                                        }}
+                                                        style={{
+                                                          background: "#4f46e5",
+                                                          color: "white",
+                                                          border: "none",
+                                                          borderRadius: "6px",
+                                                          padding: "4px 10px",
+                                                          fontSize: "0.75rem",
+                                                          fontWeight: "bold",
+                                                          cursor: "pointer"
+                                                        }}
+                                                      >
+                                                        ✏️ Editar
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    ) : (
                     <div style={{ overflowX: "auto", marginBottom: "20px", maxHeight: "500px", border: "1px solid #e2e8f0", borderRadius: "12px" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px", fontSize: "0.85rem" }}>
                         <thead>
@@ -25273,6 +25667,7 @@ Instrucciones:
                         </tbody>
                       </table>
                     </div>
+                  )}
 
                     <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", flexWrap: "wrap" }}>
                       <button
@@ -25351,6 +25746,198 @@ Instrucciones:
   const [relationLog, setRelationLog] = useState<string[]>([]);
   const [relationFilter, setRelationFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [relationSearch, setRelationSearch] = useState<string>("");
+
+  // Tree View & Drag and Drop State for Menu Products Reordering
+  const [manageMenuViewMode, setManageMenuViewMode] = useState<'tree' | 'table'>('tree');
+  const [collapsedTreeSections, setCollapsedTreeSections] = useState<Record<string, boolean>>({});
+  const [collapsedTreeSubgroups, setCollapsedTreeSubgroups] = useState<Record<string, boolean>>({});
+  const [treeDragSource, setTreeDragSource] = useState<{
+    type: 'section' | 'subgroup' | 'product';
+    sectionName: string;
+    subgroupName?: string;
+    productId?: string;
+  } | null>(null);
+  const [treeDragOverTargetKey, setTreeDragOverTargetKey] = useState<string | null>(null);
+
+  const toggleTreeSectionCollapse = (secName: string) => {
+    setCollapsedTreeSections(prev => ({ ...prev, [secName]: !prev[secName] }));
+  };
+
+  const toggleTreeSubgroupCollapse = (subKey: string) => {
+    setCollapsedTreeSubgroups(prev => ({ ...prev, [subKey]: !prev[subKey] }));
+  };
+
+  const expandAllTreeNodes = () => {
+    setCollapsedTreeSections({});
+    setCollapsedTreeSubgroups({});
+  };
+
+  const collapseAllTreeNodes = (matches: typeof relationMatches) => {
+    const secColl: Record<string, boolean> = {};
+    const subColl: Record<string, boolean> = {};
+    matches.forEach(m => {
+      const sec = (m.proposedSubcategory || "Sin Sección").trim() || "Sin Sección";
+      const sub = (m.proposedSubgroup || "Sin Subgrupo").trim() || "Sin Subgrupo";
+      secColl[sec] = true;
+      subColl[`${sec}___${sub}`] = true;
+    });
+    setCollapsedTreeSections(secColl);
+    setCollapsedTreeSubgroups(subColl);
+  };
+
+  const handleTreeDragStart = (
+    e: React.DragEvent,
+    type: 'section' | 'subgroup' | 'product',
+    sectionName: string,
+    subgroupName?: string,
+    productId?: string
+  ) => {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = "move";
+    const payload = { type, sectionName, subgroupName: subgroupName || "", productId: productId || "" };
+    e.dataTransfer.setData("text/plain", JSON.stringify(payload));
+    setTreeDragSource(payload);
+  };
+
+  const handleTreeDragOver = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (treeDragOverTargetKey !== targetKey) {
+      setTreeDragOverTargetKey(targetKey);
+    }
+  };
+
+  const handleTreeDrop = (
+    e: React.DragEvent,
+    targetType: 'section' | 'subgroup' | 'product',
+    targetSectionName: string,
+    targetSubgroupName?: string,
+    targetProductId?: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTreeDragOverTargetKey(null);
+
+    const rawData = e.dataTransfer.getData("text/plain");
+    if (!rawData) {
+      setTreeDragSource(null);
+      return;
+    }
+
+    try {
+      const dragData = JSON.parse(rawData) as {
+        type: 'section' | 'subgroup' | 'product';
+        sectionName: string;
+        subgroupName: string;
+        productId: string;
+      };
+
+      setRelationMatches(prev => {
+        const next = [...prev];
+
+        // 1. PRODUCT DRAG & DROP
+        if (dragData.type === "product" && dragData.productId) {
+          const sourceIdx = next.findIndex(m => m.productId === dragData.productId);
+          if (sourceIdx === -1) return prev;
+          const [draggedProduct] = next.splice(sourceIdx, 1);
+
+          // Update target category & subgroup
+          draggedProduct.proposedSubcategory = targetSectionName === "Sin Sección" ? "" : targetSectionName;
+          draggedProduct.proposedSubgroup = (targetSubgroupName || "Sin Subgrupo") === "Sin Subgrupo" ? "" : (targetSubgroupName || "");
+
+          if (targetType === "product" && targetProductId) {
+            const targetIdx = next.findIndex(m => m.productId === targetProductId);
+            if (targetIdx !== -1) {
+              next.splice(targetIdx, 0, draggedProduct);
+            } else {
+              next.push(draggedProduct);
+            }
+          } else if (targetType === "subgroup") {
+            const tgtSub = (targetSubgroupName || "Sin Subgrupo") === "Sin Subgrupo" ? "" : (targetSubgroupName || "");
+            const tgtSec = targetSectionName === "Sin Sección" ? "" : targetSectionName;
+            let lastSubIdx = -1;
+            for (let i = next.length - 1; i >= 0; i--) {
+              if (
+                (next[i].proposedSubcategory || "") === tgtSec &&
+                (next[i].proposedSubgroup || "") === tgtSub
+              ) {
+                lastSubIdx = i;
+                break;
+              }
+            }
+            if (lastSubIdx !== -1) {
+              next.splice(lastSubIdx + 1, 0, draggedProduct);
+            } else {
+              next.push(draggedProduct);
+            }
+          } else {
+            next.push(draggedProduct);
+          }
+        }
+
+        // 2. SUBGROUP DRAG & DROP
+        else if (dragData.type === "subgroup" && dragData.subgroupName) {
+          const sourceSubName = dragData.subgroupName === "Sin Subgrupo" ? "" : dragData.subgroupName;
+          const sourceSecName = dragData.sectionName === "Sin Sección" ? "" : dragData.sectionName;
+          const targetSecName = targetSectionName === "Sin Sección" ? "" : targetSectionName;
+
+          const subgroupItems = next.filter(
+            m => (m.proposedSubcategory || "") === sourceSecName && (m.proposedSubgroup || "") === sourceSubName
+          );
+          const remainingItems = next.filter(
+            m => !((m.proposedSubcategory || "") === sourceSecName && (m.proposedSubgroup || "") === sourceSubName)
+          );
+
+          subgroupItems.forEach(item => {
+            item.proposedSubcategory = targetSecName;
+          });
+
+          if (targetType === "subgroup" && targetSubgroupName) {
+            const tgtSubName = targetSubgroupName === "Sin Subgrupo" ? "" : targetSubgroupName;
+            const insertIdx = remainingItems.findIndex(
+              m => (m.proposedSubcategory || "") === targetSecName && (m.proposedSubgroup || "") === tgtSubName
+            );
+            if (insertIdx !== -1) {
+              remainingItems.splice(insertIdx, 0, ...subgroupItems);
+            } else {
+              remainingItems.push(...subgroupItems);
+            }
+          } else {
+            remainingItems.push(...subgroupItems);
+          }
+          return remainingItems.map((item, idx) => ({ ...item, proposedSortOrder: idx + 1 }));
+        }
+
+        // 3. SECTION DRAG & DROP
+        else if (dragData.type === "section" && dragData.sectionName) {
+          const sourceSecName = dragData.sectionName === "Sin Sección" ? "" : dragData.sectionName;
+          const targetSecName = targetSectionName === "Sin Sección" ? "" : targetSectionName;
+
+          const sectionItems = next.filter(m => (m.proposedSubcategory || "") === sourceSecName);
+          const remainingItems = next.filter(m => (m.proposedSubcategory || "") !== sourceSecName);
+
+          const insertIdx = remainingItems.findIndex(m => (m.proposedSubcategory || "") === targetSecName);
+          if (insertIdx !== -1) {
+            remainingItems.splice(insertIdx, 0, ...sectionItems);
+          } else {
+            remainingItems.push(...sectionItems);
+          }
+          return remainingItems.map((item, idx) => ({ ...item, proposedSortOrder: idx + 1 }));
+        }
+
+        // Reassign sequential sortOrder for all items
+        return next.map((item, idx) => ({
+          ...item,
+          proposedSortOrder: idx + 1
+        }));
+      });
+    } catch (err) {
+      console.error("Error parsing drag data:", err);
+    } finally {
+      setTreeDragSource(null);
+    }
+  };
 
   const suggestProductReportName = (product: any): string => {
     const name = (product.name || "").trim().toUpperCase();
