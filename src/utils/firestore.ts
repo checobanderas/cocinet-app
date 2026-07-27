@@ -511,6 +511,7 @@ export async function addComandaToFirebase(
   notes: string,
   createdBy: any,
   tableInfo: any,
+  folioInterno?: string,
 ) {
   const folio = Date.now();
   const currentTenant = tableInfo.tenantId || getCurrentTenantId();
@@ -519,14 +520,13 @@ export async function addComandaToFirebase(
   const newComanda = cleanUndefined({
     uid: "comanda-" + folio + "-" + Math.floor(Math.random() * 1000000),
     folio,
+    folioInterno: folioInterno || null,
     timestamp: now,
     updatedAt: now,
     items: items.map((i) => ({ ...i, isCancelled: false })),
     generalNotes: notes,
     createdBy: createdBy || null,
   });
-
-
 
   // Update the table to include this new comanda
   const tableRef = doc(db, "tables", tableId);
@@ -539,6 +539,15 @@ export async function addComandaToFirebase(
       updatedAt: getMexicoISOString(),
     }),
   );
+
+  if (folioInterno) {
+    try {
+      const tenantRef = doc(db, "tenants", currentTenant);
+      await runWrite(updateDoc(tenantRef, { lastInternalFolio: folioInterno }));
+    } catch (err) {
+      console.warn("No se pudo actualizar lastInternalFolio en tenant doc:", err);
+    }
+  }
 
   return folio;
 }

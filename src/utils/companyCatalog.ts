@@ -15,6 +15,7 @@ export interface CompanyTenant {
   lat?: number;
   lng?: number;
   logoUrl?: string;
+  requireInternalFolio?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

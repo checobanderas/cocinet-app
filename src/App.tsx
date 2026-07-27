@@ -335,6 +335,7 @@ interface CartItem {
 
 interface Comanda {
   folio: number;
+  folioInterno?: string;
   timestamp: Date;
   items: CartItem[];
   generalNotes?: string;
@@ -903,6 +904,8 @@ export default function App() {
         logoUrl: selectedTenant.logoUrl || ownerLogo || "",
         geminiApiKey: companyConfig?.geminiApiKey || "",
       });
+
+      setTicketRequireInternalFolio(selectedTenant.requireInternalFolio === true);
 
       const tenantUsers = getTenantUsers(selectedTenant.id);
       setUsers(tenantUsers);
@@ -2283,6 +2286,7 @@ export default function App() {
   const [formTenantLat, setFormTenantLat] = useState<number | "">("");
   const [formTenantLng, setFormTenantLng] = useState<number | "">("");
   const [formTenantLogoUrl, setFormTenantLogoUrl] = useState("");
+  const [formTenantRequireInternalFolio, setFormTenantRequireInternalFolio] = useState<boolean>(false);
 
   const resetTenantForm = () => {
     setEditingTenant(null);
@@ -2299,6 +2303,7 @@ export default function App() {
     setFormTenantLat("");
     setFormTenantLng("");
     setFormTenantLogoUrl("");
+    setFormTenantRequireInternalFolio(false);
   };
 
   const handleEditTenantClick = (tenant: CompanyTenant) => {
@@ -2316,6 +2321,7 @@ export default function App() {
     setFormTenantLat(tenant.lat ?? "");
     setFormTenantLng(tenant.lng ?? "");
     setFormTenantLogoUrl(tenant.logoUrl || "");
+    setFormTenantRequireInternalFolio(tenant.requireInternalFolio === true);
     setShowTenantCrudModal(true);
   };
 
@@ -2363,6 +2369,7 @@ export default function App() {
       lat: formTenantLat !== "" ? Number(formTenantLat) : undefined,
       lng: formTenantLng !== "" ? Number(formTenantLng) : undefined,
       logoUrl: formTenantLogoUrl || "",
+      requireInternalFolio: formTenantRequireInternalFolio,
       createdAt: editingTenant?.createdAt || getMexicoISOString(),
       updatedAt: getMexicoISOString(),
     };
@@ -4199,6 +4206,16 @@ export default function App() {
   const [showCloseTurnConfirm, setShowCloseTurnConfirm] = useState(false);
   const [showResetSalesConfirm, setShowResetSalesConfirm] = useState(false);
 
+  // Estados para Modal de Folio Interno de Comanda por Sucursal 📋
+  const [showFolioModal, setShowFolioModal] = useState<boolean>(false);
+  const [folioStep, setFolioStep] = useState<1 | 2>(1);
+  const [folioInput1, setFolioInput1] = useState<string>("");
+  const [folioInputValue, setFolioInputValue] = useState<string>("");
+  const [folioModalError, setFolioModalError] = useState<string | null>(null);
+  const [pendingGoToCheckout, setPendingGoToCheckout] = useState<boolean>(false);
+  const [suggestedLastFolio, setSuggestedLastFolio] = useState<string>("");
+  const folioInputRef = useRef<HTMLInputElement | null>(null);
+
   // Estados para Corte Nuevo y Arqueo de Caja
   const [corteNuevoType, setCorteNuevoType] = useState<"in" | "out">("in");
   const [corteNuevoConcept, setCorteNuevoConcept] =
@@ -4432,6 +4449,7 @@ export default function App() {
     "¡Gracias por su visita! Vuelva pronto 🌮",
   );
   const [ticketGeminiApiKey, setTicketGeminiApiKey] = useState<string>("");
+  const [ticketRequireInternalFolio, setTicketRequireInternalFolio] = useState<boolean>(false);
 
   const [companyConfig, setCompanyConfig] = useState<{
     businessName: string;
@@ -5597,6 +5615,24 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Opción Folio Interno */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 flex items-center justify-between">
+                <div className="pr-3">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer">
+                    <span>📋</span> Exigir Folio Interno por Comanda
+                  </label>
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
+                    Si está activado, el sistema solicitará capturar y confirmar el folio de comanda al enviar cada pedido en esta sucursal.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formTenantRequireInternalFolio}
+                  onChange={(e) => setFormTenantRequireInternalFolio(e.target.checked)}
+                  className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
+                />
               </div>
             </div>
 
@@ -9138,28 +9174,66 @@ export default function App() {
 
                       {/* Right: Inputs & visibility toggle */}
                       <div className="flex flex-col gap-2.5 min-w-[245px] text-left">
-                        {/* Visibility slider checkbox */}
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={conf.visible}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setCompaniesConfig((prev) => ({
-                                ...prev,
-                                [c.id]: {
-                                  ...conf,
-                                  visible: checked,
-                                  updated_at: getMexicoISOString(),
-                                },
-                              }));
-                            }}
-                            className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
-                          />
-                          <span className="text-xs font-extrabold text-slate-700">
-                            👁️ Mostrar en Login
-                          </span>
-                        </label>
+                        <div className="flex flex-col gap-2">
+                          {/* Visibility slider checkbox */}
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={conf.visible}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setCompaniesConfig((prev) => ({
+                                  ...prev,
+                                  [c.id]: {
+                                    ...conf,
+                                    visible: checked,
+                                    updated_at: getMexicoISOString(),
+                                  },
+                                }));
+                              }}
+                              className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+                            />
+                            <span className="text-xs font-extrabold text-slate-700">
+                              👁️ Mostrar en Login
+                            </span>
+                          </label>
+
+                          {/* Require Internal Folio switch */}
+                          <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-100/80 px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition">
+                            <input
+                              type="checkbox"
+                              checked={c.requireInternalFolio === true}
+                              onChange={async (e) => {
+                                const checked = e.target.checked;
+                                const updatedTenant = {
+                                  ...c,
+                                  requireInternalFolio: checked,
+                                };
+                                const idx = COMPANY_CATALOG.findIndex(item => item.id === c.id);
+                                if (idx !== -1) {
+                                  COMPANY_CATALOG[idx] = updatedTenant;
+                                }
+                                try {
+                                  await addTenantToFirebase(updatedTenant);
+                                  if (selectedTenant?.id === c.id) {
+                                    setSelectedTenant(updatedTenant);
+                                  }
+                                  triggerAppNotification(
+                                    checked ? "📋 Folio Interno Exigido" : "⚡ Folio Interno Libre (Desactivado)",
+                                    `Folio interno ${checked ? "activado" : "deshabilitado"} para la sucursal: ${c.name}`,
+                                    checked ? "info" : "warning"
+                                  );
+                                } catch (err: any) {
+                                  console.error("Error al actualizar folio interno:", err);
+                                }
+                              }}
+                              className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                            />
+                            <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1">
+                              <span>📋</span> Exigir Folio Interno
+                            </span>
+                          </label>
+                        </div>
 
                         {/* Group Name input with Auto-complete Chips */}
                         <div className="space-y-1.5">
@@ -11258,7 +11332,7 @@ export default function App() {
 
         job.center();
         job.setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED).bold(true);
-        job.printLine(`COMANDA #${comanda.folio}`);
+        job.printLine(comanda.folioInterno ? `COMANDA INTERNA #${comanda.folioInterno}` : `COMANDA #${comanda.folio}`);
         if (comanda.createdBy) {
           job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
           job.printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`);
@@ -11399,7 +11473,162 @@ export default function App() {
     }, 500);
   };
 
+  const getLastInternalFolio = (
+    tenantId: string,
+    tablesList: TableData[],
+    historyList: ClosedAccount[]
+  ): string => {
+    const cached = localStorage.getItem("cocinet_last_internal_folio_" + tenantId);
+    let lastFound: string = cached || "";
+    let highestNum = -1;
+
+    if (cached && !isNaN(Number(cached))) {
+      highestNum = Number(cached);
+    }
+
+    const allComandas: Comanda[] = [];
+
+    (tablesList || []).forEach((t: any) => {
+      const tTenant = t.tenantId || tenantId;
+      if (tTenant === tenantId && Array.isArray(t.comandas)) {
+        allComandas.push(...t.comandas);
+      }
+    });
+
+    (historyList || []).forEach((h: any) => {
+      const hTenant = h.tenantId || tenantId;
+      if (hTenant === tenantId && Array.isArray(h.comandas)) {
+        allComandas.push(...h.comandas);
+      }
+    });
+
+    allComandas.forEach((c: any) => {
+      if (c.folioInterno) {
+        const valStr = String(c.folioInterno).trim();
+        const num = Number(valStr);
+        if (!isNaN(num) && num > highestNum) {
+          highestNum = num;
+          lastFound = valStr;
+        } else if (highestNum === -1 && !lastFound) {
+          lastFound = valStr;
+        }
+      }
+    });
+
+    return lastFound;
+  };
+
+  const isInternalFolioDuplicate = (
+    candidateFolio: string,
+    tenantId: string,
+    tablesList: TableData[],
+    historyList: ClosedAccount[]
+  ): boolean => {
+    if (!candidateFolio) return false;
+    const target = candidateFolio.trim().toLowerCase();
+
+    for (const t of (tablesList || []) as any[]) {
+      const tTenant = t.tenantId || tenantId;
+      if (tTenant === tenantId && Array.isArray(t.comandas)) {
+        for (const c of t.comandas) {
+          if (c.folioInterno && String(c.folioInterno).trim().toLowerCase() === target) {
+            return true;
+          }
+        }
+      }
+    }
+
+    for (const h of (historyList || []) as any[]) {
+      const hTenant = h.tenantId || tenantId;
+      if (hTenant === tenantId && Array.isArray(h.comandas)) {
+        for (const c of h.comandas) {
+          if (c.folioInterno && String(c.folioInterno).trim().toLowerCase() === target) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  };
+
   const generateOrder = async (goToCheckout: boolean = false) => {
+    if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+
+    // Folio interno DESHABILITADO por defecto. Solo se exige si la sucursal lo tiene activado explícitamente (true)
+    const requiresFolio = selectedTenant?.requireInternalFolio === true;
+    if (!requiresFolio) {
+      await executeGenerateOrder("", goToCheckout);
+      return;
+    }
+
+    const tenantId = selectedTenant?.id || "";
+    const lastFolio = getLastInternalFolio(tenantId, tables, history);
+
+    setFolioStep(1);
+    setFolioInput1("");
+    setFolioInputValue("");
+    setFolioModalError(null);
+    setPendingGoToCheckout(goToCheckout);
+    setSuggestedLastFolio(lastFolio);
+    setShowFolioModal(true);
+    setTimeout(() => {
+      if (folioInputRef.current) folioInputRef.current.focus();
+    }, 100);
+  };
+
+  const handleFolioStepSubmit = async () => {
+    const val = folioInputValue.trim();
+    if (!val) {
+      setFolioModalError("⚠️ Por favor ingresa el número de folio interno.");
+      return;
+    }
+
+    if (folioStep === 1) {
+      setFolioInput1(val);
+      setFolioInputValue("");
+      setFolioModalError(null);
+      setFolioStep(2);
+      setTimeout(() => {
+        if (folioInputRef.current) folioInputRef.current.focus();
+      }, 50);
+    } else {
+      const f1 = folioInput1.trim();
+      const f2 = val;
+
+      if (f1.toLowerCase() !== f2.toLowerCase()) {
+        setFolioModalError(`❌ Los folios no coinciden (#${f1} vs #${f2}). Intenta de nuevo.`);
+        setFolioStep(1);
+        setFolioInput1("");
+        setFolioInputValue("");
+        setTimeout(() => {
+          if (folioInputRef.current) folioInputRef.current.focus();
+        }, 50);
+        return;
+      }
+
+      const tenantId = selectedTenant?.id || "";
+      if (isInternalFolioDuplicate(f1, tenantId, tables, history)) {
+        setFolioModalError(`⚠️ El folio interno #${f1} ya fue registrado previamente en esta sucursal.`);
+        setFolioStep(1);
+        setFolioInput1("");
+        setFolioInputValue("");
+        setTimeout(() => {
+          if (folioInputRef.current) folioInputRef.current.focus();
+        }, 50);
+        return;
+      }
+
+      try {
+        localStorage.setItem("cocinet_last_internal_folio_" + tenantId, f1);
+      } catch (e) {}
+
+      setShowFolioModal(false);
+      await executeGenerateOrder(f1, pendingGoToCheckout);
+    }
+  };
+
+  const executeGenerateOrder = async (folioInterno: string, goToCheckout: boolean = false) => {
     if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
     setIsGeneratingOrder(true);
     setMenuToastMessage("Procesando comanda...");
@@ -11418,6 +11647,7 @@ export default function App() {
         notes,
         currentUser,
         selectedTable,
+        folioInterno,
       );
 
       const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
@@ -11449,11 +11679,12 @@ export default function App() {
 
       triggerAppNotification(
         "🍳 COMANDA ENVIADA",
-        `Mesa ${tableLabel} | Folio: #${folio} | ${comandaItems.length} productos.${deliverySubStr}`,
+        `Mesa ${tableLabel} | Folio Interno: #${folioInterno} | ${comandaItems.length} productos.${deliverySubStr}`,
         "success",
         {
           isComandaNotification: true,
           comandaFolio: folio,
+          folioInterno: folioInterno,
           tableLabel: tableLabel,
           deliveryClientName: dClient || null,
           deliveryClientPhone: dPhone || null,
@@ -11471,6 +11702,7 @@ export default function App() {
           pedidoData: {
             tipo: "comanda",
             folio: folio,
+            folioInterno: folioInterno,
             mesa: tableLabel,
             deliveryClientName: dClient || null,
             deliveryClientPhone: dPhone || null,
@@ -11491,6 +11723,7 @@ export default function App() {
 
       const newComanda: Comanda = {
         folio: folio,
+        folioInterno: folioInterno,
         timestamp: new Date(),
         items: comandaItems,
         generalNotes: notes,
@@ -12546,7 +12779,7 @@ export default function App() {
         }
       } else if (view === "comandas") {
         table.comandas.forEach((comanda) => {
-          job.bold(true).printLine(`FOLIO #${comanda.folio}`).bold(false);
+          job.bold(true).printLine(comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`).bold(false);
           comanda.items
             .filter((i) => !i.isCancelled)
             .forEach((item) => {
@@ -12688,7 +12921,7 @@ export default function App() {
         });
       } else if (view === "comandas") {
         table.comandas.forEach((comanda) => {
-          itemsHtml += `<div style="font-weight: bold; margin-top: 8px;">FOLIO #${comanda.folio}</div>`;
+          itemsHtml += `<div style="font-weight: bold; margin-top: 8px;">${comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`}</div>`;
           comanda.items
             .filter((i) => !i.isCancelled)
             .forEach((item) => {
@@ -13236,15 +13469,30 @@ export default function App() {
                         <IonLabel style={{ margin: "8px 0" }}>
                           <h2
                             style={{
-                              fontWeight: "black",
+                              fontWeight: "900",
                               whiteSpace: "normal",
-                              fontSize: "1rem",
+                              fontSize: "1.05rem",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              flexWrap: "wrap",
                             }}
                           >
-                            #{comanda.folio}
+                            {comanda.folioInterno ? (
+                              <>
+                                <span style={{ color: "#d97706", background: "#fef3c7", padding: "2px 8px", borderRadius: "6px", border: "1px solid #fde68a" }}>
+                                  Folio Interno #{comanda.folioInterno}
+                                </span>
+                                <span style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "normal" }}>
+                                  (ID: #{comanda.folio})
+                                </span>
+                              </>
+                            ) : (
+                              `#${comanda.folio}`
+                            )}
                           </h2>
                           <p style={{ fontSize: "0.75rem" }}>
-                            {comanda.createdBy?.name || "S/M"} •{" "}
+                            Propietario: {comanda.createdBy?.name || "S/M"} 👑 •{" "}
                             {new Date(comanda.timestamp).toLocaleTimeString(
                               [],
                               { hour: "2-digit", minute: "2-digit" },
@@ -17501,7 +17749,7 @@ Instrucciones:
                               letterSpacing: "1px",
                             }}
                           >
-                            FOLIO #{comanda.folio}
+                            FOLIO {comanda.folioInterno ? `INTERNO #${comanda.folioInterno}` : `#${comanda.folio}`}
                           </IonText>
                         </div>
                         <span
@@ -19769,6 +20017,23 @@ Instrucciones:
                         directo desde tu navegador.
                       </p>
                     </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mt-3 flex items-center justify-between">
+                      <div className="pr-4">
+                        <label className="text-xs font-black text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                          <span>📋</span> Exigir Captura de Folio Interno por Comanda
+                        </label>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                          Si está activado, el sistema solicitará capturar y confirmar el folio de comanda en esta sucursal al enviar el pedido. Si está desactivado, se enviará directo.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={ticketRequireInternalFolio}
+                        onChange={(e) => setTicketRequireInternalFolio(e.target.checked)}
+                        className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 mt-2">
@@ -19782,6 +20047,7 @@ Instrucciones:
                           `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`,
                         );
                         setTicketGeminiApiKey(companyConfig.geminiApiKey || "");
+                        setTicketRequireInternalFolio(selectedTenant.requireInternalFolio ?? true);
                         triggerAppNotification(
                           "⚡ Valores Sugeridos",
                           `Se han autocompletado los campos con los valores por defecto de: ${selectedTenant.name}`,
@@ -19812,11 +20078,12 @@ Instrucciones:
                             productCategories: productCategories,
                           });
 
-                          // Also update selectedTenant in tenants collection with geminiApiKey
+                          // Also update selectedTenant in tenants collection with geminiApiKey & requireInternalFolio
                           if (selectedTenant) {
                             const updatedTenant = {
                               ...selectedTenant,
-                              geminiApiKey: ticketGeminiApiKey.trim()
+                              geminiApiKey: ticketGeminiApiKey.trim(),
+                              requireInternalFolio: ticketRequireInternalFolio,
                             };
                             await addTenantToFirebase(updatedTenant);
                             setSelectedTenant(updatedTenant);
@@ -25771,67 +26038,6 @@ Instrucciones:
                     </div>
                   )}
 
-                    <div style={{
-                      position: "sticky",
-                      bottom: "16px",
-                      zIndex: 90,
-                      background: "rgba(15, 23, 42, 0.94)",
-                      backdropFilter: "blur(8px)",
-                      padding: "12px 20px",
-                      borderRadius: "16px",
-                      boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "16px",
-                      border: "1px solid rgba(255, 255, 255, 0.1)",
-                      marginTop: "16px"
-                    }}>
-                      <span style={{ color: "white", fontSize: "0.85rem", fontWeight: "bold" }}>
-                        ✏️ Modificaciones de catálogo: <strong style={{ color: "#38bdf8" }}>{relationMatches.length} productos</strong>
-                      </span>
-                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                        <button
-                          onClick={() => {
-                            setRelationMatches([]);
-                            setRelationSearch("");
-                            setRelationLog([]);
-                          }}
-                          style={{
-                            background: "rgba(255, 255, 255, 0.15)",
-                            color: "white",
-                            border: "none",
-                            padding: "8px 16px",
-                            borderRadius: "10px",
-                            fontSize: "0.8rem",
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={() => saveRelationChanges(false, true)}
-                          style={{
-                            background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                            color: "white",
-                            border: "none",
-                            padding: "10px 24px",
-                            borderRadius: "10px",
-                            fontSize: "0.85rem",
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                            boxShadow: "0 4px 12px rgba(16, 185, 129, 0.4)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px"
-                          }}
-                          title="Guarda la configuración de nombres, subgrupos, secciones y orden en la base de datos"
-                        >
-                          💾 Guardar Cambios en Base de Datos
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -33599,7 +33805,8 @@ Instrucciones:
             !["cash", "efectivo"].includes((h.paymentMethod || "").toLowerCase())
         )
         .forEach((h) => {
-          text += `• Mesa ${h.tableLabel || "0"} (${h.paymentMethod.toUpperCase()}${h.cardLastFour ? ` *${h.cardLastFour}` : ""}): $${Number(h.total || 0).toFixed(2)}\n`;
+          const foliosInt = (h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(",");
+          text += `• Mesa ${h.tableLabel || "0"} (${h.paymentMethod.toUpperCase()}${h.cardLastFour ? ` *${h.cardLastFour}` : ""}${foliosInt ? ` Int:${foliosInt}` : ""}): $${Number(h.total || 0).toFixed(2)}\n`;
           elecAdded = true;
         });
       if (!elecAdded) text += `• Sin ventas electrónicas\n`;
@@ -40451,6 +40658,105 @@ Instrucciones:
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modal para solicitar Folio Interno de Comanda por Sucursal (Rápido POS) 📋 */}
+      <IonModal
+        isOpen={showFolioModal}
+        onDidDismiss={() => {
+          setShowFolioModal(false);
+          setFolioModalError(null);
+        }}
+        style={{ "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
+      >
+        <div className="p-6 bg-slate-900 text-white rounded-3xl max-w-md mx-auto shadow-2xl border border-slate-800 w-full">
+          <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+            <div>
+              <h2 className="text-xl font-black text-amber-400 flex items-center gap-2">
+                <span>📋</span> Captura de Folio Interno
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Sucursal: <strong className="text-slate-200">{selectedTenant?.name || "General"}</strong>
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowFolioModal(false);
+                setFolioModalError(null);
+              }}
+              className="text-slate-400 hover:text-white p-2 text-lg font-bold"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="my-4 bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 text-xs flex justify-between items-center">
+            <span className="text-slate-400">Último folio registrado:</span>
+            <strong className="text-emerald-400 font-mono text-sm ml-1">
+              {suggestedLastFolio ? `#${suggestedLastFolio}` : "Sin folios previos"}
+            </strong>
+          </div>
+
+          {folioModalError && (
+            <div className="mb-4 p-3 bg-red-950/90 border border-red-500/80 text-red-200 text-xs rounded-xl flex items-start gap-2 font-medium">
+              <span className="text-base">⚠️</span>
+              <div className="flex-1">{folioModalError}</div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
+              <div className="inline-block px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-bold mb-2">
+                {folioStep === 1 ? "Paso 1 de 2: Ingrese Folio" : "Paso 2 de 2: Confirme el Folio"}
+              </div>
+              <p className="text-sm font-semibold text-slate-300 mb-3">
+                {folioStep === 1
+                  ? "Escribe el folio interno y presiona ENTER ↵"
+                  : `Vuelve a escribir el folio y presiona ENTER ↵`}
+              </p>
+
+              <input
+                ref={folioInputRef}
+                type="text"
+                value={folioInputValue}
+                onChange={(e) => {
+                  setFolioInputValue(e.target.value);
+                  if (folioModalError) setFolioModalError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleFolioStepSubmit();
+                  }
+                }}
+                placeholder={folioStep === 1 ? "Ingresa folio (ej: 105)" : "Confirma el folio"}
+                className="w-full bg-slate-900 border-2 border-emerald-500 focus:border-amber-400 rounded-xl px-4 py-3 text-2xl text-center font-mono font-bold text-white outline-none transition-all placeholder:text-slate-600 placeholder:text-base"
+                autoFocus
+              />
+              <span className="block text-[11px] text-slate-500 mt-2 font-medium">
+                ⏎ Presiona ENTER para {folioStep === 1 ? "continuar" : "enviar comanda"}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={() => {
+                setShowFolioModal(false);
+                setFolioModalError(null);
+              }}
+              className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleFolioStepSubmit}
+              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2"
+            >
+              <span>{folioStep === 1 ? "Siguiente ➔" : "Confirmar y Enviar 🍳"}</span>
+            </button>
+          </div>
+        </div>
+      </IonModal>
 
       <IonToast
         isOpen={showMenuToast}

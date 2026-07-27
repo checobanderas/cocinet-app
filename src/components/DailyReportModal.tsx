@@ -388,8 +388,8 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     // Header Row (Row 6)
     accountsAOA.push([
       "CONSECUTIVO",
-      "FOLIO",
-      "COMANDAS",
+      "FOLIO CUENTA",
+      "FOLIO INTERNO COMANDAS",
       "FECHA / HORA DE CIERRE",
       "MESA",
       "MÉTODO DE PAGO",
@@ -402,10 +402,11 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     // Data Rows
     dailyHistory.forEach((h, index) => {
       const consecutive = dailyHistory.length - index;
+      const foliosInternos = (h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(", ");
       accountsAOA.push([
         `#${consecutive}`,
-        h.folio,
-        (h.comandas || []).map((c: any) => c.folio).join(", "),
+        h.folio || `CUT-${consecutive}`,
+        foliosInternos,
         h.timestamp instanceof Date ? h.timestamp.toLocaleString() : h.timestamp,
         h.tableLabel || "N/A",
         h.paymentMethod || "Efectivo",
@@ -746,8 +747,13 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     text += `📅 *Fecha:* ${friendlyTitleDate}\n`;
     text += `----------------------------------\n\n`;
 
-    text += `💰 *RESUMEN DE CUENTAS*\n`;
-    text += `• Total Cuentas Cobradas: *${dailyHistory.length}*\n\n`;
+    text += `💰 *RESUMEN DE CUENTAS & COMANDAS (${dailyHistory.length}):*\n`;
+    dailyHistory.forEach((h, idx) => {
+      const consecutive = dailyHistory.length - idx;
+      const foliosInt = (h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(", ");
+      text += `• #${consecutive} | Mesa ${h.tableLabel || "N/A"} | Folio Int: *${foliosInt}* | Total: *$${(h.total || 0).toFixed(2)}*\n`;
+    });
+    text += `\n`;
 
     text += `💵 *MÉTODOS DE PAGO:*\n`;
     text += `• Efec: *$${paymentBreakdown.cash.toFixed(2)}*\n`;
@@ -831,10 +837,15 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
                 <IonRow key={h.id} className={getRowClass(h)}>
                   <IonCol>
                     <div className="font-bold text-slate-800">#{consecutive}</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Folio: {h.folio}</div>
-                    <div className="text-[10px] text-indigo-600 mt-0.5 font-semibold">
-                      Cda: {(h.comandas || []).map((c: any) => c.folio).join(", ")}
+                    {h.folio && <div className="text-[11px] text-slate-500 font-medium">Folio: {h.folio}</div>}
+                    <div className="text-[11px] text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 mt-0.5 font-bold inline-block">
+                      Cda Folio Int: {(h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(", ")}
                     </div>
+                    {(h.comandas || []).some((c: any) => c.folioInterno) && (
+                      <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                        Cda Sys: {(h.comandas || []).map((c: any) => c.folio).join(", ")}
+                      </div>
+                    )}
                   </IonCol>
                   <IonCol>{formatTime(h.timestamp)}</IonCol>
                   <IonCol>{h.tableLabel || "-"}</IonCol>
