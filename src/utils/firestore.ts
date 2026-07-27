@@ -3079,3 +3079,56 @@ export async function saveCustomOwnersToFirebase(
     })
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📑 HISTORIAL DE CORTES 2 (FOLIO INTERNO DE CUENTAS & NIVELACIÓN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CorteCuentasFolioRecord {
+  id: string;
+  tenantId: string;
+  date: string;
+  folioAnterior: number;
+  folioFinal: number;
+  montoObjetivo: number;
+  montoFoliado: number;
+  selectedAccountIds: string[];
+  status: "draft" | "closed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function subscribeToCorteFolioHistoryFromFirebase(
+  tenantId: string,
+  callback: (records: CorteCuentasFolioRecord[]) => void
+) {
+  const colRef = collection(db, "tenants", tenantId, "shift_closures_v2");
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const records: CorteCuentasFolioRecord[] = [];
+      snap.forEach((docSnap) => {
+        records.push({ id: docSnap.id, ...docSnap.data() } as CorteCuentasFolioRecord);
+      });
+      records.sort((a, b) => b.date.localeCompare(a.date));
+      callback(records);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, `tenants/${tenantId}/shift_closures_v2`);
+    }
+  );
+}
+
+export async function saveCorteFolioRecordToFirebase(
+  tenantId: string,
+  record: CorteCuentasFolioRecord
+) {
+  const docRef = doc(db, "tenants", tenantId, "shift_closures_v2", record.id);
+  await runWrite(
+    setDoc(docRef, {
+      ...record,
+      updatedAt: getMexicoISOString()
+    }, { merge: true })
+  );
+}
+
