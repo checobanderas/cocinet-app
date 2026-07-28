@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonButton, IonIcon } from "@ionic/react";
 import { closeOutline, printOutline, saveOutline, downloadOutline, textOutline, codeDownloadOutline, checkmarkCircleOutline } from "ionicons/icons";
+import { EMBEDDED_INSTALLER_FILES } from "../utils/installerFiles";
 
 interface PrinterTemplateModalProps {
   isOpen: boolean;
@@ -150,10 +151,11 @@ export const PrinterTemplateModal: React.FC<PrinterTemplateModalProps> = ({
 
   const downloadFile = async (fileName: string) => {
     try {
-      const res = await fetch(`/${fileName}?v=${Date.now()}`);
+      const res = await fetch(`/${fileName}?v=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const text = await res.text();
-        if (!text.trim().toLowerCase().startsWith("<!doctype html") && !text.trim().toLowerCase().startsWith("<html")) {
+        const clean = text.trim().toLowerCase();
+        if (!clean.startsWith("<!doctype html") && !clean.startsWith("<html")) {
           const blob = new Blob([text], { type: "application/octet-stream" });
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
@@ -170,12 +172,19 @@ export const PrinterTemplateModal: React.FC<PrinterTemplateModalProps> = ({
       console.warn("Fallback de descarga estática:", e);
     }
 
-    const link = document.createElement("a");
-    link.href = `/api/sentinel/download/${fileName}`;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const embeddedContent = EMBEDDED_INSTALLER_FILES[fileName];
+    if (embeddedContent) {
+      const blob = new Blob([embeddedContent], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
   };
 
   const handleDownloadInstallerFiles = () => {
