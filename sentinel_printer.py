@@ -721,8 +721,31 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y += h_det + 6
             continue
         
+        # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰
+        if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
+            clean_date_text = text
+            if "FECHA:" in clean_date_text.upper():
+                date_val = re.sub(r'^FECHA:\s*', '', clean_date_text, flags=re.IGNORECASE).strip()
+                if ',' in date_val:
+                    parts = date_val.split(',', 1)
+                    f_part = parts[0].strip()
+                    h_part = parts[1].strip()
+                    formatted_dt = f"📅 {f_part}   ⏰ {h_part}"
+                else:
+                    formatted_dt = f"📅 {date_val}"
+            elif clean_date_text.upper().startswith("HORA:"):
+                hora_val = clean_date_text[5:].strip()
+                formatted_dt = f"⏰ {hora_val}"
+            else:
+                formatted_dt = text
+
+            f_dt = get_font(FONT_NAME, pt * 0.90, False, use_emoji_font=True)
+            hDC.SelectObject(f_dt)
+            y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
+            continue
+        
         # 4. Formatear y alinear Totales, Subtotales, Cambios, etc.
-        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA|HORA|FECHA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:
