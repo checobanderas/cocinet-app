@@ -269,6 +269,17 @@ def parse_escpos(raw_bytes: bytes) -> list:
     align = 0  # 0=izq, 1=centro, 2=der
     bold = False
     size = 'normal'  # 'normal', 'big', 'small'
+
+    def flush_current():
+        nonlocal current_line_text
+        if current_line_text.strip():
+            lines.append({
+                'text': current_line_text.strip(),
+                'align': align,
+                'size': size,
+                'bold': bold
+            })
+            current_line_text = ""
     
     i = 0
     n = len(raw_bytes)
@@ -282,6 +293,7 @@ def parse_escpos(raw_bytes: bytes) -> list:
                 cmd = raw_bytes[i + 1]
                 # ESC @ (Inicializar impresora)
                 if cmd == 0x40:
+                    flush_current()
                     align = 0
                     bold = False
                     size = 'normal'
@@ -290,6 +302,7 @@ def parse_escpos(raw_bytes: bytes) -> list:
                 # ESC a (Alineación)
                 elif cmd == 0x61:
                     if i + 2 < n:
+                        flush_current()
                         align = raw_bytes[i + 2]
                         i += 3
                         continue
@@ -297,27 +310,28 @@ def parse_escpos(raw_bytes: bytes) -> list:
                 elif cmd == 0x21:
                     if i + 2 < n:
                         mode = raw_bytes[i + 2]
-                        bold = bool(mode & 8)
-                        size = 'big' if (mode & 48) else 'normal'
+                        new_bold = bool(mode & 8)
+                        new_size = 'big' if (mode & 48) else 'normal'
+                        if new_bold != bold or new_size != size:
+                            flush_current()
+                            bold = new_bold
+                            size = new_size
                         i += 3
                         continue
                 # ESC E (Negrita)
                 elif cmd == 0x45:
                     if i + 2 < n:
-                        bold = bool(raw_bytes[i + 2])
+                        new_bold = bool(raw_bytes[i + 2])
+                        if new_bold != bold:
+                            flush_current()
+                            bold = new_bold
                         i += 3
                         continue
                 # ESC d (Avanzar N líneas)
                 elif cmd == 0x64:
                     if i + 2 < n:
                         feed_count = raw_bytes[i + 2]
-                        lines.append({
-                            'text': current_line_text.strip(),
-                            'align': align,
-                            'size': size,
-                            'bold': bold
-                        })
-                        current_line_text = ""
+                        flush_current()
                         for _ in range(max(1, feed_count - 1)):
                             lines.append({
                                 'text': '',
@@ -354,18 +368,16 @@ def parse_escpos(raw_bytes: bytes) -> list:
             
         # Salto de línea (LF = 0x0a / 10)
         elif b == 0x0a:
-            lines.append({
-                'text': current_line_text.strip(),
-                'align': align,
-                'size': size,
-                'bold': bold
-            })
-            current_line_text = ""
+            flush_current()
             i += 1
             
         # Retorno de carro (CR = 0x0d / 13)
         elif b == 0x0d:
-            i += 1
+            if i + 1 < n and raw_bytes[i + 1] == 0x0a:
+                i += 1
+            else:
+                flush_current()
+                i += 1
             
         # Caracteres normales del ticket
         else:
@@ -389,13 +401,7 @@ def parse_escpos(raw_bytes: bytes) -> list:
                 current_line_text += char_str
                 i += 1
             
-    if current_line_text:
-        lines.append({
-            'text': current_line_text.strip(),
-            'align': align,
-            'size': size,
-            'bold': bold
-        })
+    flush_current()
         
     # Sanitizar todas las líneas para remover basura binaria
     cleaned_lines = []
@@ -460,6 +466,63 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         log.error(f"Error renderizando el logotipo GDI: {e}")
         return y_start
 
+def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, printable_width: int, y: int, align: int = 0, line_spacing: int = 4) -> int:
+    """Renderiza texto con ajuste de línea automático para evitar recortes en los bordes del papel."""
+    if not text:
+        return y
+        
+    text_w, text_h = hDC.GetTextExtent(text)
+    if text_w <= printable_width:
+        if align == 1:    # Centro
+            x = margin_left + (printable_width - text_w) // 2
+        elif align == 2:  # Derecha
+            x = margin_left + printable_width - text_w
+        else:             # Izquierda
+            x = margin_left
+        hDC.TextOut(x, y, text)
+        return y + text_h + line_spacing
+
+    words = text.split(" ")
+    lines_to_draw = []
+    curr_line = ""
+    
+    for word in words:
+        test_line = f"{curr_line} {word}".strip() if curr_line else word
+        w, _ = hDC.GetTextExtent(test_line)
+        if w <= printable_width:
+            curr_line = test_line
+        else:
+            if curr_line:
+                lines_to_draw.append(curr_line)
+            w_word, _ = hDC.GetTextExtent(word)
+            if w_word > printable_width:
+                sub = ""
+                for char in word:
+                    if hDC.GetTextExtent(sub + char)[0] <= printable_width:
+                        sub += char
+                    else:
+                        lines_to_draw.append(sub)
+                        sub = char
+                curr_line = sub
+            else:
+                curr_line = word
+                
+    if curr_line:
+        lines_to_draw.append(curr_line)
+        
+    for l_text in lines_to_draw:
+        tw, th = hDC.GetTextExtent(l_text)
+        if align == 1:    # Centro
+            x = margin_left + (printable_width - tw) // 2
+        elif align == 2:  # Derecha
+            x = margin_left + printable_width - tw
+        else:             # Izquierda
+            x = margin_left
+        hDC.TextOut(x, y, l_text)
+        y += th + line_spacing
+        
+    return y
+
 def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
     """Parsea el ticket de comandos ESC/POS y lo dibuja vectorialmente usando el GDI de Windows."""
     global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT
@@ -483,6 +546,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     hDC = win32ui.CreateDC()
     hDC.CreatePrinterDC(printer_name)
     hDC.SetMapMode(win32con.MM_TEXT)
+    hDC.SetBkMode(win32con.TRANSPARENT)
     
     dpi_y = hDC.GetDeviceCaps(win32con.LOGPIXELSY) or 203
     
@@ -496,6 +560,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         margin_left = 30
         margin_right = 30
         
+    printable_width = width - margin_left - margin_right
     job_name = f"COCINET-GDI-{paper_size}-{datetime.now().strftime('%H%M%S')}"
     hDC.StartDoc(job_name)
     hDC.StartPage()
@@ -588,8 +653,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         hDC.SelectObject(f)
 
         # 3. Detectar Renglón de Producto
-        item_match = re.match(r'^(\d+)\s*(?:x)?\s+(.*?)(?:\s+\$?([0-9.,]+))?$', text, re.IGNORECASE)
-        is_item_line = bool(item_match and not any(text.upper().startswith(k) for k in ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:"]))
+        item_match = re.match(r'^(\d+)\s*(?:x|X)?\s+([^:].*?)(?:\s+\$?([0-9.,]+))?$', text, re.IGNORECASE)
+        is_item_line = bool(item_match and not any(text.upper().startswith(k) for k in ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:"]))
 
         # Dibujar encabezado de tabla estilizada si es el primer item de producto
         if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
@@ -607,7 +672,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             fh = get_font(FONT_NAME, base_pt * 0.88, True)
             hDC.SelectObject(fh)
             hDC.TextOut(margin_left, y, "DESCRIPCIÓN DE PRODUCTO")
-            y += 14
+            _, h_hdr1 = hDC.GetTextExtent("DESCRIPCIÓN DE PRODUCTO")
+            y += h_hdr1 + 4
             
             # Renglón 2 del encabezado: CANT x PRECIO U.                IMPORTE
             fh_sub = get_font(FONT_NAME, base_pt * 0.78, True)
@@ -633,23 +699,16 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             unit_price = (price_num / qty_val) if (qty_val > 0 and price_num > 0) else price_num
             
             # Renglón 1: Nombre completo del producto (Fila de Producto en negrita con Emojis)
-            fd = get_font(FONT_NAME, pt * 1.02, True, use_emoji_font=has_emoji(desc))
+            fd = get_font(FONT_NAME, pt * 1.00, True, use_emoji_font=has_emoji(desc))
             hDC.SelectObject(fd)
-            
-            max_full_w = width - margin_left - margin_right
-            truncated_desc = desc
-            while hDC.GetTextExtent(truncated_desc)[0] > max_full_w and len(truncated_desc) > 3:
-                truncated_desc = truncated_desc[:-1]
-                
-            hDC.TextOut(margin_left, y, truncated_desc)
-            _, h_desc = hDC.GetTextExtent(truncated_desc)
-            y += h_desc + 3
+            y = wrap_and_draw_text(hDC, desc, margin_left, margin_right, printable_width, y, align=0, line_spacing=2)
             
             # Renglón 2: Detalle de Tabla - CANT x PRECIO U. (izquierda) e IMPORTE (derecha)
             detail_left_str = f"  {qty_val} x  ${unit_price:.2f}"
             f_det = get_font(FONT_NAME, pt * 0.88, False)
             hDC.SelectObject(f_det)
             hDC.TextOut(margin_left, y, detail_left_str)
+            _, h_det = hDC.GetTextExtent(detail_left_str)
             
             if price_num > 0:
                 imp_str = f"${price_num:.2f}"
@@ -657,9 +716,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 hDC.SelectObject(fp)
                 pr_w, pr_h = hDC.GetTextExtent(imp_str)
                 hDC.TextOut(width - margin_right - pr_w, y, imp_str)
-                y += max(pr_h, 14) + 6
+                y += max(h_det, pr_h) + 6
             else:
-                y += 16
+                y += h_det + 6
             continue
         
         # 4. Formatear y alinear Totales, Subtotales, Cambios, etc.
@@ -685,22 +744,22 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
             is_total_label = ("TOTAL" in label or "TOTAL" in text.upper()) and "SUBTOTAL" not in text.upper()
             
-            lbl_pt = pt * 1.25 if is_total_label else pt
+            lbl_pt = pt * 1.15 if is_total_label else pt
             lbl_str = "TOTAL A PAGAR:" if is_total_label else label
             fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold, use_emoji_font=has_emoji(lbl_str))
             hDC.SelectObject(fl)
             
-            # Posicionar etiquetas a la derecha para estilo POS elegante
+            # Posicionar etiquetas al margen izquierdo para evitar colisión con importes a la derecha
             lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
-            x_lbl = margin_left + (100 if is_total_label else 80)
+            x_lbl = margin_left
             hDC.TextOut(x_lbl, y, lbl_str)
             
-            val_pt = pt * 1.35 if is_total_label else pt
+            val_pt = pt * 1.25 if is_total_label else pt
             fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
             hDC.SelectObject(fb)
             val_width, val_height = hDC.GetTextExtent(val)
             hDC.TextOut(width - margin_right - val_width, y, val)
-            y += max(val_height, 18) + 6
+            y += max(lbl_h, val_height) + 6
             
             # SI ES EL TOTAL PRINCIPAL, DIBUJAR AUTOMÁTICAMENTE EL TOTAL EN LETRA DEBAJO
             if is_total_label:
@@ -712,11 +771,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                         if letra_str:
                             f_letra = get_font(FONT_NAME, base_pt * 0.82, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
                             hDC.SelectObject(f_letra)
-                            l_width, l_height = hDC.GetTextExtent(letra_str)
-                            x_letra = margin_left + (width - margin_left - margin_right - l_width) // 2
-                            if x_letra < margin_left: x_letra = margin_left
-                            hDC.TextOut(x_letra, y, letra_str)
-                            y += l_height + 8
+                            y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
                             
                             pen_tot = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x475569)
                             hDC.SelectObject(pen_tot)
@@ -731,24 +786,13 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         if text.startswith('*') or text.startswith('>'):
             f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
             hDC.SelectObject(f_italic)
-            _, text_height = hDC.GetTextExtent(text)
-            hDC.TextOut(margin_left + 65, y, text)
-            y += text_height + 4
+            y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
             continue
             
-        # 6. Renderizar líneas comunes
+        # 6. Renderizar líneas comunes y pie de página con envoltorio automático
         f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f_line)
-        text_width, text_height = hDC.GetTextExtent(text)
-        if alignment == 1:    # Centro
-            x = (width - text_width) // 2
-        elif alignment == 2:  # Derecha
-            x = width - margin_right - text_width
-        else:                 # Izquierda
-            x = 10
-            
-        hDC.TextOut(x, y, text)
-        y += text_height + 4
+        y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
         
     hDC.EndPage()
     hDC.EndDoc()
