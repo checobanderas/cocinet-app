@@ -19,6 +19,14 @@ import subprocess
 import urllib.request
 import json
 
+# Asegurar codificación UTF-8 en consola de Windows para evitar errores con Emojis
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # Nombre exacto del servicio de Windows
 SERVICE_NAME = "CocinetPrinterSentinel"
 SENTINEL_SCRIPT = "sentinel_printer.py"

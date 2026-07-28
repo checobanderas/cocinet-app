@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 title INSTALADOR SENTINELA COCINET PRO 🚀
 echo =======================================================================
 echo   🚀 COCINET PRO - INICIANDO INSTALADOR DEL SENTINELA DE IMPRESION 🚀
