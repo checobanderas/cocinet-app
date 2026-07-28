@@ -12573,7 +12573,7 @@ export default function App() {
       if (companyConfig.sucursal)
         job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
       if (customFolio !== undefined && customFolio !== null) {
-        job.bold(true).printLine(`FOLIO DE NIVELACION: #${customFolio}`).bold(false);
+        job.bold(true).printLine(`FOLIO: #${customFolio}`).bold(false);
       } else {
         job.printLine("REIMPRESION DE CUENTA");
       }

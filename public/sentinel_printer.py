@@ -602,7 +602,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             expanded_lines.append(l)
             continue
         # Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
-        keywords_pattern = r'(?=(?:SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO|PAGO)\s*:)'
+        keywords_pattern = r'(?=(?:RFC|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
         found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
         if len(found_parts) > 1:
             for p in found_parts:
@@ -721,7 +721,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y += h_det + 6
             continue
         
-        # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰
+        # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰ (Negrita, oscuro y legible)
         if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
             clean_date_text = text
             if "FECHA:" in clean_date_text.upper():
@@ -739,7 +739,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             else:
                 formatted_dt = text
 
-            f_dt = get_font(FONT_NAME, pt * 0.90, False, use_emoji_font=True)
+            f_dt = get_font(FONT_NAME, pt * 1.05, True, use_emoji_font=True)
             hDC.SelectObject(f_dt)
             y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
             continue
