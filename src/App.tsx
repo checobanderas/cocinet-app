@@ -12580,17 +12580,19 @@ export default function App() {
       job.printLine(`MESA: ${account.tableLabel}`);
       job.printLine(`FECHA: ${account.timestamp ? new Date(account.timestamp).toLocaleString("es-MX") : ""}`);
       const getPaymentLabel = (acc: any) => {
-        const m = (acc.paymentMethod || "").toLowerCase();
-        const ct = (acc.cardType || "").toLowerCase();
+        const m = (acc.paymentMethod || acc.metodoPago || acc.payment_method || acc.formaPago || acc.tipoPago || "").toString().toLowerCase().trim();
+        const ct = (acc.cardType || acc.tipoTarjeta || "").toString().toLowerCase().trim();
+
         if (["cash", "efectivo"].includes(m)) return "EFECTIVO";
-        if (m === "card") {
-          if (ct === "credito") return "TARJETA CRÉDITO";
-          if (ct === "debito") return "TARJETA DÉBITO";
+        if (["card", "tarjeta", "credit", "debit", "credito", "debito"].includes(m)) {
+          if (ct === "credito" || m === "credito") return "TARJETA CRÉDITO";
+          if (ct === "debito" || m === "debito") return "TARJETA DÉBITO";
           return "TARJETA";
         }
-        if (m === "lupay") return "LUPAY";
-        if (m === "transfer") return "TRANSFERENCIA";
-        return (acc.paymentMethod || "TARJETA").toUpperCase();
+        if (["lupay", "lu-pay"].includes(m)) return "LUPAY";
+        if (["transfer", "transferencia", "spei"].includes(m)) return "TRANSFERENCIA";
+        if (m) return m.toUpperCase();
+        return "EFECTIVO";
       };
       job.printLine(`PAGO: ${getPaymentLabel(account)}`);
       job.printLine("--------------------------------");
