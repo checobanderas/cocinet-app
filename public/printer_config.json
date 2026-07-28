@@ -1,0 +1,22 @@
+{
+    "PRINTER_MAP": {
+        "cuentas": "CUENTAS",
+        "cocina": "COCINA",
+        "barra": "BARRA"
+    },
+    "PRINTER_PAPER_SIZES": {
+        "cuentas": "80mm",
+        "cocina": "80mm",
+        "barra": "80mm"
+    },
+    "LOGO_PATH": "C:\\buzon\\logoroy.png",
+    "FONT_NAME": "Arial",
+    "FONT_SIZE_PT": 14,
+    "HEADER_FONT_SIZE_PT": 15,
+    "ITEM_FONT_SIZE_PT": 10.5,
+    "TOTAL_FONT_SIZE_PT": 14.5,
+    "MARGIN_LEFT_PX": 10,
+    "MARGIN_RIGHT_PX": 25,
+    "LINE_SPACING": 4,
+    "SHOW_DIVIDER": true
+}

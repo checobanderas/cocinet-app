@@ -148,7 +148,28 @@ export const PrinterTemplateModal: React.FC<PrinterTemplateModalProps> = ({
     }
   };
 
-  const downloadFile = (fileName: string) => {
+  const downloadFile = async (fileName: string) => {
+    try {
+      const res = await fetch(`/${fileName}?v=${Date.now()}`);
+      if (res.ok) {
+        const text = await res.text();
+        if (!text.trim().toLowerCase().startsWith("<!doctype html") && !text.trim().toLowerCase().startsWith("<html")) {
+          const blob = new Blob([text], { type: "application/octet-stream" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Fallback de descarga estática:", e);
+    }
+
     const link = document.createElement("a");
     link.href = `/api/sentinel/download/${fileName}`;
     link.download = fileName;
