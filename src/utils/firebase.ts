@@ -1,5 +1,12 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, setLogLevel } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  CACHE_SIZE_UNLIMITED,
+  setLogLevel
+} from "firebase/firestore";
 
 // Silenciar warnings/errores de conexión internos de Firebase en consola
 try {
@@ -65,12 +72,13 @@ let firestoreDb;
 const cleanDbId = (activeDbId === "(default)" || activeDbId === "default" || !activeDbId) ? undefined : activeDbId;
 
 try {
-  // Inicializamos Firestore con long-polling y caché persistente multitestaña (IndexedDB)
-  // Esto permite que la aplicación opere de forma 100% offline y sincronice cambios al recuperar conexión.
+  // Inicializamos Firestore con long-polling y caché persistente multitestaña (IndexedDB) con tamaño ilimitado (CACHE_SIZE_UNLIMITED)
+  // Esto previene el error QuotaExceededError y permite que la aplicación opere de forma 100% offline.
   firestoreDb = initializeFirestore(app, {
     experimentalForceLongPolling: true,
     localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
+      tabManager: persistentMultipleTabManager(),
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED
     })
   }, cleanDbId);
 } catch (error: any) {

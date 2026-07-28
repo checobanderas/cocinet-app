@@ -270,6 +270,47 @@ async function startServer() {
     }
   });
 
+  // Endpoints para el Sentinela de Impresión Windows
+  app.get('/api/sentinel/download/:file', (req, res) => {
+    const allowedFiles = ['sentinel_printer.py', 'instalador.bat', 'instalador_sentinela.py', 'printer_config.json'];
+    const file = req.params.file;
+    if (!allowedFiles.includes(file)) {
+      return res.status(400).json({ error: 'File not allowed' });
+    }
+    const filePath = path.join(process.cwd(), file);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    res.download(filePath);
+  });
+
+  app.get('/api/sentinel/config', (req, res) => {
+    const configPath = path.join(process.cwd(), 'printer_config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        return res.json({ success: true, config: data });
+      } catch (e) {}
+    }
+    res.json({ success: false, error: 'Config file not found' });
+  });
+
+  app.post('/api/sentinel/config', (req, res) => {
+    const configPath = path.join(process.cwd(), 'printer_config.json');
+    try {
+      const data = req.body || {};
+      let existing = {};
+      if (fs.existsSync(configPath)) {
+        try { existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch (e) {}
+      }
+      const updated = { ...existing, ...data };
+      fs.writeFileSync(configPath, JSON.stringify(updated, null, 4), 'utf-8');
+      return res.json({ success: true, config: updated });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.post('/api/reset', (req, res) => {
     try {
       const resetTransaction = db.transaction(() => {
@@ -942,7 +983,7 @@ Retorna EXCLUSIVAMENTE el JSON directo, sin bloques markdown de código (como \`
   // Vite integration
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);

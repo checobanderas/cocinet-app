@@ -316,27 +316,23 @@ function NotificationCard({
         <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold" }}>
           📅 {formatNotificationDate(notif.createdAt, notif.time)}
         </span>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {onReprint && (notif.isComandaNotification || notif.isCuentaNotification) && (
             <button
               onClick={handleReprint}
-              className="text-[11px] font-black text-indigo-600 underline cursor-pointer bg-none border-none"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1 rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all border-none cursor-pointer"
             >
-              Reimprimir 🖨️
+              <span>🖨️</span> Reimprimir
             </button>
           )}
           {!notif.read && (
             <button
               onClick={() => onMarkAsRead(notif.id)}
-              style={{
-                background: "none",
-                border: "none",
-                color: isAnyCancellationRequest ? "#e11d48" : "#d97706",
-                fontSize: "11px",
-                fontWeight: "black",
-                cursor: "pointer",
-                textDecoration: "underline",
-              }}
+              className={`font-bold px-2.5 py-1 rounded-xl text-xs border-none cursor-pointer transition-all ${
+                isAnyCancellationRequest 
+                  ? "bg-rose-100 hover:bg-rose-200 text-rose-800" 
+                  : "bg-amber-100 hover:bg-amber-200 text-amber-900"
+              }`}
             >
               Leído ✓
             </button>

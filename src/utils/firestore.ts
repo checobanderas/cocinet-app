@@ -517,10 +517,13 @@ export async function addComandaToFirebase(
   const currentTenant = tableInfo.tenantId || getCurrentTenantId();
   const now = getMexicoISOString();
 
+  const existingTableFolio = tableInfo?.folioInterno || (tableInfo?.comandas || []).find((c: any) => c.folioInterno)?.folioInterno;
+  const finalFolioInterno = folioInterno || existingTableFolio || null;
+
   const newComanda = cleanUndefined({
     uid: "comanda-" + folio + "-" + Math.floor(Math.random() * 1000000),
     folio,
-    folioInterno: folioInterno || null,
+    folioInterno: finalFolioInterno,
     timestamp: now,
     updatedAt: now,
     items: items.map((i) => ({ ...i, isCancelled: false })),
@@ -536,6 +539,7 @@ export async function addComandaToFirebase(
     updateDoc(tableRef, {
       status: "occupied",
       comandas: cleanUndefined([...currentComandas, newComanda]),
+      folioInterno: finalFolioInterno,
       updatedAt: getMexicoISOString(),
     }),
   );

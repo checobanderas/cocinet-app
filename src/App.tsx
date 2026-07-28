@@ -2,6 +2,7 @@ import { DailyReportModal } from "./components/DailyReportModal";
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
+import { PrinterTemplateModal } from "./components/PrinterTemplateModal";
 import {
   User,
   Product,
@@ -3968,11 +3969,16 @@ export default function App() {
         }
 
         job.right().printLine("--------------------------------");
-        job.printLine(`SUBTOTAL: $${(pedido.subtotal || 0).toFixed(2)}`);
-        if (pedido.propina > 0) job.printLine(`PROPINA: $${pedido.propina.toFixed(2)}`);
-        if (pedido.descuento > 0) job.printLine(`DESCUENTO: -$${pedido.descuento.toFixed(2)}`);
+        const subtotalVal = Number(pedido.subtotal || pedido.total || 0);
+        const propinaVal = Number(pedido.propina || 0);
+        const descuentoVal = Number(pedido.descuento || 0);
+        const totalVal = Number(pedido.total || subtotalVal || 0);
+
+        job.printLine(`SUBTOTAL: $${subtotalVal.toFixed(2)}`);
+        if (propinaVal > 0) job.printLine(`PROPINA: $${propinaVal.toFixed(2)}`);
+        if (descuentoVal > 0) job.printLine(`DESCUENTO: -$${descuentoVal.toFixed(2)}`);
         
-        job.bold(true).printLine(`TOTAL: $${(pedido.total || 0).toFixed(2)}`).bold(false);
+        job.bold(true).printLine(`TOTAL: $${totalVal.toFixed(2)}`).bold(false);
 
         job.center();
         if (companyConfig.footerMessage) {
@@ -4322,6 +4328,7 @@ export default function App() {
   const [bluetoothPrinterBarra, setBluetoothPrinterBarra] = useState<string>(() => localStorage.getItem("bluetooth_printer_barra") || "barra");
   const [bluetoothTransportMode, setBluetoothTransportMode] = useState<string>(() => localStorage.getItem("bluetooth_transport_mode") || "webbluetooth");
   const [showBluetoothConfigModal, setShowBluetoothConfigModal] = useState<boolean>(false);
+  const [showPrinterTemplateModal, setShowPrinterTemplateModal] = useState<boolean>(false);
   const [connectedBtDeviceName, setConnectedBtDeviceName] = useState<string | null>(() => localStorage.getItem("bt_connected_device_name"));
   const [systemPrintDestination, setSystemPrintDestination] = useState<string>(() => localStorage.getItem("system_print_destination") || "windows");
   const [windowsPrinterPort, setWindowsPrinterPort] = useState<string>(() => localStorage.getItem("windows_printer_port") || "3010");
@@ -7411,7 +7418,7 @@ export default function App() {
             "warning"
           );
           setCorteTablaSessionSelected(null);
-          setAppMode("dashboard");
+          setAppMode("floorplan");
         }
       }
     }
@@ -11534,32 +11541,74 @@ export default function App() {
     return lastFound;
   };
 
+  const getExistingTableFolio = (table: TableData | null | undefined): string | null => {
+    if (!table) return null;
+    if ((table as any).folioInterno && String((table as any).folioInterno).trim() !== "") {
+      return String((table as any).folioInterno).trim();
+    }
+    if (Array.isArray(table.comandas) && table.comandas.length > 0) {
+      const found = table.comandas.find(
+        (c: any) => c.folioInterno && String(c.folioInterno).trim() !== ""
+      );
+      if (found) return String(found.folioInterno).trim();
+    }
+    return null;
+  };
+
   const isInternalFolioDuplicate = (
     candidateFolio: string,
     tenantId: string,
     tablesList: TableData[],
-    historyList: ClosedAccount[]
+    historyList: ClosedAccount[],
+    currentTableId?: string
   ): boolean => {
     if (!candidateFolio) return false;
     const target = candidateFolio.trim().toLowerCase();
 
+    const isToday = (dateVal: any): boolean => {
+      if (!dateVal) return true;
+      const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+      if (isNaN(d.getTime())) return true;
+      const now = new Date();
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    };
+
+    // Validar en otras mesas activas de la misma sucursal
     for (const t of (tablesList || []) as any[]) {
       const tTenant = t.tenantId || tenantId;
       if (tTenant === tenantId && Array.isArray(t.comandas)) {
+        if (currentTableId && t.id === currentTableId) {
+          continue;
+        }
         for (const c of t.comandas) {
-          if (c.folioInterno && String(c.folioInterno).trim().toLowerCase() === target) {
+          if (
+            c.folioInterno &&
+            String(c.folioInterno).trim().toLowerCase() === target &&
+            isToday(c.timestamp)
+          ) {
             return true;
           }
         }
       }
     }
 
+    // Validar en historial de cuentas cerradas de la misma sucursal pero SOLO DEL MISMO DÍA
     for (const h of (historyList || []) as any[]) {
       const hTenant = h.tenantId || tenantId;
-      if (hTenant === tenantId && Array.isArray(h.comandas)) {
-        for (const c of h.comandas) {
-          if (c.folioInterno && String(c.folioInterno).trim().toLowerCase() === target) {
-            return true;
+      if (hTenant === tenantId) {
+        const accountIsToday = isToday(h.timestamp);
+        if (accountIsToday && Array.isArray(h.comandas)) {
+          for (const c of h.comandas) {
+            if (
+              c.folioInterno &&
+              String(c.folioInterno).trim().toLowerCase() === target
+            ) {
+              return true;
+            }
           }
         }
       }
@@ -11570,6 +11619,13 @@ export default function App() {
 
   const generateOrder = async (goToCheckout: boolean = false) => {
     if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+
+    // Si la mesa ya tiene un folio interno asignado en esta sesión, se reutiliza directamente sin pedirlo de nuevo
+    const existingTableFolio = getExistingTableFolio(selectedTable);
+    if (existingTableFolio) {
+      await executeGenerateOrder(existingTableFolio, goToCheckout);
+      return;
+    }
 
     // Folio interno DESHABILITADO por defecto. Solo se exige si la sucursal lo tiene activado explícitamente (true)
     const requiresFolio = selectedTenant?.requireInternalFolio === true;
@@ -11624,8 +11680,8 @@ export default function App() {
       }
 
       const tenantId = selectedTenant?.id || "";
-      if (isInternalFolioDuplicate(f1, tenantId, tables, history)) {
-        setFolioModalError(`⚠️ El folio interno #${f1} ya fue registrado previamente en esta sucursal.`);
+      if (isInternalFolioDuplicate(f1, tenantId, tables, history, selectedTable?.id)) {
+        setFolioModalError(`⚠️ El folio interno #${f1} ya fue registrado el día de hoy en esta sucursal.`);
         setFolioStep(1);
         setFolioInput1("");
         setFolioInputValue("");
@@ -20218,6 +20274,23 @@ Instrucciones:
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-left">
+                      <div className="font-black text-sm text-indigo-900 flex items-center gap-2">
+                        🎨 Diseñar Plantilla de Tickets GDI & Servicio Windows
+                      </div>
+                      <p className="text-xs text-indigo-700 max-w-xl">
+                        Personaliza la fuente de Windows, tamaño de letra (pt), márgenes de tus tickets y descarga los archivos de instalación del Sentinela de Windows.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowPrinterTemplateModal(true)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shrink-0 cursor-pointer shadow-md transition-all"
+                    >
+                      <span>🎨</span> Configurar Plantilla y Descargar Servicio
+                    </button>
                   </div>
                 </div>
               </div>
@@ -29925,629 +29998,7 @@ Instrucciones:
     }
   };
 
-  const renderDashboard = () => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const todaysClosedAccounts = (history || []).filter((acc) => {
-      if (!acc.timestamp) return false;
-      const date =
-        acc.timestamp instanceof Date ? acc.timestamp : new Date(acc.timestamp);
-      return date >= startOfToday && acc.status !== "cancelled";
-    });
-
-    const totalCollectedAccountsCount = todaysClosedAccounts.length;
-
-    let todaysCashSales = 0;
-    let todaysCardSales = 0;
-    let todaysTransSales = 0;
-    let todaysTotalSales = 0;
-
-    todaysClosedAccounts.forEach((acc) => {
-      const total = Number(acc.total || 0);
-      todaysTotalSales += total;
-
-      const method = (acc.paymentMethod || "").toLowerCase();
-      if (method === "cash" || method === "efectivo" || method === "mixed") {
-        if (method === "mixed" && acc.mixedPayments?.cash) {
-          todaysCashSales += Number(acc.mixedPayments.cash);
-          if (acc.mixedPayments?.card)
-            todaysCardSales += Number(acc.mixedPayments.card);
-          if (acc.mixedPayments?.transfer)
-            todaysTransSales += Number(acc.mixedPayments.transfer);
-        } else {
-          todaysCashSales += total;
-        }
-      } else if (method === "card" || method === "tarjeta") {
-        todaysCardSales += total;
-      } else if (
-        method === "transfer" ||
-        method === "transferencia" ||
-        method === "trans" ||
-        method === "banco"
-      ) {
-        todaysTransSales += total;
-      } else {
-        todaysCashSales += total;
-      }
-    });
-
-    const activeTables = (tables || []).filter(
-      (t) => t.status === "occupied" || t.status === "payment_pending",
-    );
-    const activeOrdersCount = activeTables.length;
-
-    const totalInventoryItems = (inventory || []).length;
-
-    // Daily cash flow calculations based on Corte logic
-    const todayOutflows = (filteredCashMovementsForCorte || []).filter(
-      (mov) =>
-        mov.type === "out" &&
-        (!mov.timestamp || new Date(mov.timestamp) >= startOfToday),
-    );
-    const todayExpenses = (filteredExpensesForCorte || []).filter(
-      (exp) => exp.createdAt && new Date(exp.createdAt) >= startOfToday,
-    );
-
-    const totalOutflowsAmt =
-      todayOutflows.reduce((sum, mov) => sum + Number(mov.amount || 0), 0) +
-      todayExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-
-    const todayInflows = (filteredCashMovementsForCorte || []).filter(
-      (mov) =>
-        mov.type === "in" &&
-        (!mov.timestamp || new Date(mov.timestamp) >= startOfToday),
-    );
-    const totalInflowsAmt = todayInflows.reduce(
-      (sum, mov) => sum + Number(mov.amount || 0),
-      0,
-    );
-
-    const estimatedCashInBox = Math.max(
-      0,
-      todaysCashSales + totalInflowsAmt - totalOutflowsAmt,
-    );
-
-    return (
-      <IonPage>
-        <IonHeader className="ion-no-border">
-          <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
-            <IonButtons slot="start">
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                className="bg-transparent border-none text-white cursor-pointer ml-2 p-2 flex items-center justify-center rounded-full hover:bg-white/10 transition"
-                onClick={() => {
-                  setShowSidebar(true);
-                }}
-              >
-                <IonIcon icon={menuOutline} style={{ fontSize: "22px" }} />
-              </motion.button>
-              <IonButton onClick={() => setAppMode("floorplan")}>
-                <IonIcon icon={arrowBackOutline} slot="icon-only" />
-              </IonButton>
-            </IonButtons>
-            <IonTitle>
-              {companyConfig?.businessName ||
-                selectedTenant?.name ||
-                "Sucursal"}
-            </IonTitle>
-          </IonToolbar>
-        </IonHeader>
-
-        <IonContent
-          className="ion-padding"
-          style={{ "--background": "#f8fafc" }}
-        >
-          <div className="max-w-xl mx-auto space-y-6 pb-12">
-            {/* Table 1: Sales / Daily Movements */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden text-sm">
-              <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-                <h3 className="font-bold text-slate-800 m-0 text-base">
-                  📅 Hoy
-                </h3>
-              </div>
-              <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/50">
-                <span className="text-xs font-bold text-slate-500 uppercase">
-                  Ventas
-                </span>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {/* Cash */}
-                <div
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() =>
-                    setExpandedDashboardSaleMethod(
-                      expandedDashboardSaleMethod === "cash" ? null : "cash",
-                    )
-                  }
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <span className="text-[10px] text-slate-400">
-                        {expandedDashboardSaleMethod === "cash" ? "▼" : "▶"}
-                      </span>
-                      <span>💵</span>
-                      <span className="font-medium">Efectivo</span>
-                    </div>
-                    <span className="font-bold">
-                      ${todaysCashSales.toFixed(2)}
-                    </span>
-                  </div>
-                  {expandedDashboardSaleMethod === "cash" && (
-                    <div className="mt-3 pl-6 pr-2 space-y-2 border-t border-slate-100 pt-3 max-h-[200px] overflow-y-auto">
-                      {todaysClosedAccounts.filter((a) => {
-                        const m = (a.paymentMethod || "").toLowerCase();
-                        return (
-                          m === "cash" ||
-                          m === "efectivo" ||
-                          (m === "mixed" && a.mixedPayments?.cash)
-                        );
-                      }).length === 0 ? (
-                        <div className="text-xs text-slate-400 italic">
-                          No hay ventas registradas.
-                        </div>
-                      ) : (
-                        todaysClosedAccounts
-                          .filter((a) => {
-                            const m = (a.paymentMethod || "").toLowerCase();
-                            return (
-                              m === "cash" ||
-                              m === "efectivo" ||
-                              (m === "mixed" && a.mixedPayments?.cash)
-                            );
-                          })
-                          .map((acc) => {
-                            const isMixed =
-                              (acc.paymentMethod || "").toLowerCase() ===
-                              "mixed";
-                            const val = isMixed
-                              ? acc.mixedPayments?.cash || 0
-                              : acc.total;
-                            return (
-                              <div
-                                key={acc.id}
-                                className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100"
-                              >
-                                <span className="text-xs font-medium text-slate-600 truncate max-w-[150px]">
-                                  Ticket Mesa {acc.tableLabel || "S/N"}{" "}
-                                  {isMixed ? "(Mixto)" : ""}
-                                </span>
-                                <span className="text-xs font-bold text-emerald-600">
-                                  ${Number(val).toFixed(2)}
-                                </span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Card */}
-                <div
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() =>
-                    setExpandedDashboardSaleMethod(
-                      expandedDashboardSaleMethod === "card" ? null : "card",
-                    )
-                  }
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <span className="text-[10px] text-slate-400">
-                        {expandedDashboardSaleMethod === "card" ? "▼" : "▶"}
-                      </span>
-                      <span>💳</span>
-                      <span className="font-medium">Tarjeta</span>
-                    </div>
-                    <span className="font-bold">
-                      ${todaysCardSales.toFixed(2)}
-                    </span>
-                  </div>
-                  {expandedDashboardSaleMethod === "card" && (
-                    <div className="mt-3 pl-6 pr-2 space-y-2 border-t border-slate-100 pt-3 max-h-[200px] overflow-y-auto">
-                      {todaysClosedAccounts.filter((a) => {
-                        const m = (a.paymentMethod || "").toLowerCase();
-                        return (
-                          m === "card" ||
-                          m === "tarjeta" ||
-                          (m === "mixed" && a.mixedPayments?.card)
-                        );
-                      }).length === 0 ? (
-                        <div className="text-xs text-slate-400 italic">
-                          No hay ventas registradas.
-                        </div>
-                      ) : (
-                        todaysClosedAccounts
-                          .filter((a) => {
-                            const m = (a.paymentMethod || "").toLowerCase();
-                            return (
-                              m === "card" ||
-                              m === "tarjeta" ||
-                              (m === "mixed" && a.mixedPayments?.card)
-                            );
-                          })
-                          .map((acc) => {
-                            const isMixed =
-                              (acc.paymentMethod || "").toLowerCase() ===
-                              "mixed";
-                            const val = isMixed
-                              ? acc.mixedPayments?.card || 0
-                              : acc.total;
-                            return (
-                              <div
-                                key={acc.id}
-                                className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100"
-                              >
-                                <span className="text-xs font-medium text-slate-600 truncate max-w-[150px]">
-                                  Ticket Mesa {acc.tableLabel || "S/N"}{" "}
-                                  {isMixed ? "(Mixto)" : ""}
-                                </span>
-                                <span className="text-xs font-bold text-blue-600">
-                                  ${Number(val).toFixed(2)}
-                                </span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Transfer */}
-                <div
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() =>
-                    setExpandedDashboardSaleMethod(
-                      expandedDashboardSaleMethod === "transfer"
-                        ? null
-                        : "transfer",
-                    )
-                  }
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <span className="text-[10px] text-slate-400">
-                        {expandedDashboardSaleMethod === "transfer" ? "▼" : "▶"}
-                      </span>
-                      <span>📱</span>
-                      <span className="font-medium">Transferencia</span>
-                    </div>
-                    <span className="font-bold">
-                      ${todaysTransSales.toFixed(2)}
-                    </span>
-                  </div>
-                  {expandedDashboardSaleMethod === "transfer" && (
-                    <div className="mt-3 pl-6 pr-2 space-y-2 border-t border-slate-100 pt-3 max-h-[200px] overflow-y-auto">
-                      {todaysClosedAccounts.filter((a) => {
-                        const m = (a.paymentMethod || "").toLowerCase();
-                        return (
-                          m === "transfer" ||
-                          m === "transferencia" ||
-                          m === "trans" ||
-                          m === "banco" ||
-                          (m === "mixed" && a.mixedPayments?.transfer)
-                        );
-                      }).length === 0 ? (
-                        <div className="text-xs text-slate-400 italic">
-                          No hay ventas registradas.
-                        </div>
-                      ) : (
-                        todaysClosedAccounts
-                          .filter((a) => {
-                            const m = (a.paymentMethod || "").toLowerCase();
-                            return (
-                              m === "transfer" ||
-                              m === "transferencia" ||
-                              m === "trans" ||
-                              m === "banco" ||
-                              (m === "mixed" && a.mixedPayments?.transfer)
-                            );
-                          })
-                          .map((acc) => {
-                            const isMixed =
-                              (acc.paymentMethod || "").toLowerCase() ===
-                              "mixed";
-                            const val = isMixed
-                              ? acc.mixedPayments?.transfer || 0
-                              : acc.total;
-                            return (
-                              <div
-                                key={acc.id}
-                                className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100"
-                              >
-                                <span className="text-xs font-medium text-slate-600 truncate max-w-[150px]">
-                                  Ticket Mesa {acc.tableLabel || "S/N"}{" "}
-                                  {isMixed ? "(Mixto)" : ""}
-                                </span>
-                                <span className="text-xs font-bold text-purple-600">
-                                  ${Number(val).toFixed(2)}
-                                </span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center">
-                <span className="font-bold uppercase text-xs tracking-wide">
-                  Total Acumulado
-                </span>
-                <span className="font-black text-lg">
-                  ${todaysTotalSales.toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Table 2: Inventory Summary */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden text-sm">
-              <div className="bg-slate-50 border-b border-slate-200 px-4 py-3">
-                <h3 className="font-bold text-slate-800 m-0 text-base">
-                  Inventario
-                </h3>
-              </div>
-              <div className="grid grid-cols-2 px-4 py-2 border-b border-slate-100 bg-slate-50/50 text-xs font-bold text-slate-500 uppercase">
-                <div>Ingrediente / Producto</div>
-                <div className="text-right">Existencia Final</div>
-              </div>
-              <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
-                {!inventory || inventory.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-slate-400 font-medium">
-                    No hay productos en inventario.
-                  </div>
-                ) : (
-                  inventory.map((item) => {
-                    const isExpanded = expandedDashboardInvId === item.id;
-                    const startOfTodayForStats = new Date();
-                    startOfTodayForStats.setHours(0, 0, 0, 0);
-
-                    const itemMovsToday = inventoryMovements.filter(
-                      (mov) =>
-                        mov.timestamp &&
-                        new Date(mov.timestamp) >= startOfTodayForStats &&
-                        mov.inventoryItemId === item.id,
-                    );
-
-                    const todayInputs = itemMovsToday
-                      .filter(
-                        (m) =>
-                          m.type === "entrada" ||
-                          m.type === "IN" ||
-                          m.type === "in",
-                      )
-                      .reduce(
-                        (sum, m) =>
-                          sum + Math.abs(Number(m.qty || m.quantity || 0)),
-                        0,
-                      );
-                    const todayOutputs = itemMovsToday
-                      .filter(
-                        (m) =>
-                          m.type === "salida" ||
-                          m.type === "OUT" ||
-                          m.type === "out",
-                      )
-                      .reduce(
-                        (sum, m) =>
-                          sum + Math.abs(Number(m.qty || m.quantity || 0)),
-                        0,
-                      );
-                    const initialStockToday =
-                      Number(item.stock) - todayInputs + todayOutputs;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex flex-col border-b border-slate-100 last:border-b-0"
-                      >
-                        <div
-                          className="grid grid-cols-2 px-4 py-3 items-center cursor-pointer hover:bg-slate-50 transition-colors"
-                          onClick={() =>
-                            setExpandedDashboardInvId(
-                              isExpanded ? null : item.id,
-                            )
-                          }
-                        >
-                          <div className="font-medium text-slate-700 truncate pr-2 flex items-center gap-2">
-                            <span className="text-[10px] text-slate-400">
-                              {isExpanded ? "▼" : "▶"}
-                            </span>
-                            {item.name}
-                          </div>
-                          <div className="text-right font-bold text-slate-800">
-                            {item.stock} {item.unit}
-                          </div>
-                        </div>
-
-                        {isExpanded && (
-                          <div className="bg-slate-50 px-4 py-3 text-xs border-t border-slate-100 flex flex-col gap-2">
-                            <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200">
-                              <div className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                                Inventario Inicial Hoy
-                              </div>
-                              <div className="font-black text-slate-700">
-                                {initialStockToday.toFixed(2)} {item.unit}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative">
-                                <div className="text-emerald-600 font-bold uppercase tracking-wider text-[11px] mb-1">
-                                  Entradas (+
-                                  {
-                                    itemMovsToday.filter(
-                                      (m) =>
-                                        m.type === "entrada" ||
-                                        m.type === "IN" ||
-                                        m.type === "in",
-                                    ).length
-                                  }{" "}
-                                  movs)
-                                </div>
-                                <div className="font-black text-emerald-700 text-lg">
-                                  +{todayInputs.toFixed(2)}
-                                </div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMovementModal({
-                                      isOpen: true,
-                                      item: item,
-                                      type: "IN",
-                                    });
-                                  }}
-                                  className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-full font-black text-lg transition-colors"
-                                >
-                                  +
-                                </button>
-                              </div>
-                              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative">
-                                <div className="text-rose-600 font-bold uppercase tracking-wider text-[11px] mb-1">
-                                  Salidas (-
-                                  {
-                                    itemMovsToday.filter(
-                                      (m) =>
-                                        m.type === "salida" ||
-                                        m.type === "OUT" ||
-                                        m.type === "out",
-                                    ).length
-                                  }{" "}
-                                  movs)
-                                </div>
-                                <div className="font-black text-rose-700 text-lg">
-                                  -{todayOutputs.toFixed(2)}
-                                </div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMovementModal({
-                                      isOpen: true,
-                                      item: item,
-                                      type: "OUT",
-                                    });
-                                  }}
-                                  className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full font-black text-lg transition-colors"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center bg-slate-800 text-white p-3 rounded-lg shadow-sm mt-1">
-                              <div className="font-bold uppercase tracking-wider text-[11px]">
-                                Existencia Final
-                              </div>
-                              <div className="font-black text-base">
-                                {item.stock} {item.unit}
-                              </div>
-                            </div>
-
-                            {itemMovsToday.length > 0 && (
-                              <div className="mt-3 text-xs">
-                                <div className="font-bold text-slate-500 uppercase tracking-widest mb-2 px-1 text-[11px]">
-                                  Detalle de Movimientos Hoy
-                                </div>
-                                <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
-                                  {itemMovsToday.map((m, idx) => {
-                                    const isEntrada =
-                                      m.type === "entrada" ||
-                                      m.type === "IN" ||
-                                      m.type === "in";
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="flex justify-between items-center bg-white px-2 py-1.5 rounded border border-slate-100"
-                                      >
-                                        <div className="flex items-center gap-1.5">
-                                          <span
-                                            className={`font-bold px-1 rounded ${
-                                              isEntrada
-                                                ? "bg-emerald-100 text-emerald-700"
-                                                : "bg-rose-100 text-rose-700"
-                                            }`}
-                                          >
-                                            {isEntrada ? "IN" : "OUT"}
-                                          </span>
-                                          <span className="text-slate-500 truncate max-w-[100px]">
-                                            {m.reason || "Ajuste"}
-                                          </span>
-                                        </div>
-                                        <div
-                                          className={`font-bold ${
-                                            isEntrada
-                                              ? "text-emerald-600"
-                                              : "text-rose-600"
-                                          }`}
-                                        >
-                                          {isEntrada ? "+" : "-"}
-                                          {Math.abs(
-                                            Number(m.qty || m.quantity || 0),
-                                          )}{" "}
-                                          {item.unit}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Table 3: Box Movements */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden text-sm">
-              <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-                <h3 className="font-bold text-slate-800 m-0 text-base">
-                  Movimientos de Caja
-                </h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                <div className="flex justify-between items-center px-4 py-3">
-                  <div className="font-medium text-slate-700">
-                    Gastos y Salidas Diarias
-                  </div>
-                  <span className="font-bold text-rose-600">
-                    -${totalOutflowsAmt.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-3">
-                  <div className="font-medium text-slate-700">
-                    Entradas Extra
-                  </div>
-                  <span className="font-bold text-emerald-600">
-                    +${totalInflowsAmt.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-3 bg-slate-50">
-                  <div className="font-bold text-slate-800">
-                    Caja Real Estimada
-                  </div>
-                  <span className="font-black text-emerald-600">
-                    ${estimatedCashInBox.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              <div className="p-4 border-t border-slate-200">
-                <button
-                  onClick={() => setAppMode("corte-tabla")}
-                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 flex justify-center items-center gap-2"
-                >
-                  <IonIcon icon={walletOutline} />
-                  Ir a Cortes y Turnos de Caja 📊
-                </button>
-              </div>
-            </div>
-          </div>
-        </IonContent>
-      </IonPage>
-    );
-  };
+  const renderDashboard = () => null;
 
   const renderCorteNuevo = () => {
     if (currentUser?.role === "mesero") {
@@ -33166,7 +32617,7 @@ Instrucciones:
           title: selectedTenant ? `🏢 ${selectedTenant.name}` : "Cortes y Turnos",
           subtitle: `📍 ${selectedTenant?.sucursalDefault || "Matriz"} - Cortes y Turnos de Caja`,
           showBack: true,
-          onBack: () => setAppMode("dashboard"),
+          onBack: () => setAppMode("floorplan"),
         })}
         <IonHeader className="ion-no-border">
             {/* Selector de vistas principal */}
@@ -34206,7 +33657,7 @@ Instrucciones:
                     );
 
                     triggerAppNotification("Balance 📊", "Conteos de caja y arqueo guardados de manera exitosa. ✅", "success");
-                    setAppMode("dashboard");
+                    setAppMode("corte-tabla");
                     setCorteTablaSessionSelected(null);
                   }
                 } catch (err) {
@@ -40314,12 +39765,19 @@ Instrucciones:
       {showBranchSwitcherModal && renderBranchSwitcherModal()}
       {showBluetoothConfigModal && renderBluetoothConfigModal()}
       {showDeliverySetupModal && renderDeliverySetupModal()}
+      <PrinterTemplateModal
+        isOpen={showPrinterTemplateModal}
+        onClose={() => setShowPrinterTemplateModal(false)}
+        triggerAppNotification={(title, body, type) => {
+          setMenuToastMessage(`🔔 [${title}] ${body}`);
+          setShowMenuToast(true);
+        }}
+      />
       {/* Master Render */}
       {!currentUser ? (
         renderLogin()
       ) : (
         <>
-          {appMode === "dashboard" && renderDashboard()}
           {appMode === "floorplan" && renderFloorplan()}
           {appMode === "menu" && renderMenu()}
           {appMode === "review" && renderReview()}
