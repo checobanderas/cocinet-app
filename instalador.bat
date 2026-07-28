@@ -1,6 +1,20 @@
 @echo off
 chcp 65001 > nul
 title INSTALADOR SENTINELA COCINET PRO 🚀
+
+:: Verificar si el script ya se está ejecutando como Administrador
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo 🔓 Solicitando elevación de privilegios de Administrador...
+    echo 💡 Por favor presiona 'Sí' en el diálogo de Windows que aparecerá a continuación.
+    echo.
+    powershell -Command "Start-Process cmd -ArgumentList '/k cd /d \"\"%~dp0\"\" && \"\"%~f0\"\"' -Verb RunAs"
+    exit /b
+)
+
+cd /d "%~dp0"
+
 echo =======================================================================
 echo   🚀 COCINET PRO - INICIANDO INSTALADOR DEL SENTINELA DE IMPRESION 🚀
 echo =======================================================================

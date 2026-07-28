@@ -41,7 +41,7 @@ def is_admin():
         return False
 
 def elevate_privileges():
-    """Intenta re-ejecutar el script actual con permisos de Administrador."""
+    """Intenta re-ejecutar el script actual con permisos de Administrador manteniendo la consola visible."""
     import ctypes
     # Si ya es admin, no hacemos nada
     if is_admin():
@@ -49,12 +49,13 @@ def elevate_privileges():
     
     print("🔑 [INFO] Solicitando elevación de privilegios de Administrador... Por favor acepta el diálogo de Windows.")
     try:
-        # Volver a lanzar con el comando runas
         script = os.path.abspath(sys.argv[0])
+        script_dir = os.path.dirname(script)
         params = " ".join(sys.argv[1:])
-        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script}" {params}', None, 1)
+        cmd_args = f'/k cd /d "{script_dir}" && "{sys.executable}" "{script}" {params}'
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", cmd_args, script_dir, 1)
         if int(result) > 32:
-            print("🚀 [OK] Re-lanzando proceso con permisos de administrador exitosamente.")
+            print("🚀 [OK] Re-lanzando proceso con permisos de administrador en nueva consola...")
             sys.exit(0)
         else:
             print("❌ [ERROR] No se concedieron los permisos de Administrador necesarios.")
