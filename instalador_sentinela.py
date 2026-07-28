@@ -182,6 +182,21 @@ def configure_printer_sizes(target_dir):
     print("\n" + "="*80)
     print("    ⚙️  CONFIGURACIÓN DE IMPRESORAS, ANCHOS DE PAPEL Y LOGOTIPO ⚙️")
     print("="*80)
+    
+    # Listar impresoras instaladas en Windows
+    installed_list = []
+    try:
+        import win32print
+        flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        installed_list = [p[2] for p in win32print.EnumPrinters(flags)]
+        if installed_list:
+            print("🖨️  Impresoras detectadas en este equipo:")
+            for p in installed_list:
+                print(f"   • {p}")
+            print("")
+    except Exception:
+        pass
+
     print("Por favor, ingresa los datos correspondientes.\n")
     
     # Preguntar ruta del logotipo
@@ -208,7 +223,11 @@ def configure_printer_sizes(target_dir):
     new_sizes = {}
     
     for area in ["cuentas", "cocina", "barra"]:
-        default_name = current_config["PRINTER_MAP"][area]
+        default_name = current_config["PRINTER_MAP"].get(area, "CUENTAS")
+        # Si la predeterminada no coincide con ninguna instalada, sugerir la primera disponible de Windows
+        if installed_list and not any(p.upper() == default_name.upper() for p in installed_list):
+            default_name = installed_list[0]
+
         name = input(f"➤ Nombre de impresora en Windows para '{area}' (Enter para '{default_name}'): ").strip()
         new_map[area] = name if name else default_name
         

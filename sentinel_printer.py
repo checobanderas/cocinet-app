@@ -418,12 +418,41 @@ def get_installed_printers() -> list:
     return [p[2] for p in win32print.EnumPrinters(flags)]
 
 def resolve_printer_name(key: str) -> str:
+    global PRINTER_MAP
+    try:
+        config_printers = load_printer_config()
+        PRINTER_MAP = config_printers.get("PRINTER_MAP", PRINTER_MAP)
+    except Exception:
+        pass
+        
     target = PRINTER_MAP.get(key.lower(), key)
     installed = get_installed_printers()
+    if not installed:
+        raise ValueError("No hay impresoras instaladas en el sistema Windows.")
+        
+    # 1. Coincidencia exacta
     for p in installed:
         if p.upper() == target.upper():
             return p
-    raise ValueError(f"Impresora '{target}' no encontrada. Disponibles: {installed}")
+            
+    # 2. Coincidencia parcial (subcadena)
+    for p in installed:
+        if target.upper() in p.upper() or p.upper() in target.upper():
+            return p
+            
+    # 3. Fallback a la impresora predeterminada de Windows
+    try:
+        default_win = win32print.GetDefaultPrinter()
+        if default_win in installed:
+            log.info(f"⚠️ Impresora '{target}' no mapeada explícitamente. Redirigiendo a la predeterminada de Windows: '{default_win}'")
+            return default_win
+    except Exception:
+        pass
+        
+    # 4. Fallback a la primera impresora instalada
+    first_printer = installed[0]
+    log.info(f"⚠️ Impresora '{target}' no encontrada. Redirigiendo a la primera impresora disponible: '{first_printer}'")
+    return first_printer
 
 def send_raw_to_printer(printer_name: str, data_bytes: bytes):
     hPrinter = win32print.OpenPrinter(printer_name)
