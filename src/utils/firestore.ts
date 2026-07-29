@@ -14,6 +14,7 @@ import {
   where,
   serverTimestamp,
   Timestamp,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -603,6 +604,7 @@ export async function cancelComandaItemInFirebase(
         status: "available",
         comandas: [],
         waiterId: null,
+        folioInterno: deleteField(),
         updatedAt: now,
       }),
     );
@@ -655,6 +657,7 @@ export async function cancelEntireComandaInFirebase(
         status: "available",
         comandas: [],
         waiterId: null,
+        folioInterno: deleteField(),
         updatedAt: now,
       }),
     );
@@ -760,6 +763,7 @@ export async function moveItemsBetweenTablesInFirebase(
       status: "available",
       comandas: [],
       waiterId: null,
+      folioInterno: deleteField(),
       updatedAt: getMexicoISOString(),
     });
   } else {
@@ -770,9 +774,11 @@ export async function moveItemsBetweenTablesInFirebase(
   }
 
   const targetRef = doc(db, "tables", targetTableId);
+  const targetFolio = targetComandas.find((c: any) => c.folioInterno)?.folioInterno || null;
   batch.update(targetRef, {
     status: targetStatus,
     comandas: cleanUndefined(targetComandas),
+    folioInterno: targetFolio || deleteField(),
     updatedAt: getMexicoISOString(),
   });
 
@@ -792,13 +798,16 @@ export async function transferEntireTableInFirebase(
     status: "available",
     comandas: [],
     waiterId: null,
+    folioInterno: deleteField(),
     updatedAt: getMexicoISOString(),
   });
 
   const targetRef = doc(db, "tables", targetTableId);
+  const targetFolio = targetComandas.find((c: any) => c.folioInterno)?.folioInterno || null;
   batch.update(targetRef, {
     status: targetStatus,
     comandas: cleanUndefined(targetComandas),
+    folioInterno: targetFolio || deleteField(),
     updatedAt: getMexicoISOString(),
   });
 
@@ -848,6 +857,7 @@ export async function checkoutTableInFirebase(
     status: "available",
     waiterId: null,
     comandas: [],
+    folioInterno: deleteField(),
     updatedAt: now,
     deliveryClientName: null,
     deliveryClientPhone: null,
@@ -914,6 +924,7 @@ export async function releaseTableInFirebase(tableId: string) {
       status: "available",
       comandas: [],
       waiterId: null,
+      folioInterno: deleteField(),
       updatedAt: getMexicoISOString(),
     })
   );

@@ -3185,11 +3185,13 @@ export default function App() {
   }>({ isOpen: false, customer: null });
   const [customerModalAddresses, setCustomerModalAddresses] = useState<string[]>([]);
   const [newAddressInput, setNewAddressInput] = useState("");
+  const [newAddressRefInput, setNewAddressRefInput] = useState("");
 
   useEffect(() => {
     if (customerModal.isOpen) {
       setCustomerModalAddresses(customerModal.customer?.addresses || []);
       setNewAddressInput("");
+      setNewAddressRefInput("");
     }
   }, [customerModal.isOpen, customerModal.customer]);
   const [purchaseForm, setPurchaseForm] = useState({
@@ -6800,7 +6802,7 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleTestPrinter(areaKey, cfg.printerName)}
+                            onClick={() => handleTestPrinter(areaKey as any, cfg.printerName)}
                             className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold px-3 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs transition cursor-pointer"
                           >
                             📄 Probar
@@ -6902,7 +6904,7 @@ export default function App() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleScanBluetoothDevice(areaKey)}
+                            onClick={() => handleScanBluetoothDevice(areaKey as any)}
                             disabled={isScanningBt}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] transition shadow-2xs disabled:opacity-50 cursor-pointer"
                           >
@@ -11288,7 +11290,7 @@ export default function App() {
     const dests = new Set<Destination>();
     comanda.items.forEach((item) => {
       if (!item.isCancelled) {
-        dests.add(item.product.destination);
+        dests.add(item.product.destination as Destination);
       }
     });
     return Array.from(dests);
@@ -11543,15 +11545,21 @@ export default function App() {
 
   const getExistingTableFolio = (table: TableData | null | undefined): string | null => {
     if (!table) return null;
+    if (table.status === "available" || !Array.isArray(table.comandas) || table.comandas.length === 0) {
+      return null;
+    }
+    const hasActiveItems = table.comandas.some(
+      (c: any) => c.items && c.items.some((item: any) => !item.isCancelled)
+    );
+    if (!hasActiveItems) return null;
+
     if ((table as any).folioInterno && String((table as any).folioInterno).trim() !== "") {
       return String((table as any).folioInterno).trim();
     }
-    if (Array.isArray(table.comandas) && table.comandas.length > 0) {
-      const found = table.comandas.find(
-        (c: any) => c.folioInterno && String(c.folioInterno).trim() !== ""
-      );
-      if (found) return String(found.folioInterno).trim();
-    }
+    const found = table.comandas.find(
+      (c: any) => c.folioInterno && String(c.folioInterno).trim() !== ""
+    );
+    if (found) return String(found.folioInterno).trim();
     return null;
   };
 
@@ -26514,7 +26522,7 @@ Instrucciones:
 
       // Fast local update & localStorage cache update 🚀
       setProducts(prev => {
-        const map = new globalThis.Map(prev.map(p => [p.id, { ...p }]));
+        const map = new globalThis.Map<string, any>(prev.map(p => [p.id, { ...p }]));
         targets.forEach(m => {
           const existing = map.get(m.productId);
           if (existing) {
