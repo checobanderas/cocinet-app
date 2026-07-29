@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "5.0.0"
+VERSION = "6.0.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -622,14 +622,24 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     if paper_size == "58mm":
         base_pt = base_pt * 0.82
         
-    # Pre-procesamiento: separar renglones concatenados (ej: SUBTOTAL y TOTAL en la misma línea)
+    # Pre-procesamiento: separar renglones concatenados (ej: múltiples productos pegados o SUBTOTAL y TOTAL)
     expanded_lines = []
     for l in parsed_lines:
         txt = l['text'].strip()
         if not txt:
             expanded_lines.append(l)
             continue
-        # Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
+            
+        # 1. Separar si vienen múltiples productos concatenados en una sola línea (ej: "6x TACO DE PASTOR (MAÍZ) $132.002x REFRESCOS $76.00")
+        item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
+        found_items = re.findall(item_split_pattern, txt, flags=re.IGNORECASE)
+        if len(found_items) > 1:
+            for item_str in found_items:
+                if item_str.strip():
+                    expanded_lines.append({**l, 'text': item_str.strip()})
+            continue
+
+        # 2. Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
         keywords_pattern = r'(?=(?:RFC|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
         found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
         if len(found_parts) > 1:
