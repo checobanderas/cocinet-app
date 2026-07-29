@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "3.7.0"
+VERSION = "3.8.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -641,6 +641,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
     header_drawn = False
     in_table_phase = False
+    header_metadata_passed = False
         
     for line in expanded_lines:
         text = line['text'].strip()
@@ -680,6 +681,10 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
+        # Detectar si ya pasamos la cabecera del negocio (MESA, FECHA, HORA, PRECUENTA, SUC, RFC)
+        if any(k in text.upper() for k in ["MESA", "HORA", "FECHA", "PRECUENTA", "CUENTA", "COMANDA", "DESTINO:"]):
+            header_metadata_passed = True
+
         # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
         item_match = re.match(r'^(?:(\d+)\s*(?:x|X)\s+)?(.+?)(?:\s+\$?([0-9]+(?:\.[0-9]{1,2})?))?$', text, re.IGNORECASE)
         EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA"]
@@ -687,7 +692,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         has_qty = bool(re.match(r'^\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
         has_price = bool(re.search(r'\$?([0-9]+\.[0-9]{2})\s*$', text))
         
+        # El renglón de producto DEBE venir estrictamente después de los metadatos de cabecera (MESA/FECHA)
         is_item_line = bool(
+            header_metadata_passed and
             item_match and 
             item_match.group(2) and
             (has_qty or has_price) and
@@ -695,10 +702,13 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             not any(c in ('-', '=', '_', '*') for c in text)
         )
 
-        # Dibujar encabezado de tabla estilizada si es el primer item de producto
+        # Dibujar encabezado de tabla estilizada justo después de los metadatos y antes del primer producto
         if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
             header_drawn = True
             in_table_phase = True
+            
+            # Espaciado vectorial para bajar la tabla y dejarla clara debajo de MESA/FECHA
+            y += 6
             
             # Línea superior del encabezado de tabla
             pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
@@ -734,6 +744,13 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     desc = q_m.group(2).strip()
             
             qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
+            
+            if not price_str:
+                p_m = re.search(r'\$?([0-9]+\.[0-9]{2})\s*$', text)
+                if p_m:
+                    price_str = p_m.group(1)
+                    desc = re.sub(r'\s+\$?[0-9]+\.[0-9]{2}\s*$', '', desc).strip()
+
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
             
             # 1. Dibujar el IMPORTE alineado a la derecha en la misma línea
@@ -750,7 +767,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 x_right = width - margin_right
                 
             # 2. Formatear la descripción con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
-            full_desc_left = f"{qty_val}x {desc}"
+            clean_desc = re.sub(rf'^{qty_val}\s*(?:x|X)\s+', '', desc, flags=re.IGNORECASE).strip()
+            full_desc_left = f"{qty_val}x {clean_desc}"
                 
             # 3. Truncar la descripción si excede el espacio disponible antes del importe
             fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
