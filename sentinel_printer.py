@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "4.0.0"
+VERSION = "5.0.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -693,6 +693,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
         )
+
+        log.info(f"  [GDI v5.0.0]: '{text}' | item={is_item_line}")
 
         # Dibujar encabezado de tabla estilizada justo después de los metadatos y antes del primer producto
         if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:

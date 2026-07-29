@@ -125,12 +125,12 @@ def verify_service_status():
                 print("\n🎉 ¡EL SENTINELA SE ENCUENTRA EN LÍNEA Y OPERANDO CON ÉXITO! 🎉")
                 print(f"   📡 Estado: {data.get('status', 'desconocido').upper()}")
                 print(f"   🛠️  Servicio: {data.get('service', 'N/A')}")
-                print(f"   🏷️  Versión Instalada: v{data.get('version', '4.0.0')}")
+                print(f"   🏷️  Versión Instalada: v{data.get('version', '5.0.0')}")
                 print(f"   🔌 Puerto: {data.get('port', PORT)}")
                 print(f"   📋 Impresoras Mapeadas: {list(data.get('mapped_printers', {}).keys())}")
-                print("   ✨ Novedades v4.0.0:")
-                print("      • Captura y renderizado de TODOS los productos de la orden sin omitir ninguno.")
-                print("      • 1 renglón estricto por producto con importe alineado a la derecha y suma exacta.")
+                print("   ✨ Novedades v5.0.0:")
+                print("      • Reinicio forzado de memoria para garantizar aplicación inmediata del parche.")
+                print("      • Logging estructurado línea por línea e inclusión de 100% de productos.")
                 print("================================================================================")
                 print("💡 ¡Listo! El Sentinela de Windows ya está actualizado e impresoras listas.")
                 print("================================================================================\n")
@@ -285,15 +285,16 @@ def main():
     # Cambiar al directorio del script para evitar fallos de rutas relativas
     os.chdir(os.path.dirname(sentinel_path))
 
-    # 3. Detener servicio existente (si está corriendo)
-    print("🛑 [PROCESANDO] Intentando detener cualquier servicio previo del Sentinela...")
-    # Intentamos por python o por SC
+    # 3. Detener y cerrar forzadamente cualquier servicio o proceso previo del Sentinela
+    print("🛑 [PROCESANDO] Deteniendo y liberando memoria del Sentinela previo...")
     run_command(f'python "{SENTINEL_SCRIPT}" stop', "Detener servicio mediante script", ignore_error=True)
     run_command(f'sc stop {SERVICE_NAME}', "Detener servicio mediante SCM de Windows", ignore_error=True)
-    time.sleep(1.5)
+    run_command('taskkill /F /FI "SERVICES eq COCINETPrintSentinel"', "Cierre forzado por SCM", ignore_error=True)
+    run_command('taskkill /F /IM pythonservice.exe', "Cierre forzado de pythonservice.exe", ignore_error=True)
+    time.sleep(2.0)
 
     # 4. Desinstalar servicio existente
-    print("🗑️ [PROCESANDO] Desinstalando versión anterior del servicio de Windows...")
+    print("🗑️ [PROCESANDO] Limpiando registro del servicio previo de Windows...")
     run_command(f'python "{SENTINEL_SCRIPT}" remove', "Eliminar servicio mediante script", ignore_error=True)
     run_command(f'sc delete {SERVICE_NAME}', "Eliminar servicio mediante SCM de Windows", ignore_error=True)
     time.sleep(1.5)
@@ -352,12 +353,12 @@ def main():
     print("🎯 [PROCESANDO] Realizando pruebas de conexión finales...")
     verify_service_status()
 
-    print("🎈 ¡ACTUALIZACIÓN v4.0.0 FINALIZADA CON ÉXITO! 🎈")
+    print("🎈 ¡ACTUALIZACIÓN v5.0.0 FINALIZADA CON ÉXITO! 🎈")
     print("================================================================================")
-    print("  VERSION INSTALADA: v4.0.0")
+    print("  VERSION INSTALADA: v5.0.0")
     print("  CAMBIOS APLICADOS:")
-    print("  • Impresión completa de TODOS los productos de la orden sin omitir ninguno.")
-    print("  • 1 renglón estricto por producto con importe a la derecha y suma exacta.")
+    print("  • Liberación y reinicio forzado del proceso en segundo plano de Windows.")
+    print("  • Impresión garantizada de TODOS los productos y coincidencia exacta del total.")
     print("================================================================ drop-down\n")
     input("Presiona Enter para finalizar el instalador... 🌟")
 
