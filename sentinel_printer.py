@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "3.8.0"
+VERSION = "3.9.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -686,17 +686,14 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             header_metadata_passed = True
 
         # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
-        item_match = re.match(r'^(?:(\d+)\s*(?:x|X)\s+)?(.+?)(?:\s+\$?([0-9]+(?:\.[0-9]{1,2})?))?$', text, re.IGNORECASE)
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA"]
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
         
-        has_qty = bool(re.match(r'^\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
-        has_price = bool(re.search(r'\$?([0-9]+\.[0-9]{2})\s*$', text))
+        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
+        has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
         
         # El renglón de producto DEBE venir estrictamente después de los metadatos de cabecera (MESA/FECHA)
         is_item_line = bool(
             header_metadata_passed and
-            item_match and 
-            item_match.group(2) and
             (has_qty or has_price) and
             not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
@@ -733,27 +730,26 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
         # Renderizar Renglón de Producto (1 solo renglón estricto por producto, truncando la descripción si es muy larga)
         if is_item_line:
-            qty_str = item_match.group(1)
-            desc = item_match.group(2).strip()
-            price_str = item_match.group(3)
+            desc = text.strip()
+            price_str = None
+            qty_str = None
             
-            if not qty_str:
-                q_m = re.match(r'^(\d+)\s*(?:x|X)\s+(.*)$', desc, re.IGNORECASE)
-                if q_m:
-                    qty_str = q_m.group(1)
-                    desc = q_m.group(2).strip()
-            
+            # 1. Extraer precio al final de la línea si existe
+            p_m = re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', desc)
+            if p_m:
+                price_str = p_m.group(1)
+                desc = desc[:p_m.start()].strip()
+                
+            # 2. Extraer cantidad al inicio si existe
+            q_m = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', desc, re.IGNORECASE)
+            if q_m:
+                qty_str = q_m.group(1)
+                desc = q_m.group(2).strip()
+                
             qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
-            
-            if not price_str:
-                p_m = re.search(r'\$?([0-9]+\.[0-9]{2})\s*$', text)
-                if p_m:
-                    price_str = p_m.group(1)
-                    desc = re.sub(r'\s+\$?[0-9]+\.[0-9]{2}\s*$', '', desc).strip()
-
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
             
-            # 1. Dibujar el IMPORTE alineado a la derecha en la misma línea
+            # 3. Dibujar el IMPORTE alineado a la derecha en la misma línea
             imp_str = f"${price_num:.2f}" if price_num > 0 else ""
             fp = get_font(FONT_NAME, pt * 0.95, True)
             hDC.SelectObject(fp)
@@ -766,11 +762,10 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 pr_w, pr_h = 0, int(pt * dpi_y / 72)
                 x_right = width - margin_right
                 
-            # 2. Formatear la descripción con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
-            clean_desc = re.sub(rf'^{qty_val}\s*(?:x|X)\s+', '', desc, flags=re.IGNORECASE).strip()
-            full_desc_left = f"{qty_val}x {clean_desc}"
+            # 4. Formatear la descripción limpia con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
+            full_desc_left = f"{qty_val}x {desc}"
                 
-            # 3. Truncar la descripción si excede el espacio disponible antes del importe
+            # 5. Truncar la descripción si excede el espacio disponible antes del importe
             fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
             hDC.SelectObject(fd)
             
@@ -786,7 +781,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.TextOut(margin_left, y, curr_desc)
             _, desc_h = hDC.GetTextExtent(curr_desc)
             
-            y += max(desc_h, pr_h) + 4
+            y += max(desc_h, pr_h, int(pt * dpi_y / 72)) + 5
             continue
         
         # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰ (Negrita, oscuro y legible)
