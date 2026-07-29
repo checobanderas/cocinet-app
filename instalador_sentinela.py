@@ -125,13 +125,14 @@ def verify_service_status():
                 print("\n🎉 ¡EL SENTINELA SE ENCUENTRA EN LÍNEA Y OPERANDO CON ÉXITO! 🎉")
                 print(f"   📡 Estado: {data.get('status', 'desconocido').upper()}")
                 print(f"   🛠️  Servicio: {data.get('service', 'N/A')}")
-                print(f"   🏷️  Versión: v{data.get('version', '3.1.0')}")
+                print(f"   🏷️  Versión Instalada: v{data.get('version', '3.6.0')}")
                 print(f"   🔌 Puerto: {data.get('port', PORT)}")
                 print(f"   📋 Impresoras Mapeadas: {list(data.get('mapped_printers', {}).keys())}")
+                print("   ✨ Novedades v3.6.0:")
+                print("      • 1 solo renglón por producto con importe a la derecha en la misma línea.")
+                print("      • Recorte/truncado con '...' si la descripción es larga para no encimar el importe.")
                 print("================================================================================")
-                print("💡 ¡Listo! El Sentinela de Windows ya está conectado a tu base de datos SQLite.")
-                print("   Estará revisando continuamente la tabla 'print_queue' para imprimir comandas,")
-                print("   cuentas y cortes de caja de forma 100% automática y transparente sin retrasos. ⚡")
+                print("💡 ¡Listo! El Sentinela de Windows ya está actualizado e impresoras listas.")
                 print("================================================================================\n")
                 return True
     except Exception as e:
@@ -326,7 +327,7 @@ def main():
     configure_printer_sizes(os.path.dirname(sentinel_path))
 
     # 7. Instalar el nuevo servicio de Windows
-    print("🔌 [PROCESANDO] Instalando el renovado servicio de Windows del Sentinela...")
+    print("🔌 [PROCESANDO] Instalando el renovado servicio de Windows del Sentinela v3.6.0...")
     # Instalamos con inicio retrasado o automático para que el spooler de Windows esté listo al iniciar
     if not run_command(f'python "{SENTINEL_SCRIPT}" install', "Registrar Servicio de Windows"):
         print("🛑 [PASO 7 FALLADO] Error al registrar el servicio de Windows.")
@@ -351,13 +352,13 @@ def main():
     print("🎯 [PROCESANDO] Realizando pruebas de conexión finales...")
     verify_service_status()
 
-    print("🎈 ¡INSTALACIÓN COMPLETA DE MANERA EXITOSA! 🎈")
+    print("🎈 ¡ACTUALIZACIÓN v3.6.0 FINALIZADA CON ÉXITO! 🎈")
     print("================================================================================")
-    print("  El Sentinela de Windows se ha configurado para iniciarse automáticamente con Windows.")
-    print("  A partir de ahora, todas las comandas, cuentas y precortes que se envíen desde")
-    print("  el navegador (incluso dispositivos Android con RawBT desactivado) se guardarán")
-    print("  en tu base de datos y se imprimirán automáticamente de forma centralizada.")
-    print("================================================================================\n")
+    print("  VERSION INSTALADA: v3.6.0")
+    print("  CAMBIOS APLICADOS:")
+    print("  • 1 renglón estricto por producto (Cantidad + Descripción... + Importe)")
+    print("  • Si la descripción es larga, se corta con '...' sin encimar el importe")
+    print("================================================================ drop-down\n")
     input("Presiona Enter para finalizar el instalador... 🌟")
 
 if __name__ == "__main__":

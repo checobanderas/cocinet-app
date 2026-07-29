@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "3.5.0"
+VERSION = "3.6.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -703,17 +703,10 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.LineTo(width - margin_right, y + 2)
             y += 8
             
-            # Renglón 1 del encabezado: DESCRIPCIÓN DE PRODUCTO
+            # Encabezado de 1 renglón: CANT / DESCRIPCIÓN                IMPORTE
             fh = get_font(FONT_NAME, base_pt * 0.88, True)
             hDC.SelectObject(fh)
-            hDC.TextOut(margin_left, y, "DESCRIPCIÓN DE PRODUCTO")
-            _, h_hdr1 = hDC.GetTextExtent("DESCRIPCIÓN DE PRODUCTO")
-            y += h_hdr1 + 4
-            
-            # Renglón 2 del encabezado: CANT x PRECIO U.                IMPORTE
-            fh_sub = get_font(FONT_NAME, base_pt * 0.78, True)
-            hDC.SelectObject(fh_sub)
-            hDC.TextOut(margin_left, y, "  CANT x PRECIO U.")
+            hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
             w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
             x_imp = max(margin_left + 150, width - margin_right - w_imp)
             hDC.TextOut(x_imp, y, "IMPORTE")
@@ -724,7 +717,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.LineTo(width - margin_right, y + 2)
             y += 10
 
-        # Renderizar Renglón de Producto en Estructura Multilínea de Tabla POS de Alta Legibilidad
+        # Renderizar Renglón de Producto (1 solo renglón estricto por producto, truncando la descripción si es muy larga)
         if is_item_line:
             qty_str = item_match.group(1)
             desc = item_match.group(2).strip()
@@ -732,30 +725,43 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             
             qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
-            unit_price = (price_num / qty_val) if (qty_val > 0 and price_num > 0) else price_num
             
-            # Renglón 1: Nombre completo del producto (Fila de Producto en negrita con Emojis)
-            fd = get_font(FONT_NAME, pt * 1.00, True, use_emoji_font=has_emoji(desc))
-            hDC.SelectObject(fd)
-            y = wrap_and_draw_text(hDC, desc, margin_left, margin_right, printable_width, y, align=0, line_spacing=2)
+            # 1. Dibujar el IMPORTE alineado a la derecha en la misma línea
+            imp_str = f"${price_num:.2f}" if price_num > 0 else ""
+            fp = get_font(FONT_NAME, pt * 0.95, True)
+            hDC.SelectObject(fp)
             
-            # Renglón 2: Detalle de Tabla - CANT x PRECIO U. (izquierda) e IMPORTE (derecha)
-            detail_left_str = f"  {qty_val} x  ${unit_price:.2f}"
-            f_det = get_font(FONT_NAME, pt * 0.88, False)
-            hDC.SelectObject(f_det)
-            hDC.TextOut(margin_left, y, detail_left_str)
-            _, h_det = hDC.GetTextExtent(detail_left_str)
-            
-            if price_num > 0:
-                imp_str = f"${price_num:.2f}"
-                fp = get_font(FONT_NAME, pt * 0.95, True)
-                hDC.SelectObject(fp)
+            if imp_str:
                 pr_w, pr_h = hDC.GetTextExtent(imp_str)
-                x_right = max(margin_left + 150, width - margin_right - pr_w)
+                x_right = max(margin_left + 120, width - margin_right - pr_w)
                 hDC.TextOut(x_right, y, imp_str)
-                y += max(h_det, pr_h) + 6
             else:
-                y += h_det + 6
+                pr_w, pr_h = 0, int(pt * dpi_y / 72)
+                x_right = width - margin_right
+                
+            # 2. Formatear la descripción con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
+            if re.match(rf'^{qty_val}\s*(?:x|X)', desc, re.IGNORECASE):
+                full_desc_left = desc
+            else:
+                full_desc_left = f"{qty_val}x {desc}"
+                
+            # 3. Truncar la descripción si excede el espacio disponible antes del importe
+            fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
+            hDC.SelectObject(fd)
+            
+            max_desc_w = x_right - margin_left - 10
+            curr_desc = full_desc_left
+            
+            if max_desc_w > 40:
+                while curr_desc and hDC.GetTextExtent(curr_desc)[0] > max_desc_w:
+                    curr_desc = curr_desc[:-1]
+                if len(curr_desc) < len(full_desc_left):
+                    curr_desc = curr_desc.rstrip() + "..."
+            
+            hDC.TextOut(margin_left, y, curr_desc)
+            _, desc_h = hDC.GetTextExtent(curr_desc)
+            
+            y += max(desc_h, pr_h) + 4
             continue
         
         # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰ (Negrita, oscuro y legible)
