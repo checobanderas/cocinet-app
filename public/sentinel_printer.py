@@ -579,16 +579,15 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     
     dpi_y = hDC.GetDeviceCaps(win32con.LOGPIXELSY) or 203
     
-    # Dimensiones y márgenes seguros para evitar recortes de texto en bordes físicos del papel
-    if paper_size == "58mm":
-        width = 370
-        margin_left = 20
-        margin_right = 20
+    # Obtener el ancho real de la superficie de impresión informada por el driver de Windows (DC)
+    dev_width = hDC.GetDeviceCaps(win32con.HORZRES) or hDC.GetDeviceCaps(win32con.PHYSICALWIDTH)
+    if dev_width and dev_width > 150:
+        width = dev_width
     else:
-        width = 540
-        margin_left = 30
-        margin_right = 30
+        width = 370 if paper_size == "58mm" else 540
         
+    margin_left = 15 if paper_size == "58mm" else 25
+    margin_right = 15 if paper_size == "58mm" else 25
     printable_width = width - margin_left - margin_right
     job_name = f"COCINET-GDI-{paper_size}-{datetime.now().strftime('%H%M%S')}"
     hDC.StartDoc(job_name)
@@ -681,9 +680,16 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        # 3. Detectar Renglón de Producto
-        item_match = re.match(r'^(\d+)\s*(?:x|X)?\s+([^:].*?)(?:\s+\$?([0-9.,]+))?$', text, re.IGNORECASE)
-        is_item_line = bool(item_match and not any(text.upper().startswith(k) for k in ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:"]))
+        # 3. Detectar Renglón de Producto (con o sin prefijo "1x", "6x", etc.)
+        item_match = re.match(r'^(?:(\d+)\s*(?:x|X)?\s+)?(.+?)(?:\s+\$?([0-9.,]+))?$', text, re.IGNORECASE)
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:"]
+        
+        is_item_line = bool(
+            item_match and 
+            item_match.group(2) and
+            not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
+            not any(c in ('-', '=', '_', '*') for c in text)
+        )
 
         # Dibujar encabezado de tabla estilizada si es el primer item de producto
         if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
@@ -709,7 +715,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.SelectObject(fh_sub)
             hDC.TextOut(margin_left, y, "  CANT x PRECIO U.")
             w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
-            hDC.TextOut(width - margin_right - w_imp, y, "IMPORTE")
+            x_imp = max(margin_left + 150, width - margin_right - w_imp)
+            hDC.TextOut(x_imp, y, "IMPORTE")
             y += h_imp + 4
             
             # Línea inferior del encabezado
@@ -717,13 +724,13 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.LineTo(width - margin_right, y + 2)
             y += 10
 
-        # Renderizar Renglón de Producto en Estructura Multilínea de Tabla POS
+        # Renderizar Renglón de Producto en Estructura Multilínea de Tabla POS de Alta Legibilidad
         if is_item_line:
             qty_str = item_match.group(1)
-            desc = item_match.group(2)
+            desc = item_match.group(2).strip()
             price_str = item_match.group(3)
             
-            qty_val = int(qty_str) if qty_str.isdigit() else 1
+            qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
             unit_price = (price_num / qty_val) if (qty_val > 0 and price_num > 0) else price_num
             
@@ -744,7 +751,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 fp = get_font(FONT_NAME, pt * 0.95, True)
                 hDC.SelectObject(fp)
                 pr_w, pr_h = hDC.GetTextExtent(imp_str)
-                hDC.TextOut(width - margin_right - pr_w, y, imp_str)
+                x_right = max(margin_left + 150, width - margin_right - pr_w)
+                hDC.TextOut(x_right, y, imp_str)
                 y += max(h_det, pr_h) + 6
             else:
                 y += h_det + 6
@@ -810,7 +818,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
             hDC.SelectObject(fb)
             val_width, val_height = hDC.GetTextExtent(val)
-            hDC.TextOut(width - margin_right - val_width, y, val)
+            x_val = max(margin_left + lbl_w + 10, width - margin_right - val_width)
+            hDC.TextOut(x_val, y, val)
             y += max(lbl_h, val_height) + 6
             
             # SI ES EL TOTAL PRINCIPAL, DIBUJAR AUTOMÁTICAMENTE EL TOTAL EN LETRA DEBAJO
