@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "3.6.0"
+VERSION = "3.7.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -680,13 +680,17 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        # 3. Detectar Renglón de Producto (con o sin prefijo "1x", "6x", etc.)
-        item_match = re.match(r'^(?:(\d+)\s*(?:x|X)?\s+)?(.+?)(?:\s+\$?([0-9.,]+))?$', text, re.IGNORECASE)
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:"]
+        # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
+        item_match = re.match(r'^(?:(\d+)\s*(?:x|X)\s+)?(.+?)(?:\s+\$?([0-9]+(?:\.[0-9]{1,2})?))?$', text, re.IGNORECASE)
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA"]
+        
+        has_qty = bool(re.match(r'^\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
+        has_price = bool(re.search(r'\$?([0-9]+\.[0-9]{2})\s*$', text))
         
         is_item_line = bool(
             item_match and 
             item_match.group(2) and
+            (has_qty or has_price) and
             not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
         )
@@ -723,6 +727,12 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             desc = item_match.group(2).strip()
             price_str = item_match.group(3)
             
+            if not qty_str:
+                q_m = re.match(r'^(\d+)\s*(?:x|X)\s+(.*)$', desc, re.IGNORECASE)
+                if q_m:
+                    qty_str = q_m.group(1)
+                    desc = q_m.group(2).strip()
+            
             qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
             
@@ -740,10 +750,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 x_right = width - margin_right
                 
             # 2. Formatear la descripción con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
-            if re.match(rf'^{qty_val}\s*(?:x|X)', desc, re.IGNORECASE):
-                full_desc_left = desc
-            else:
-                full_desc_left = f"{qty_val}x {desc}"
+            full_desc_left = f"{qty_val}x {desc}"
                 
             # 3. Truncar la descripción si excede el espacio disponible antes del importe
             fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
