@@ -69,7 +69,7 @@ from flask_cors import CORS
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "3.9.0"
+VERSION = "4.0.0"
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -681,19 +681,14 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        # Detectar si ya pasamos la cabecera del negocio (MESA, FECHA, HORA, PRECUENTA, SUC, RFC)
-        if any(k in text.upper() for k in ["MESA", "HORA", "FECHA", "PRECUENTA", "CUENTA", "COMANDA", "DESTINO:"]):
-            header_metadata_passed = True
-
         # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
         EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
         
         has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
         has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
         
-        # El renglón de producto DEBE venir estrictamente después de los metadatos de cabecera (MESA/FECHA)
+        # El renglón de producto se identifica de forma absoluta por tener cantidad inicial o importe final sin ser clave de cabecera
         is_item_line = bool(
-            header_metadata_passed and
             (has_qty or has_price) and
             not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
