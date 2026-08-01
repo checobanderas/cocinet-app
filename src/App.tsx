@@ -12876,6 +12876,18 @@ export default function App() {
         .bold(false);
       if (companyConfig.rfc)
         job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
+      if (companyConfig.regimenFiscal)
+        job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
+      if (companyConfig.lugarExpedicion)
+        job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
+      if (companyConfig.direccionFiscal)
+        job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
+      if (companyConfig.telefono || companyConfig.email) {
+        let cStr = "";
+        if (companyConfig.telefono) cStr += `TEL: ${companyConfig.telefono}`;
+        if (companyConfig.email) cStr += ` ${companyConfig.email}`;
+        job.printLine(cStr.trim().toUpperCase());
+      }
       if (companyConfig.sucursal)
         job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
       job.printLine(

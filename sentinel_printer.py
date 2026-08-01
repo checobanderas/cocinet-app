@@ -492,6 +492,7 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         "C:\\buzon\\logo.png",
         "C:\\buzon\\logo.jpg",
         "C:\\buzon\\INSTALADOR_SENTINELA\\logoroy.png",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.png",
         "C:\\buzon\\INSTALADOR_SENTINELA\\logo.jpg",
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "logoroy.png"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"),
@@ -503,7 +504,7 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
             break
 
     if not target_logo:
-        log.warning(f"No se encontró logotipo físico en ninguna de las rutas de búsqueda.")
+        log.warning("No se encontró logotipo físico en ninguna de las rutas de búsqueda.")
         return y_start
 
     try:
@@ -519,7 +520,8 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         new_h = int(h * scale)
         
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        x_start = (printable_width - new_w) // 2
+        margin_left = 25
+        x_start = margin_left + max(0, (printable_width - new_w) // 2)
         
         hdc_handle = hDC.GetSafeHdc()
         dib = ImageWin.Dib(img)

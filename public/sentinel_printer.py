@@ -47,16 +47,31 @@ import sqlite3
 import re
 from datetime import datetime
 
+# Fix DLL search path for pywin32 in elevated UAC environment
+try:
+    pywin32_sys32 = os.path.join(sys.prefix, "Lib", "site-packages", "pywin32_system32")
+    win32_dir = os.path.join(sys.prefix, "Lib", "site-packages", "win32")
+    sys32_win = os.environ.get("SystemRoot", r"C:\Windows") + r"\System32"
+    for d in (pywin32_sys32, win32_dir, sys32_win):
+        if os.path.exists(d) and hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(d)
+            except Exception:
+                pass
+except Exception:
+    pass
+
+try:
+    import pywintypes
+except Exception:
+    pass
+
 import win32print
 import win32serviceutil
 import win32service
 import win32event
 import servicemanager
 import socket
-
-# Importaciones para renderizado GDI
-import win32ui
-import win32con
 
 # PIL
 try:
@@ -470,11 +485,31 @@ def send_raw_to_printer(printer_name: str, data_bytes: bytes):
 
 def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi_y: int) -> int:
     """Carga y dibuja el logotipo centrado en el DC del ticket, retornando la nueva coordenada Y."""
-    if not logo_path or not os.path.exists(logo_path):
+    target_logo = None
+    possible_paths = [
+        logo_path,
+        "C:\\buzon\\logoroy.png",
+        "C:\\buzon\\logo.png",
+        "C:\\buzon\\logo.jpg",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logoroy.png",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.png",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.jpg",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logoroy.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.jpg"),
+    ]
+    for p in possible_paths:
+        if p and os.path.exists(p):
+            target_logo = p
+            break
+
+    if not target_logo:
+        log.warning("No se encontró logotipo físico en ninguna de las rutas de búsqueda.")
         return y_start
+
     try:
         from PIL import Image, ImageWin
-        img = Image.open(logo_path)
+        img = Image.open(target_logo)
         if img.mode != "RGB":
             img = img.convert("RGB")
             
@@ -485,14 +520,15 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         new_h = int(h * scale)
         
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        x_start = (printable_width - new_w) // 2
+        margin_left = 25
+        x_start = margin_left + max(0, (printable_width - new_w) // 2)
         
         hdc_handle = hDC.GetSafeHdc()
         dib = ImageWin.Dib(img)
         dib.draw(hdc_handle, (x_start, y_start, x_start + new_w, y_start + new_h))
         return y_start + new_h + 15
     except Exception as e:
-        log.error(f"Error renderizando el logotipo GDI: {e}")
+        log.error(f"Error renderizando el logotipo GDI ({target_logo}): {e}")
         return y_start
 
 def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, printable_width: int, y: int, align: int = 0, line_spacing: int = 4) -> int:
@@ -554,6 +590,10 @@ def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, prin
 
 def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
     """Parsea el ticket de comandos ESC/POS y lo dibuja vectorialmente usando el GDI de Windows."""
+    import pywintypes
+    import win32ui
+    import win32con
+
     global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT
     config_printers = load_printer_config()
     PRINTER_MAP = config_printers["PRINTER_MAP"]
@@ -613,8 +653,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
     y = 20
     
-    # Dibujar logotipo si es ticket de cuentas (precuenta/cuenta) y existe logotipo
-    if ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
+    # Dibujar logotipo para todos los tickets comerciales (cuentas/precuentas/caja)
+    if ticket_type.lower() not in ["cocina", "barra"]:
         y = draw_logo_on_dc(hDC, LOGO_PATH, width, y, dpi_y)
     
     # Escalar tamaño base de tipografía
@@ -692,7 +732,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         hDC.SelectObject(f)
 
         # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "EMAIL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "REGIMEN", "RÉGIMEN", "LUGAR", "EXPEDICION", "EXPEDICIÓN", "FORMA DE PAGO", "PAGA CON", "RECIBIDO", "CAMBIO", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
         
         has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
         has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
@@ -815,7 +855,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             continue
         
         # 4. Formatear y alinear Totales, Subtotales, Cambios, etc.
-        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA MESEROS|PROPINA VOLUNTARIA|PROPINA|DESCUENTO|FORMA DE PAGO|PAGO|PAGA CON|RECIBIDO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:
