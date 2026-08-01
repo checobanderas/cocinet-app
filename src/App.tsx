@@ -3944,23 +3944,34 @@ export default function App() {
       } else if (pedido.tipo === "cuenta") {
         job.center();
         job.setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED).bold(true);
-        job.printLine(companyConfig.businessName.toUpperCase());
+        const bName = (pedido.businessName || companyConfig.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+        job.printLine(bName);
         job.setPrintMode(job.FONT_SIZE_NORMAL).bold(false);
         
-        if (companyConfig.rfc) job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
-        if (companyConfig.regimenFiscal) job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
-        if (companyConfig.lugarExpedicion) job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
-        if (companyConfig.direccionFiscal) job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
-        if (companyConfig.telefono || companyConfig.email) {
+        const rfcVal = (pedido.rfc || companyConfig.rfc || "").toUpperCase();
+        const regVal = (pedido.regimenFiscal || companyConfig.regimenFiscal || "").toUpperCase();
+        const lugVal = (pedido.lugarExpedicion || companyConfig.lugarExpedicion || "").toUpperCase();
+        const dirVal = (pedido.direccionFiscal || companyConfig.direccionFiscal || "").toUpperCase();
+        const telVal = pedido.telefono || companyConfig.telefono || "";
+        const emlVal = pedido.email || companyConfig.email || "";
+        const sucVal = (pedido.sucursal || companyConfig.sucursal || "").toUpperCase();
+
+        if (rfcVal) job.printLine(`RFC: ${rfcVal}`);
+        if (regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
+        if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
+        if (dirVal) job.printLine(`DIR: ${dirVal}`);
+        if (telVal || emlVal) {
           let cStr = "";
-          if (companyConfig.telefono) cStr += `TEL: ${companyConfig.telefono}`;
-          if (companyConfig.email) cStr += ` ${companyConfig.email}`;
+          if (telVal) cStr += `TEL: ${telVal}`;
+          if (emlVal) cStr += ` ${emlVal}`;
           job.printLine(cStr.trim().toUpperCase());
         }
-        if (companyConfig.sucursal) job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
+        if (sucVal) job.printLine(`SUC: ${sucVal}`);
         
         job.printLine(`-- PRECUENTA (RED) --`);
         job.printLine(`MESA: ${pedido.mesa}`);
+        const atendidoStr = pedido.atendidoPor || pedido.mesero || pedido.createdBy || "S/M";
+        job.printLine(`LE ATENDIO: ${atendidoStr.toUpperCase()}`);
         
         const dateStr = pedido.timestamp ? new Date(pedido.timestamp).toLocaleString() : new Date().toLocaleString();
         job.printLine(`FECHA: ${dateStr}`);
@@ -12654,6 +12665,8 @@ export default function App() {
         job.printLine("REIMPRESION DE CUENTA");
       }
       job.printLine(`MESA: ${account.tableLabel}`);
+      const waiterNameStr = (account.comandas || []).map(c => c.createdBy?.name).find(Boolean) || account.createdBy || "S/M";
+      job.printLine(`LE ATENDIO: ${waiterNameStr.toUpperCase()}`);
       job.printLine(`FECHA: ${account.timestamp ? new Date(account.timestamp).toLocaleString("es-MX") : ""}`);
       const getPaymentLabel = (acc: any) => {
         const m = (acc.paymentMethod || acc.metodoPago || acc.payment_method || acc.formaPago || acc.tipoPago || "").toString().toLowerCase().trim();
@@ -12834,7 +12847,7 @@ export default function App() {
                 precio: i.product.price,
                 subtotal: i.quantity * i.product.price,
               })),
-            atendidoPor: currentUser?.name || "S/M",
+            atendidoPor: Array.from(new Set(table.comandas.map(c => c.createdBy?.name).filter(Boolean))).join(", ") || currentUser?.name || "S/M",
             pedidoData: {
                 tipo: "cuenta",
                 folio: preFolio,
@@ -12855,7 +12868,16 @@ export default function App() {
                     precio: i.product.price,
                     subtotal: i.quantity * i.product.price,
                   })),
+                atendidoPor: Array.from(new Set(table.comandas.map(c => c.createdBy?.name).filter(Boolean))).join(", ") || currentUser?.name || "S/M",
                 timestamp: getMexicoISOString(),
+                businessName: companyConfig.businessName,
+                rfc: companyConfig.rfc,
+                regimenFiscal: companyConfig.regimenFiscal,
+                lugarExpedicion: companyConfig.lugarExpedicion,
+                direccionFiscal: companyConfig.direccionFiscal,
+                telefono: companyConfig.telefono,
+                email: companyConfig.email,
+                sucursal: companyConfig.sucursal,
             }
           }
         );
@@ -12897,6 +12919,8 @@ export default function App() {
         `-- PRECUENTA (${view === "resumen" ? "GLOBAL" : view.toUpperCase()}) --`
       );
       job.printLine(`MESA: ${table.label}`);
+      const waiterNamesStr = Array.from(new Set(table.comandas.map(c => c.createdBy?.name).filter(Boolean))).join(", ") || currentUser?.name || "S/M";
+      job.printLine(`LE ATENDIO: ${waiterNamesStr.toUpperCase()}`);
       job.printLine(`FECHA: ${new Date().toLocaleString()}`);
       job.printLine("--------------------------------");
 

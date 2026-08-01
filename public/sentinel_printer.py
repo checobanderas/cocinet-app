@@ -662,7 +662,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     if paper_size == "58mm":
         base_pt = base_pt * 0.82
         
-    # Pre-procesamiento: separar renglones concatenados (ej: múltiples productos pegados o SUBTOTAL y TOTAL)
+    # Pre-procesamiento: separar renglones concatenados
     expanded_lines = []
     for l in parsed_lines:
         txt = l['text'].strip()
@@ -670,7 +670,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             expanded_lines.append(l)
             continue
             
-        # 1. Separar si vienen múltiples productos concatenados en una sola línea (ej: "6x TACO DE PASTOR (MAÍZ) $132.002x REFRESCOS $76.00")
+        # 1. Separar si vienen múltiples productos concatenados
         item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
         found_items = re.findall(item_split_pattern, txt, flags=re.IGNORECASE)
         if len(found_items) > 1:
@@ -680,7 +680,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             continue
 
         # 2. Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
-        keywords_pattern = r'(?=(?:RFC|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
+        keywords_pattern = r'(?=(?:RFC|REGIMEN|LUGAR|DIR|TEL|EMAIL|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
         found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
         if len(found_parts) > 1:
             for p in found_parts:
@@ -689,11 +689,26 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         else:
             expanded_lines.append(l)
 
+    # 3. Fusionar líneas de producto que se hayan dividido entre cantidad/nombre y precio
+    merged_lines = []
+    idx = 0
+    while idx < len(expanded_lines):
+        curr = expanded_lines[idx]
+        curr_text = curr['text'].strip()
+        has_qty_only = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', curr_text, re.IGNORECASE)) and not bool(re.search(r'\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', curr_text))
+        if has_qty_only and idx + 1 < len(expanded_lines):
+            nxt_text = expanded_lines[idx + 1]['text'].strip()
+            if bool(re.match(r'^\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', nxt_text)):
+                merged_lines.append({**curr, 'text': f"{curr_text} {nxt_text}"})
+                idx += 2
+                continue
+        merged_lines.append(curr)
+        idx += 1
+
     header_drawn = False
     in_table_phase = False
-    header_metadata_passed = False
         
-    for line in expanded_lines:
+    for line in merged_lines:
         text = line['text'].strip()
         alignment = line['align']
         size_mode = line['size']
@@ -731,74 +746,43 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "EMAIL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "REGIMEN", "RÉGIMEN", "LUGAR", "EXPEDICION", "EXPEDICIÓN", "FORMA DE PAGO", "PAGA CON", "RECIBIDO", "CAMBIO", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
+        # 3. Detectar Renglón de Producto
+        is_item_line = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE)) or bool(re.search(r'\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', text))
         
-        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
-        has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
-        
-        # El renglón de producto se identifica de forma absoluta por tener cantidad inicial o importe final sin ser clave de cabecera
-        is_item_line = bool(
-            (has_qty or has_price) and
-            not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
-            not any(c in ('-', '=', '_', '*') for c in text)
-        )
-
-        log.info(f"  [GDI v5.0.0]: '{text}' | item={is_item_line}")
-
-        # Dibujar encabezado de tabla estilizada justo después de los metadatos y antes del primer producto
-        if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
-            header_drawn = True
+        if is_item_line and not any(k in text.upper() for k in ["TOTAL", "SUBTOTAL", "PROPINA", "DESCUENTO", "CAMBIO", "FECHA", "HORA", "MESA", "FOLIO", "SUC", "RFC", "REGIMEN", "LUGAR", "DIR", "TEL", "EMAIL", "LE ATENDIO", "LE ATENDIÓ", "ATENDIDO POR", "MESERO"]):
             in_table_phase = True
             
-            # Espaciado vectorial para bajar la tabla y dejarla clara debajo de MESA/FECHA
-            y += 6
+            # Encabezado de tabla si es la primera vez
+            if not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
+                header_drawn = True
+                y += 6
+                pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
+                hDC.SelectObject(pen_tbl)
+                hDC.MoveTo(margin_left, y + 2)
+                hDC.LineTo(width - margin_right, y + 2)
+                y += 8
+                fh = get_font(FONT_NAME, base_pt * 0.88, True)
+                hDC.SelectObject(fh)
+                hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
+                w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
+                x_imp = max(margin_left + 150, width - margin_right - w_imp)
+                hDC.TextOut(x_imp, y, "IMPORTE")
+                y += h_imp + 4
+                hDC.MoveTo(margin_left, y + 2)
+                hDC.LineTo(width - margin_right, y + 2)
+                y += 10
+                hDC.SelectObject(f)
             
-            # Línea superior del encabezado de tabla
-            pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
-            hDC.SelectObject(pen_tbl)
-            hDC.MoveTo(margin_left, y + 2)
-            hDC.LineTo(width - margin_right, y + 2)
-            y += 8
-            
-            # Encabezado de 1 renglón: CANT / DESCRIPCIÓN                IMPORTE
-            fh = get_font(FONT_NAME, base_pt * 0.88, True)
-            hDC.SelectObject(fh)
-            hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
-            w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
-            x_imp = max(margin_left + 150, width - margin_right - w_imp)
-            hDC.TextOut(x_imp, y, "IMPORTE")
-            y += h_imp + 4
-            
-            # Línea inferior del encabezado
-            hDC.MoveTo(margin_left, y + 2)
-            hDC.LineTo(width - margin_right, y + 2)
-            y += 10
-
-        # Renderizar Renglón de Producto (1 solo renglón estricto por producto, truncando la descripción si es muy larga)
-        if is_item_line:
-            desc = text.strip()
-            price_str = None
-            qty_str = None
-            
-            # 1. Extraer precio al final de la línea si existe
-            p_m = re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', desc)
-            if p_m:
-                price_str = p_m.group(1)
-                desc = desc[:p_m.start()].strip()
+            # Extraer Cantidad/Descripción/Precio
+            qty_match = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', text, re.IGNORECASE)
+            qty_val = qty_match.group(1) if qty_match else "1"
+            rem_text = qty_match.group(2).strip() if qty_match else text.strip()
+            imp_match = re.search(r'(\$?[0-9]+(?:\.[0-9]{1,2})?)\s*$', rem_text)
+            imp_str = imp_match.group(1) if imp_match else ""
+            desc = rem_text[:imp_match.start()].strip() if imp_match else rem_text
                 
-            # 2. Extraer cantidad al inicio si existe
-            q_m = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', desc, re.IGNORECASE)
-            if q_m:
-                qty_str = q_m.group(1)
-                desc = q_m.group(2).strip()
-                
-            qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
-            price_num = float(price_str.replace(',', '')) if price_str else 0.0
-            
-            # 3. Dibujar el IMPORTE alineado a la derecha en la misma línea
-            imp_str = f"${price_num:.2f}" if price_num > 0 else ""
-            fp = get_font(FONT_NAME, pt * 0.95, True)
+            item_pt = base_pt * 0.88
+            fp = get_font(FONT_NAME, item_pt, True)
             hDC.SelectObject(fp)
             
             if imp_str:
@@ -806,56 +790,26 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 x_right = max(margin_left + 120, width - margin_right - pr_w)
                 hDC.TextOut(x_right, y, imp_str)
             else:
-                pr_w, pr_h = 0, int(pt * dpi_y / 72)
                 x_right = width - margin_right
                 
-            # 4. Formatear la descripción limpia con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
-            full_desc_left = f"{qty_val}x {desc}"
-                
-            # 5. Truncar la descripción si excede el espacio disponible antes del importe
-            fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
-            hDC.SelectObject(fd)
-            
+            full_desc = f"{qty_val}x {desc}"
             max_desc_w = x_right - margin_left - 10
-            curr_desc = full_desc_left
-            
-            if max_desc_w > 40:
-                while curr_desc and hDC.GetTextExtent(curr_desc)[0] > max_desc_w:
-                    curr_desc = curr_desc[:-1]
-                if len(curr_desc) < len(full_desc_left):
-                    curr_desc = curr_desc.rstrip() + "..."
-            
-            hDC.TextOut(margin_left, y, curr_desc)
-            _, desc_h = hDC.GetTextExtent(curr_desc)
-            
-            y += max(desc_h, pr_h, int(pt * dpi_y / 72)) + 5
+            while full_desc and hDC.GetTextExtent(full_desc)[0] > max_desc_w:
+                full_desc = full_desc[:-1]
+            hDC.TextOut(margin_left, y, full_desc)
+            _, desc_h = hDC.GetTextExtent(full_desc)
+            y += max(desc_h, int(item_pt * dpi_y / 72)) + 5
             continue
         
-        # 3.5. Formatear y renderizar Fecha y Hora con Emojis 📅 y ⏰ (Negrita, oscuro y legible)
-        if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
-            clean_date_text = text
-            if "FECHA:" in clean_date_text.upper():
-                date_val = re.sub(r'^FECHA:\s*', '', clean_date_text, flags=re.IGNORECASE).strip()
-                if ',' in date_val:
-                    parts = date_val.split(',', 1)
-                    f_part = parts[0].strip()
-                    h_part = parts[1].strip()
-                    formatted_dt = f"📅 {f_part}   ⏰ {h_part}"
-                else:
-                    formatted_dt = f"📅 {date_val}"
-            elif clean_date_text.upper().startswith("HORA:"):
-                hora_val = clean_date_text[5:].strip()
-                formatted_dt = f"⏰ {hora_val}"
-            else:
-                formatted_dt = text
-
+        # 3.5. Formatear Fecha y Hora
+        if any(k in text.upper() for k in ["FECHA:", "HORA:"]):
             f_dt = get_font(FONT_NAME, pt * 1.05, True, use_emoji_font=True)
             hDC.SelectObject(f_dt)
-            y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
+            y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
             continue
         
-        # 4. Formatear y alinear Totales, Subtotales, Cambios, etc.
-        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA MESEROS|PROPINA VOLUNTARIA|PROPINA|DESCUENTO|FORMA DE PAGO|PAGO|PAGA CON|RECIBIDO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        # 4. Totales
+        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA MESEROS|PROPINA VOLUNTARIA|PROPINA|DESCUENTO|FORMA DE PAGO|PAGO|PAGA CON|RECIBIDO|CAMBIO|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:
