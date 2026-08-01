@@ -20315,10 +20315,13 @@ Instrucciones:
                             localStorage.setItem("company_config", JSON.stringify(updatedCfg));
                           } catch (e) {}
 
-                          // Also update selectedTenant in tenants collection with geminiApiKey & requireInternalFolio
+                          // Also update selectedTenant in tenants collection with geminiApiKey & requireInternalFolio & rfc
                           if (selectedTenant) {
                             const updatedTenant = {
                               ...selectedTenant,
+                              name: ticketBusinessName.trim() || selectedTenant.name,
+                              rfc: ticketRfc.trim() || selectedTenant.rfc,
+                              sucursalDefault: ticketSucursal.trim() || selectedTenant.sucursalDefault,
                               geminiApiKey: ticketGeminiApiKey.trim(),
                               requireInternalFolio: ticketRequireInternalFolio,
                             };
