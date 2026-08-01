@@ -485,11 +485,30 @@ def send_raw_to_printer(printer_name: str, data_bytes: bytes):
 
 def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi_y: int) -> int:
     """Carga y dibuja el logotipo centrado en el DC del ticket, retornando la nueva coordenada Y."""
-    if not logo_path or not os.path.exists(logo_path):
+    target_logo = None
+    possible_paths = [
+        logo_path,
+        "C:\\buzon\\logoroy.png",
+        "C:\\buzon\\logo.png",
+        "C:\\buzon\\logo.jpg",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logoroy.png",
+        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.jpg",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logoroy.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.jpg"),
+    ]
+    for p in possible_paths:
+        if p and os.path.exists(p):
+            target_logo = p
+            break
+
+    if not target_logo:
+        log.warning(f"No se encontró logotipo físico en ninguna de las rutas de búsqueda.")
         return y_start
+
     try:
         from PIL import Image, ImageWin
-        img = Image.open(logo_path)
+        img = Image.open(target_logo)
         if img.mode != "RGB":
             img = img.convert("RGB")
             
@@ -507,7 +526,7 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         dib.draw(hdc_handle, (x_start, y_start, x_start + new_w, y_start + new_h))
         return y_start + new_h + 15
     except Exception as e:
-        log.error(f"Error renderizando el logotipo GDI: {e}")
+        log.error(f"Error renderizando el logotipo GDI ({target_logo}): {e}")
         return y_start
 
 def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, printable_width: int, y: int, align: int = 0, line_spacing: int = 4) -> int:
@@ -632,8 +651,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
     y = 20
     
-    # Dibujar logotipo si es ticket de cuentas (precuenta/cuenta) y existe logotipo
-    if ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
+    # Dibujar logotipo para todos los tickets comerciales (cuentas/precuentas/caja)
+    if ticket_type.lower() not in ["cocina", "barra"]:
         y = draw_logo_on_dc(hDC, LOGO_PATH, width, y, dpi_y)
     
     # Escalar tamaño base de tipografía

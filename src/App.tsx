@@ -1577,6 +1577,11 @@ export default function App() {
           `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`;
         const g = data?.geminiApiKey || "";
         const u = data?.useRawBt ?? false;
+        const reg = data?.regimenFiscal || "601 - General de Ley Personas Morales";
+        const dir = data?.direccionFiscal || "";
+        const lug = data?.lugarExpedicion || "";
+        const tel = data?.telefono || "";
+        const eml = data?.email || "";
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
@@ -1597,6 +1602,11 @@ export default function App() {
           footerMessage: f,
           geminiApiKey: g,
           useRawBt: u,
+          regimenFiscal: reg,
+          direccionFiscal: dir,
+          lugarExpedicion: lug,
+          telefono: tel,
+          email: eml,
         });
 
         setSystemUseRawBt(u);
@@ -1605,6 +1615,11 @@ export default function App() {
         setTicketSucursal(s);
         setTicketFooterMessage(f);
         setTicketGeminiApiKey(g);
+        setTicketRegimenFiscal(reg);
+        setTicketDireccionFiscal(dir);
+        setTicketLugarExpedicion(lug);
+        setTicketTelefono(tel);
+        setTicketEmail(eml);
 
         try {
           localStorage.setItem(
@@ -1616,6 +1631,11 @@ export default function App() {
               footerMessage: f,
               geminiApiKey: g,
               useRawBt: u,
+              regimenFiscal: reg,
+              direccionFiscal: dir,
+              lugarExpedicion: lug,
+              telefono: tel,
+              email: eml,
             }),
           );
           localStorage.setItem("system_use_rawbt", u ? "true" : "false");
@@ -12611,6 +12631,18 @@ export default function App() {
         .bold(false);
       if (companyConfig.rfc)
         job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
+      if (companyConfig.regimenFiscal)
+        job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
+      if (companyConfig.lugarExpedicion)
+        job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
+      if (companyConfig.direccionFiscal)
+        job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
+      if (companyConfig.telefono || companyConfig.email) {
+        let cStr = "";
+        if (companyConfig.telefono) cStr += `TEL: ${companyConfig.telefono}`;
+        if (companyConfig.email) cStr += ` ${companyConfig.email}`;
+        job.printLine(cStr.trim());
+      }
       if (companyConfig.sucursal)
         job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
       if (customFolio !== undefined && customFolio !== null) {
@@ -13099,11 +13131,9 @@ export default function App() {
         </head>
         <body onload="window.print()">
           <div class="center">
-            ${companyConfig.logoUrl ? `
-              <div style="display: flex; justify-content: center; margin-bottom: 10px;">
-                <img src="${companyConfig.logoUrl}" style="max-height: 32px; max-width: 90px; object-fit: contain;" />
-              </div>
-            ` : ""}
+            <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+              <img src="${companyConfig.logoUrl || '/logoroy.png'}" style="max-height: 50px; max-width: 140px; object-fit: contain;" onError="this.style.display='none'" />
+            </div>
             <h2 style="margin: 0 0 5px 0;">${companyConfig.businessName.toUpperCase()}</h2>
             ${companyConfig.rfc ? `<div style="font-size: 11px;">RFC: ${companyConfig.rfc.toUpperCase()}</div>` : ''}
             ${companyConfig.regimenFiscal ? `<div style="font-size: 11px;">RÉGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}</div>` : ''}
@@ -20250,16 +20280,11 @@ Instrucciones:
                     <button
                       onClick={async () => {
                         try {
-                          await saveCompanyConfigInFirebase(selectedTenant.id, {
-                            businessName:
-                              ticketBusinessName.trim() || selectedTenant.name,
+                          const updatedCfg = {
+                            businessName: ticketBusinessName.trim() || selectedTenant.name,
                             rfc: ticketRfc.trim() || selectedTenant.rfc,
-                            sucursal:
-                              ticketSucursal.trim() ||
-                              selectedTenant.sucursalDefault,
-                            footerMessage:
-                              ticketFooterMessage.trim() ||
-                              "¡Gracias por su visita! Vuelva pronto 🌮",
+                            sucursal: ticketSucursal.trim() || selectedTenant.sucursalDefault,
+                            footerMessage: ticketFooterMessage.trim() || "¡Gracias por su visita! Vuelva pronto 🌮",
                             geminiApiKey: ticketGeminiApiKey.trim(),
                             regimenFiscal: ticketRegimenFiscal.trim(),
                             direccionFiscal: ticketDireccionFiscal.trim(),
@@ -20269,7 +20294,14 @@ Instrucciones:
                             useRawBt: systemUseRawBt,
                             printerConfig: tenantPrinterConfig,
                             productCategories: productCategories,
-                          });
+                          };
+
+                          await saveCompanyConfigInFirebase(selectedTenant.id, updatedCfg);
+
+                          setCompanyConfig(updatedCfg);
+                          try {
+                            localStorage.setItem("company_config", JSON.stringify(updatedCfg));
+                          } catch (e) {}
 
                           // Also update selectedTenant in tenants collection with geminiApiKey & requireInternalFolio
                           if (selectedTenant) {
