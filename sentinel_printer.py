@@ -689,11 +689,27 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         else:
             expanded_lines.append(l)
 
+    # 3. Fusionar líneas de producto que se hayan dividido entre cantidad/nombre y precio
+    merged_lines = []
+    idx = 0
+    while idx < len(expanded_lines):
+        curr = expanded_lines[idx]
+        curr_text = curr['text'].strip()
+        has_qty_only = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', curr_text, re.IGNORECASE)) and not bool(re.search(r'\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', curr_text))
+        if has_qty_only and idx + 1 < len(expanded_lines):
+            nxt_text = expanded_lines[idx + 1]['text'].strip()
+            if bool(re.match(r'^\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', nxt_text)):
+                merged_lines.append({**curr, 'text': f"{curr_text} {nxt_text}"})
+                idx += 2
+                continue
+        merged_lines.append(curr)
+        idx += 1
+
     header_drawn = False
     in_table_phase = False
     header_metadata_passed = False
         
-    for line in expanded_lines:
+    for line in merged_lines:
         text = line['text'].strip()
         alignment = line['align']
         size_mode = line['size']
@@ -797,8 +813,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             price_num = float(price_str.replace(',', '')) if price_str else 0.0
             
             # 3. Dibujar el IMPORTE alineado a la derecha en la misma línea
+            item_pt = ITEM_FONT_SIZE_PT if ITEM_FONT_SIZE_PT else (base_pt * 0.78)
             imp_str = f"${price_num:.2f}" if price_num > 0 else ""
-            fp = get_font(FONT_NAME, pt * 0.95, True)
+            fp = get_font(FONT_NAME, item_pt, True)
             hDC.SelectObject(fp)
             
             if imp_str:
@@ -806,14 +823,14 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 x_right = max(margin_left + 120, width - margin_right - pr_w)
                 hDC.TextOut(x_right, y, imp_str)
             else:
-                pr_w, pr_h = 0, int(pt * dpi_y / 72)
+                pr_w, pr_h = 0, int(item_pt * dpi_y / 72)
                 x_right = width - margin_right
                 
             # 4. Formatear la descripción limpia con su cantidad (ej: "1x TACO DE PASTOR (MAÍZ)")
             full_desc_left = f"{qty_val}x {desc}"
                 
             # 5. Truncar la descripción si excede el espacio disponible antes del importe
-            fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
+            fd = get_font(FONT_NAME, item_pt, True, use_emoji_font=has_emoji(full_desc_left))
             hDC.SelectObject(fd)
             
             max_desc_w = x_right - margin_left - 10

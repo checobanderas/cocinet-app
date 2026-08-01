@@ -3968,8 +3968,11 @@ export default function App() {
 
         job.left();
         (pedido.items || []).forEach((item: any) => {
-          const line = `${item.cantidad}x ${String(item.nombre).toUpperCase()}`;
           const price = `$${Number(item.subtotal || (item.precio || 0) * (item.cantidad || 1)).toFixed(2)}`;
+          const maxDescLen = Math.max(10, 32 - price.length - 4);
+          const rawName = String(item.nombre).toUpperCase();
+          const cleanName = rawName.length > maxDescLen ? rawName.substring(0, maxDescLen) : rawName;
+          const line = `${item.cantidad}x ${cleanName}`;
           const padding = " ".repeat(Math.max(1, 32 - line.length - price.length));
           job.printLine(line + padding + price);
         });
@@ -12909,8 +12912,11 @@ export default function App() {
             return acc;
           }, []);
         summarized.forEach((item) => {
-          const line = `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`;
           const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
+          const maxDescLen = Math.max(10, 32 - price.length - 4);
+          const rawName = getFormattedProductName(item.product).toUpperCase();
+          const cleanName = rawName.length > maxDescLen ? rawName.substring(0, maxDescLen) : rawName;
+          const line = `${item.quantity}x ${cleanName}`;
           const padding = " ".repeat(
             Math.max(1, 32 - line.length - price.length),
           );
