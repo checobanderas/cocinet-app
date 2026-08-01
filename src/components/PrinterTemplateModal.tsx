@@ -188,7 +188,7 @@ export const PrinterTemplateModal: React.FC<PrinterTemplateModalProps> = ({
   };
 
   const handleDownloadInstallerFiles = () => {
-    const files = ["instalador.bat", "sentinel_printer.py", "instalador_sentinela.py", "printer_config.json"];
+    const files = ["instalador.bat", "sentinel_printer.py", "instalador_sentinela.py", "printer_config.json", "logoroy.png"];
     files.forEach((file, index) => {
       setTimeout(() => {
         downloadFile(file);
@@ -196,7 +196,7 @@ export const PrinterTemplateModal: React.FC<PrinterTemplateModalProps> = ({
     });
     setShowInstructions(true);
     if (triggerAppNotification) {
-      triggerAppNotification("📥 Descargando Archivos", "Se están descargando los 4 archivos de instalación para el Servicio de Windows.", "info");
+      triggerAppNotification("📥 Descargando Archivos", "Se están descargando los 5 archivos de instalación y logotipo para el Servicio de Windows.", "info");
     }
   };
 

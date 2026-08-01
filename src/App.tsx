@@ -3928,6 +3928,15 @@ export default function App() {
         job.setPrintMode(job.FONT_SIZE_NORMAL).bold(false);
         
         if (companyConfig.rfc) job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
+        if (companyConfig.regimenFiscal) job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
+        if (companyConfig.lugarExpedicion) job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
+        if (companyConfig.direccionFiscal) job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
+        if (companyConfig.telefono || companyConfig.email) {
+          let cStr = "";
+          if (companyConfig.telefono) cStr += `TEL: ${companyConfig.telefono}`;
+          if (companyConfig.email) cStr += ` ${companyConfig.email}`;
+          job.printLine(cStr.trim().toUpperCase());
+        }
         if (companyConfig.sucursal) job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
         
         job.printLine(`-- PRECUENTA (RED) --`);
@@ -3938,15 +3947,15 @@ export default function App() {
         job.printLine("--------------------------------");
 
         job.left();
-        pedido.items?.forEach((item: any) => {
-          const line = `${item.quantity || item.cantidad || 1}x ${(item.nombre || "").toUpperCase()}`;
-          const price = `$${((item.subtotal || (item.quantity || item.cantidad || 1) * (item.precio || 0)) || 0).toFixed(2)}`;
+        (pedido.items || []).forEach((item: any) => {
+          const line = `${item.cantidad}x ${String(item.nombre).toUpperCase()}`;
+          const price = `$${Number(item.subtotal || (item.precio || 0) * (item.cantidad || 1)).toFixed(2)}`;
           const padding = " ".repeat(Math.max(1, 32 - line.length - price.length));
           job.printLine(line + padding + price);
         });
 
         if (pedido.deliveryClientName || pedido.deliveryAddress) {
-          job.printLine(" ");
+          job.printLine("--------------------------------");
           job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
           if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
           if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
@@ -3971,13 +3980,12 @@ export default function App() {
         }
 
         job.right().printLine("--------------------------------");
-        const subtotalVal = Number(pedido.subtotal || pedido.total || 0);
-        const propinaVal = Number(pedido.propina || 0);
-        const descuentoVal = Number(pedido.descuento || 0);
-        const totalVal = Number(pedido.total || subtotalVal || 0);
+        const subtotalVal = Number(pedido.subtotal !== undefined && pedido.subtotal !== null ? pedido.subtotal : (pedido.total ?? 0));
+        const propinaVal = Number(pedido.propina ?? 0);
+        const descuentoVal = Number(pedido.descuento ?? 0);
+        const totalVal = Number(pedido.total !== undefined && pedido.total !== null ? pedido.total : Math.max(0, subtotalVal - descuentoVal));
 
         job.printLine(`SUBTOTAL: $${subtotalVal.toFixed(2)}`);
-        if (propinaVal > 0) job.printLine(`PROPINA: $${propinaVal.toFixed(2)}`);
         if (descuentoVal > 0) job.printLine(`DESCUENTO: -$${descuentoVal.toFixed(2)}`);
         
         job.bold(true).printLine(`TOTAL: $${totalVal.toFixed(2)}`).bold(false);
@@ -4475,6 +4483,11 @@ export default function App() {
   );
   const [ticketGeminiApiKey, setTicketGeminiApiKey] = useState<string>("");
   const [ticketRequireInternalFolio, setTicketRequireInternalFolio] = useState<boolean>(false);
+  const [ticketRegimenFiscal, setTicketRegimenFiscal] = useState<string>("601 - General de Ley Personas Morales");
+  const [ticketDireccionFiscal, setTicketDireccionFiscal] = useState<string>("");
+  const [ticketLugarExpedicion, setTicketLugarExpedicion] = useState<string>("");
+  const [ticketTelefono, setTicketTelefono] = useState<string>("");
+  const [ticketEmail, setTicketEmail] = useState<string>("");
 
   const [companyConfig, setCompanyConfig] = useState<{
     businessName: string;
@@ -4482,19 +4495,39 @@ export default function App() {
     sucursal: string;
     footerMessage: string;
     geminiApiKey: string;
+    regimenFiscal?: string;
+    direccionFiscal?: string;
+    lugarExpedicion?: string;
+    telefono?: string;
+    email?: string;
     logoUrl?: string;
     useRawBt?: boolean;
   }>(() => {
     try {
       const cached = localStorage.getItem("company_config");
       return cached
-        ? { geminiApiKey: "", logoUrl: "", useRawBt: false, ...JSON.parse(cached) }
+        ? {
+            geminiApiKey: "",
+            logoUrl: "",
+            useRawBt: false,
+            regimenFiscal: "601 - General de Ley Personas Morales",
+            direccionFiscal: "",
+            lugarExpedicion: "",
+            telefono: "",
+            email: "",
+            ...JSON.parse(cached),
+          }
         : {
             businessName: "Taquería El Pastorcito",
             rfc: "XAXX010101000",
             sucursal: "Sucursal Centro",
             footerMessage: "¡Gracias por su visita! Vuelva pronto 🌮",
             geminiApiKey: "",
+            regimenFiscal: "601 - General de Ley Personas Morales",
+            direccionFiscal: "",
+            lugarExpedicion: "",
+            telefono: "",
+            email: "",
             logoUrl: "",
             useRawBt: false,
           };
@@ -13073,6 +13106,10 @@ export default function App() {
             ` : ""}
             <h2 style="margin: 0 0 5px 0;">${companyConfig.businessName.toUpperCase()}</h2>
             ${companyConfig.rfc ? `<div style="font-size: 11px;">RFC: ${companyConfig.rfc.toUpperCase()}</div>` : ''}
+            ${companyConfig.regimenFiscal ? `<div style="font-size: 11px;">RÉGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}</div>` : ''}
+            ${companyConfig.lugarExpedicion ? `<div style="font-size: 11px;">LUGAR EXPEDICIÓN: ${companyConfig.lugarExpedicion.toUpperCase()}</div>` : ''}
+            ${companyConfig.direccionFiscal ? `<div style="font-size: 11px;">DIR: ${companyConfig.direccionFiscal.toUpperCase()}</div>` : ''}
+            ${companyConfig.telefono || companyConfig.email ? `<div style="font-size: 11px;">TEL: ${companyConfig.telefono || ''} ${companyConfig.email || ''}</div>` : ''}
             ${companyConfig.sucursal ? `<div style="font-size: 11px;">SUC: ${companyConfig.sucursal.toUpperCase()}</div>` : ''}
             <div class="divider"></div>
             <strong>PRECUENTA (${view.toUpperCase()})</strong><br/>
@@ -13113,9 +13150,9 @@ export default function App() {
           }
           <div class="right">
             <div class="total-row"><strong>SUBTOTAL:</strong><span>$${subTotalItems.toFixed(2)}</span></div>
-            ${paymentTipValue > 0 ? `<div class="total-row"><strong>PROPINA:</strong><span>$${paymentTipValue.toFixed(2)}</span></div>` : ''}
             ${discountAmount > 0 ? `<div class="total-row"><strong>DESCUENTO:</strong><span>-$${discountAmount.toFixed(2)}</span></div>` : ''}
-            <div class="total-row" style="font-size: 15px;"><strong>TOTAL:</strong><span>$${total.toFixed(2)}</span></div>
+            <div class="total-row" style="font-size: 15px; font-weight: bold;"><strong>TOTAL A PAGAR:</strong><span>$${total.toFixed(2)}</span></div>
+            ${paymentTipValue > 0 ? `<div class="total-row" style="margin-top: 4px; border-top: 1px dotted #888; padding-top: 4px; font-size: 11px;"><strong>(+) PROPINA MESEROS (VOLUNTARIA):</strong><span>$${paymentTipValue.toFixed(2)}</span></div>` : ''}
           </div>
           <div class="divider"></div>
           <div class="center" style="font-size: 11px; margin-top: 15px;">
@@ -20059,6 +20096,71 @@ Instrucciones:
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Régimen Fiscal (SAT México) 🇲🇽
+                      </label>
+                      <input
+                        type="text"
+                        value={ticketRegimenFiscal}
+                        onChange={(e) => setTicketRegimenFiscal(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm"
+                        placeholder="Ej. 601 - General de Ley Personas Morales / 626 RESICO"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Dirección Fiscal (Calle, No., Col., Municipio)
+                      </label>
+                      <input
+                        type="text"
+                        value={ticketDireccionFiscal}
+                        onChange={(e) => setTicketDireccionFiscal(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm"
+                        placeholder="Ej. Av. Azucenas #102, Col. Reforma"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Lugar de Expedición / Código Postal (SAT)
+                      </label>
+                      <input
+                        type="text"
+                        value={ticketLugarExpedicion}
+                        onChange={(e) => setTicketLugarExpedicion(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm"
+                        placeholder="Ej. C.P. 68000, OAXACA, MEX"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Teléfono de Atención / Sucursal
+                      </label>
+                      <input
+                        type="text"
+                        value={ticketTelefono}
+                        onChange={(e) => setTicketTelefono(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm"
+                        placeholder="Ej. 951 123 4567"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Correo de Facturación / Atención a Clientes
+                      </label>
+                      <input
+                        type="text"
+                        value={ticketEmail}
+                        onChange={(e) => setTicketEmail(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm"
+                        placeholder="Ej. facturacion@tacosroy.mx"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                         Sucursal / Ubicación en el Ticket
                       </label>
                       <input
@@ -20159,6 +20261,11 @@ Instrucciones:
                               ticketFooterMessage.trim() ||
                               "¡Gracias por su visita! Vuelva pronto 🌮",
                             geminiApiKey: ticketGeminiApiKey.trim(),
+                            regimenFiscal: ticketRegimenFiscal.trim(),
+                            direccionFiscal: ticketDireccionFiscal.trim(),
+                            lugarExpedicion: ticketLugarExpedicion.trim(),
+                            telefono: ticketTelefono.trim(),
+                            email: ticketEmail.trim(),
                             useRawBt: systemUseRawBt,
                             printerConfig: tenantPrinterConfig,
                             productCategories: productCategories,

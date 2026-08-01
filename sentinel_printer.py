@@ -47,16 +47,31 @@ import sqlite3
 import re
 from datetime import datetime
 
+# Fix DLL search path for pywin32 in elevated UAC environment
+try:
+    pywin32_sys32 = os.path.join(sys.prefix, "Lib", "site-packages", "pywin32_system32")
+    win32_dir = os.path.join(sys.prefix, "Lib", "site-packages", "win32")
+    sys32_win = os.environ.get("SystemRoot", r"C:\Windows") + r"\System32"
+    for d in (pywin32_sys32, win32_dir, sys32_win):
+        if os.path.exists(d) and hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(d)
+            except Exception:
+                pass
+except Exception:
+    pass
+
+try:
+    import pywintypes
+except Exception:
+    pass
+
 import win32print
 import win32serviceutil
 import win32service
 import win32event
 import servicemanager
 import socket
-
-# Importaciones para renderizado GDI
-import win32ui
-import win32con
 
 # PIL
 try:
@@ -554,6 +569,10 @@ def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, prin
 
 def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
     """Parsea el ticket de comandos ESC/POS y lo dibuja vectorialmente usando el GDI de Windows."""
+    import pywintypes
+    import win32ui
+    import win32con
+
     global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT
     config_printers = load_printer_config()
     PRINTER_MAP = config_printers["PRINTER_MAP"]
@@ -692,7 +711,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         hDC.SelectObject(f)
 
         # 3. Detectar Renglón de Producto (requiere prefijo de cantidad "1x", "6x" o importe final "$XX.XX")
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "DIR:", "TEL:", "EMAIL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "REGIMEN", "RÉGIMEN", "LUGAR", "EXPEDICION", "EXPEDICIÓN", "FORMA DE PAGO", "PAGA CON", "RECIBIDO", "CAMBIO", "DATOS DE ENVIO", "SON:", "PAGADO", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
         
         has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
         has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
@@ -815,7 +834,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             continue
         
         # 4. Formatear y alinear Totales, Subtotales, Cambios, etc.
-        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA MESEROS|PROPINA VOLUNTARIA|PROPINA|DESCUENTO|FORMA DE PAGO|PAGO|PAGA CON|RECIBIDO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:

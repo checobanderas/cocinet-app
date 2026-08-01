@@ -287,7 +287,7 @@ def main():
 
     # 3. Detener y cerrar forzadamente cualquier servicio o proceso previo del Sentinela
     print("🛑 [PROCESANDO] Deteniendo y liberando memoria del Sentinela previo...")
-    run_command(f'python "{SENTINEL_SCRIPT}" stop', "Detener servicio mediante script", ignore_error=True)
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" stop', "Detener servicio mediante script", ignore_error=True)
     run_command(f'sc stop {SERVICE_NAME}', "Detener servicio mediante SCM de Windows", ignore_error=True)
     run_command('taskkill /F /FI "SERVICES eq COCINETPrintSentinel"', "Cierre forzado por SCM", ignore_error=True)
     run_command('taskkill /F /IM pythonservice.exe', "Cierre forzado de pythonservice.exe", ignore_error=True)
@@ -295,7 +295,7 @@ def main():
 
     # 4. Desinstalar servicio existente
     print("🗑️ [PROCESANDO] Limpiando registro del servicio previo de Windows...")
-    run_command(f'python "{SENTINEL_SCRIPT}" remove', "Eliminar servicio mediante script", ignore_error=True)
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" remove', "Eliminar servicio mediante script", ignore_error=True)
     run_command(f'sc delete {SERVICE_NAME}', "Eliminar servicio mediante SCM de Windows", ignore_error=True)
     time.sleep(1.5)
 
@@ -311,6 +311,22 @@ def main():
     
     # 6. Ejecutar script de post-instalación de pywin32 para registrar DLLs en System32
     print("⚙️ [PROCESANDO] Registrando variables del sistema para servicios de Python en Windows...")
+    try:
+        import shutil
+        sys32_path = os.environ.get("SystemRoot", r"C:\Windows") + r"\System32"
+        pywin32_sys32 = os.path.join(sys.prefix, "Lib", "site-packages", "pywin32_system32")
+        if os.path.exists(pywin32_sys32):
+            for f in os.listdir(pywin32_sys32):
+                if f.lower().endswith(".dll"):
+                    src = os.path.join(pywin32_sys32, f)
+                    try:
+                        shutil.copy2(src, os.path.join(sys32_path, f))
+                        shutil.copy2(src, os.path.join(sys.prefix, f))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
     post_install_cmd = f'"{sys.executable}" -c "import os, sys; print(os.path.join(sys.prefix, \'Scripts\', \'pywin32_postinstall.py\'))"'
     try:
         post_path = subprocess.check_output(post_install_cmd, shell=True, text=True).strip()
@@ -330,7 +346,7 @@ def main():
     # 7. Instalar el nuevo servicio de Windows
     print("🔌 [PROCESANDO] Instalando el renovado servicio de Windows del Sentinela v3.6.0...")
     # Instalamos con inicio retrasado o automático para que el spooler de Windows esté listo al iniciar
-    if not run_command(f'python "{SENTINEL_SCRIPT}" install', "Registrar Servicio de Windows"):
+    if not run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" install', "Registrar Servicio de Windows"):
         print("🛑 [PASO 7 FALLADO] Error al registrar el servicio de Windows.")
         print("💡 Sugerencia: Asegúrate de que no haya procesos de Python fantasma bloqueando y de que ejecutas como Administrador.")
         input("\nPresiona Enter para salir...")
@@ -341,7 +357,7 @@ def main():
 
     # 8. Iniciar el servicio de Windows
     print("⚡ [PROCESANDO] Inicializando el servicio en segundo plano de Windows...")
-    if not run_command(f'python "{SENTINEL_SCRIPT}" start', "Iniciar Servicio de Windows"):
+    if not run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" start', "Iniciar Servicio de Windows"):
         # Intentar forzar con SC
         if not run_command(f'sc start {SERVICE_NAME}', "Iniciar Servicio de Windows con SCM"):
             print("🛑 [PASO 8 FALLADO] No se pudo iniciar el servicio de Windows recién instalado.")
