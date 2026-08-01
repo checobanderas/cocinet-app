@@ -1577,11 +1577,11 @@ export default function App() {
           `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`;
         const g = data?.geminiApiKey || "";
         const u = data?.useRawBt ?? false;
-        const reg = data?.regimenFiscal || "601 - General de Ley Personas Morales";
-        const dir = data?.direccionFiscal || "";
-        const lug = data?.lugarExpedicion || "";
-        const tel = data?.telefono || "";
-        const eml = data?.email || "";
+        const reg = data?.regimenFiscal ?? selectedTenant.regimenFiscal ?? "";
+        const dir = data?.direccionFiscal ?? selectedTenant.direccionFiscal ?? "";
+        const lug = data?.lugarExpedicion ?? selectedTenant.lugarExpedicion ?? "";
+        const tel = data?.telefono ?? selectedTenant.telefono ?? "";
+        const eml = data?.email ?? selectedTenant.email ?? "";
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
