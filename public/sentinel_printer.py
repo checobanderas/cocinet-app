@@ -680,7 +680,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             continue
 
         # 2. Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
-        keywords_pattern = r'(?=(?:RFC|REGIMEN|LUGAR|DIR|TEL|EMAIL|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
+        keywords_pattern = r'(?=(?:RFC|REGIMEN FISCAL|REGIMEN|LUGAR EXPEDICION|LUGAR|DIR|TEL|EMAIL|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
         found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
         if len(found_parts) > 1:
             for p in found_parts:

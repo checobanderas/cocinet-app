@@ -16,6 +16,11 @@ export interface CompanyTenant {
   lng?: number;
   logoUrl?: string;
   requireInternalFolio?: boolean;
+  regimenFiscal?: string;
+  direccionFiscal?: string;
+  lugarExpedicion?: string;
+  telefono?: string;
+  email?: string;
   createdAt?: string;
   updatedAt?: string;
 }
