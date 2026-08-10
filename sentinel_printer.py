@@ -738,14 +738,15 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", "METODO DE PAGO", "FORMA DE PAGO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", "METODO DE PAGO", "FORMA DE PAGO", "DIR:", "TEL:", "TEL", "CELULAR", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:", "FACTURAR", "FACTURA"]
         
+        clean_key_text = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip()
         has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
         has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
         
         is_item_line = bool(
             (has_qty or has_price) and
-            not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
+            not any(clean_key_text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
         )
 
@@ -802,23 +803,11 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 pr_w, pr_h = 0, int(pt * dpi_y / 72)
                 x_right = width - margin_right
                 
-            full_desc_left = f"{qty_val}x {desc}"
-            fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
-            hDC.SelectObject(fd)
-            
-            max_desc_w = x_right - margin_left - 10
-            curr_desc = full_desc_left
-            
-            if max_desc_w > 40:
-                while curr_desc and hDC.GetTextExtent(curr_desc)[0] > max_desc_w:
-                    curr_desc = curr_desc[:-1]
-                if len(curr_desc) < len(full_desc_left):
-                    curr_desc = curr_desc.rstrip() + "..."
-            
-            hDC.TextOut(margin_left, y, curr_desc)
-            _, desc_h = hDC.GetTextExtent(curr_desc)
-            
-            y += max(desc_h, pr_h, int(pt * dpi_y / 72)) + 5
+            desc_w = width - margin_left - margin_right - (pr_w + 15 if imp_str else 0)
+            prefix = f"{qty_val}x " if qty_str else ""
+            full_desc = prefix + desc
+            y = wrap_and_draw_text(hDC, full_desc, margin_left, margin_right, desc_w, y, align=0, line_spacing=2)
+            y += 2
             continue
         
         if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
@@ -843,7 +832,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
             continue
         
-        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|FORMA DE PAGO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|FORMA DE PAGO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA|FACTURAR|FACTURA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:
@@ -863,6 +852,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     label = "PAGADO:"
                 elif "PAGO" in match_keyword:
                     label = "💳 PAGO CON:"
+                elif "FACTURAR" in match_keyword or "FACTURA" in match_keyword:
+                    label = "🧾 FACTURAR:"
                 else:
                     label = match_keyword + ":"
                 val = total_match.group(2).strip()
