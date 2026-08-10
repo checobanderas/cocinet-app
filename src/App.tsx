@@ -4136,7 +4136,6 @@ export default function App() {
         if (pedido.deliveryClientName || pedido.deliveryAddress) {
           job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
           if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
-          if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
           
           if (pedido.deliveryAddress) {
             let cleanAddr = pedido.deliveryAddress;
@@ -4223,7 +4222,6 @@ export default function App() {
         if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
         if (dirVal) job.printLine(`DIR: ${dirVal}`);
         if (sucVal) job.printLine(`SUC: ${sucVal}`);
-        if (telVal) job.printLine(`📞 TEL: ${telVal}`);
         if (emlVal) job.printLine(`✉️ ${emlVal.toLowerCase()}`);
         
         job.printLine("--------------------------------");
@@ -4247,7 +4245,6 @@ export default function App() {
           job.printLine("--------------------------------");
           job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
           if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
-          if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
           
           if (pedido.deliveryAddress) {
             let cleanAddr = pedido.deliveryAddress;
@@ -13165,7 +13162,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
       if (dirVal) job.printLine(`DIR: ${dirVal}`);
       if (sucVal) job.printLine(`SUC: ${sucVal}`);
-      if (telVal) job.printLine(`📞 TEL: ${telVal}`);
       if (emlVal) job.printLine(`✉️ ${emlVal.toLowerCase()}`);
       
       job.printLine("--------------------------------");
@@ -13455,8 +13451,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
       if (companyConfig.sucursal)
         job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
-      if (companyConfig.telefono)
-        job.printLine(`📞 TEL: ${companyConfig.telefono}`);
       if (companyConfig.email)
         job.printLine(`✉️ ${companyConfig.email.toLowerCase()}`);
 
@@ -13580,9 +13574,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
         if (dClientEsc) {
           job.printLine(`CLIENTE: ${dClientEsc.toUpperCase()}`);
-        }
-        if (dPhoneEsc) {
-          job.printLine(`TEL: ${dPhoneEsc}`);
         }
         if (dAddrEsc) {
           let cleanAddr = "";
@@ -13750,7 +13741,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
             ${(companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion) ? `<div style="font-size: 11px;">LUGAR EXPEDICIÓN: ${(companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion || "").toUpperCase()}</div>` : ''}
             ${(companyConfig.direccionFiscal || selectedTenant?.direccionFiscal) ? `<div style="font-size: 11px;">DIR: ${(companyConfig.direccionFiscal || selectedTenant?.direccionFiscal || "").toUpperCase()}</div>` : ''}
             ${(companyConfig.sucursal || selectedTenant?.sucursalDefault) ? `<div style="font-size: 11px;">SUC: ${(companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.telefono || selectedTenant?.telefono) ? `<div style="font-size: 11px;">📞 TEL: ${companyConfig.telefono || selectedTenant?.telefono}</div>` : ''}
             ${(companyConfig.email || selectedTenant?.email) ? `<div style="font-size: 11px;">✉️ ${(companyConfig.email || selectedTenant?.email || "").toLowerCase()}</div>` : ''}
             <div class="divider"></div>
             <div>Mesa: ${table.label}</div>

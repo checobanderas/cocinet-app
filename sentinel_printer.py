@@ -724,6 +724,10 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             _, text_height = hDC.GetTextExtent(" ")
             y += text_height
             continue
+
+        clean_upper = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip().upper()
+        if clean_upper.startswith("TEL") or clean_upper.startswith("TELEFONO") or clean_upper.startswith("CEL") or clean_upper.startswith("CELULAR") or re.search(r'(?:TEL|TELEFONO|TELÉFONO|CEL|CELULAR)\s*:?\s*[0-9()-]{7,}', clean_upper):
+            continue
             
         if size_mode == 'big':
             pt = base_pt * 1.30
