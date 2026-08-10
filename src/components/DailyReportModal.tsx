@@ -410,7 +410,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
         h.timestamp instanceof Date ? h.timestamp.toLocaleString() : h.timestamp,
         h.tableLabel || "N/A",
         h.paymentMethod || "Efectivo",
-        h.requiresInvoice ? "Sí" : "No",
+        h.requiresInvoice ? (h.invoicePhone ? `Sí (${h.invoicePhone})` : "Sí") : "No",
         h.total
       ]);
     });
@@ -850,7 +850,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
                   <IonCol>{formatTime(h.timestamp)}</IonCol>
                   <IonCol>{h.tableLabel || "-"}</IonCol>
                   <IonCol>{h.paymentMethod || "Efectivo"}</IonCol>
-                  <IonCol>{h.requiresInvoice ? "Sí" : "No"}</IonCol>
+                  <IonCol>{h.requiresInvoice ? (h.invoicePhone ? `Sí (${h.invoicePhone})` : "Sí") : "No"}</IonCol>
                   <IonCol className="text-right">${(h.total || 0).toFixed(2)}</IonCol>
                 </IonRow>
               );

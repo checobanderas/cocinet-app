@@ -18,6 +18,7 @@ import time
 import subprocess
 import urllib.request
 import json
+import argparse
 
 # Asegurar codificación UTF-8 en consola de Windows para evitar errores con Emojis
 if hasattr(sys.stdout, 'reconfigure'):
@@ -138,10 +139,10 @@ def verify_service_status():
     except Exception as e:
         print(f"⚠️ [AVISO] No se pudo obtener respuesta HTTP directa del Sentinela ({e}).")
         print("   Sin embargo, el servicio de Windows se ha configurado e iniciado en segundo plano.")
-        print("   Puedes revisar los logs detallados en 'sentinel_printer.log' para confirmar su operación.")
+        print("   Puedes revisar los logs detallados en 'sentinel.log' para confirmar su operación.")
         return False
 
-def configure_printer_sizes(target_dir):
+def configure_printer_sizes(target_dir, env_mode="production"):
     """Pregunta al usuario por consola interactiva los nombres, anchos de papel, logotipo y fuentes de las impresoras."""
     config_file = os.path.join(target_dir, "printer_config.json")
     
@@ -159,7 +160,13 @@ def configure_printer_sizes(target_dir):
         },
         "LOGO_PATH": "C:\\buzon\\logo.jpg",
         "FONT_NAME": "Arial",
-        "FONT_SIZE_PT": 16.0
+        "FONT_SIZE_PT": 16.0,
+        "ENVIRONMENT": env_mode,
+        "DEBUG_VERBOSE": (env_mode == "testing"),
+        "DB_PATH": "restaurant.db",
+        "LOG_FILE": "sentinel.log",
+        "POLL_INTERVAL_SECONDS": 2,
+        "DEDUP_TTL_SECONDS": 10
     }
     
     # Leer el existente si existe para conservar la config anterior del usuario
@@ -177,6 +184,14 @@ def configure_printer_sizes(target_dir):
                     current_config["FONT_NAME"] = data["FONT_NAME"]
                 if "FONT_SIZE_PT" in data:
                     current_config["FONT_SIZE_PT"] = float(data["FONT_SIZE_PT"])
+                if "DB_PATH" in data:
+                    current_config["DB_PATH"] = data["DB_PATH"]
+                if "LOG_FILE" in data:
+                    current_config["LOG_FILE"] = data["LOG_FILE"]
+                if "POLL_INTERVAL_SECONDS" in data:
+                    current_config["POLL_INTERVAL_SECONDS"] = data["POLL_INTERVAL_SECONDS"]
+                if "DEDUP_TTL_SECONDS" in data:
+                    current_config["DEDUP_TTL_SECONDS"] = data["DEDUP_TTL_SECONDS"]
         except Exception:
             pass
             
@@ -248,7 +263,21 @@ def configure_printer_sizes(target_dir):
         "PRINTER_PAPER_SIZES": new_sizes,
         "LOGO_PATH": new_logo,
         "FONT_NAME": new_font,
-        "FONT_SIZE_PT": new_size
+        "FONT_SIZE_PT": new_size,
+        "ENVIRONMENT": env_mode,
+        "DEBUG_VERBOSE": (env_mode == "testing"),
+        "DB_PATH": current_config.get("DB_PATH", "restaurant.db"),
+        "LOG_FILE": current_config.get("LOG_FILE", "sentinel.log"),
+        "POLL_INTERVAL_SECONDS": current_config.get("POLL_INTERVAL_SECONDS", 2),
+        "DEDUP_TTL_SECONDS": current_config.get("DEDUP_TTL_SECONDS", 10),
+        "ERROR_CODES": {
+            "PRINTER_OFFLINE": "La impresora esta apagada, desconectada o fuera de linea.",
+            "PRINTER_PAPER_OUT": "La impresora no tiene papel.",
+            "PRINTER_DOOR_OPEN": "La tapa de la impresora esta abierta.",
+            "PRINTER_PAPER_JAM": "Hay un atasco de papel en la impresora.",
+            "PRINTER_NOT_FOUND": "No se encontro la impresora especificada en el sistema Windows.",
+            "INVALID_PAYLOAD": "El formato JSON de impresion es invalido o esta malformado."
+        }
     }
     
     try:
@@ -259,6 +288,11 @@ def configure_printer_sizes(target_dir):
         print(f"⚠️ [AVISO] No se pudo escribir el archivo de configuración ({e}).")
 
 def main():
+    parser = argparse.ArgumentParser(description="Instalador del Servicio Sentinela de Impresión")
+    parser.add_argument("--env", choices=["production", "testing"], default="production", help="Ambiente de ejecucion")
+    args, unknown = parser.parse_known_args()
+    env_mode = args.env
+
     print_banner()
 
     # 1. Asegurar elevación de privilegios de Administrador
@@ -301,7 +335,7 @@ def main():
 
     # 5. Instalar/Actualizar Dependencias del Sistema
     print("📦 [PROCESANDO] Instalando y actualizando librerías de Python requeridas...")
-    deps = ["pywin32", "Flask", "flask-cors"]
+    deps = ["pywin32", "Flask", "flask-cors", "pillow"]
     for dep in deps:
         if not run_command(f'"{sys.executable}" -m pip install --upgrade {dep}', f"Instalar/Actualizar paquete '{dep}'"):
             print(f"🛑 [PASO 5 FALLADO] No se pudo instalar la dependencia crítica: {dep}")
@@ -341,7 +375,7 @@ def main():
         print(f"⚠️ [AVISO] No se pudo registrar pywin32_postinstall de forma automatizada ({e}). Continuando de todos modos...")
 
     # 6.5. Configuración de Impresoras y Tamaños de Papel (58mm / 80mm)
-    configure_printer_sizes(os.path.dirname(sentinel_path))
+    configure_printer_sizes(os.path.dirname(sentinel_path), env_mode=env_mode)
 
     # 7. Instalar el nuevo servicio de Windows
     print("🔌 [PROCESANDO] Instalando el renovado servicio de Windows del Sentinela v3.6.0...")

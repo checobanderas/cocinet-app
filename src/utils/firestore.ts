@@ -17,6 +17,8 @@ import {
   deleteField,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { getOperatingDay } from "./appHelpers";
+
 
 export enum OperationType {
   CREATE = "create",
@@ -256,6 +258,22 @@ export function subscribeToTables(
       handleFirestoreError(error, OperationType.GET, "tables");
     }
   );
+}
+
+export async function fetchTablesFromFirebase(tenantId: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, "tables"),
+      where("tenantId", "==", tenantId)
+    );
+    const snapshot = await getDocs(q);
+    const tables = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    tables.sort((a: any, b: any) => (a.label || "").localeCompare(b.label || ""));
+    return tables;
+  } catch (error) {
+    console.warn("Error in fetchTablesFromFirebase:", error);
+    return [];
+  }
 }
 
 export function subscribeToHistory(
@@ -501,9 +519,56 @@ export async function addPedidoToPrinter(tenantId: string, orderData: any) {
     };
     await setDoc(docRef, payload);
     console.log(`✅ Pedido queued successfully: ${docRef.id}`);
+    return docRef.id;
   } catch (err) {
     console.warn("❌ Error syncing with local printer collection:", err);
+    return null;
   }
+}
+
+export function deduplicateComandas(comandas: any[]): any[] {
+  if (!Array.isArray(comandas) || comandas.length <= 1) return comandas || [];
+
+  const result: any[] = [];
+  for (const comanda of comandas) {
+    if (!comanda) continue;
+
+    const isDuplicate = result.some((existing) => {
+      if (!existing) return false;
+
+      // 1. Exact match by UID or numeric folio
+      if (existing.uid && comanda.uid && existing.uid === comanda.uid) return true;
+      if (existing.folio && comanda.folio && Number(existing.folio) === Number(comanda.folio)) return true;
+
+      // 2. Match by created within 45s + identical active items (with matching folioInterno OR both without folioInterno)
+      const f1 = String(existing.folioInterno || "").trim().toLowerCase();
+      const f2 = String(comanda.folioInterno || "").trim().toLowerCase();
+      if (f1 === f2) {
+        const time1 = new Date(existing.timestamp || "").getTime();
+        const time2 = new Date(comanda.timestamp || "").getTime();
+        if (!isNaN(time1) && !isNaN(time2) && Math.abs(time1 - time2) < 45000) {
+          const items1 = (existing.items || []).filter((i: any) => !i.isCancelled);
+          const items2 = (comanda.items || []).filter((i: any) => !i.isCancelled);
+          if (items1.length > 0 && items1.length === items2.length) {
+            const matchAll = items1.every((i1: any, idx: number) => {
+              const i2 = items2[idx];
+              if (!i2) return false;
+              const name1 = (i1.product?.name || i1.nombre || "").trim().toLowerCase();
+              const name2 = (i2.product?.name || i2.nombre || "").trim().toLowerCase();
+              return name1 === name2 && Number(i1.quantity) === Number(i2.quantity);
+            });
+            if (matchAll) return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    if (!isDuplicate) {
+      result.push(comanda);
+    }
+  }
+  return result;
 }
 
 export async function addComandaToFirebase(
@@ -532,17 +597,39 @@ export async function addComandaToFirebase(
     createdBy: createdBy || null,
   });
 
-  // Update the table to include this new comanda
+  // Update the table to include this new comanda securely by checking live document first
   const tableRef = doc(db, "tables", tableId);
-  const currentComandas = tableInfo.comandas || [];
+  let liveComandas = tableInfo.comandas || [];
+  try {
+    const snapDoc = await getDoc(tableRef);
+    if (snapDoc.exists()) {
+      const liveData = snapDoc.data();
+      if (liveData && Array.isArray(liveData.comandas) && liveData.comandas.length > 0) {
+        const comandasMap = new Map<number, any>();
+        liveComandas.forEach((c: any) => comandasMap.set(c.folio, c));
+        liveData.comandas.forEach((c: any) => comandasMap.set(c.folio, c));
+        liveComandas = Array.from(comandasMap.values());
+      }
+    }
+  } catch (err) {
+    console.warn("Could not read live table doc before adding comanda:", err);
+  }
+
+  const mergedComandas = deduplicateComandas([...liveComandas, newComanda]);
+
+  const tableDataToSave = cleanUndefined({
+    id: tableId,
+    label: tableInfo?.label || "1",
+    zone: tableInfo?.zone || "Salón Principal",
+    tenantId: currentTenant,
+    status: "occupied",
+    comandas: mergedComandas,
+    folioInterno: finalFolioInterno,
+    updatedAt: getMexicoISOString(),
+  });
 
   await runWrite(
-    updateDoc(tableRef, {
-      status: "occupied",
-      comandas: cleanUndefined([...currentComandas, newComanda]),
-      folioInterno: finalFolioInterno,
-      updatedAt: getMexicoISOString(),
-    }),
+    setDoc(tableRef, tableDataToSave, { merge: true }),
   );
 
   if (folioInterno) {
@@ -700,6 +787,7 @@ export async function confirmPaymentInFirebase(
     cardLastFour?: string;
     cardType?: string;
     requiresInvoice?: boolean;
+    invoicePhone?: string;
   }
 ) {
   console.log("Firestore: Updating account:", accountId, "with data:", paymentData);
@@ -715,12 +803,14 @@ export async function confirmPaymentInFirebase(
 
 export async function updateInvoiceRequirementInFirebase(
   accountId: string,
-  requiresInvoice: boolean
+  requiresInvoice: boolean,
+  invoicePhone?: string
 ) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
     updateDoc(accountRef, {
       requiresInvoice,
+      invoicePhone: invoicePhone || "",
       updatedAt: getMexicoISOString(),
     })
   );
@@ -1851,6 +1941,186 @@ export async function deleteCashierSessionFromFirebase(id: string) {
   return runWrite(deleteDoc(ref));
 }
 
+export async function exportCashierSessionToTargetTenant({
+  sourceSession,
+  targetTenantId,
+  sessionHistory = [],
+  sessionMovements = [],
+  sessionExpenses = [],
+  sessionPurchases = [],
+  existingSessions = [],
+}: {
+  sourceSession: any;
+  targetTenantId: string;
+  sessionHistory?: any[];
+  sessionMovements?: any[];
+  sessionExpenses?: any[];
+  sessionPurchases?: any[];
+  existingSessions?: any[];
+}): Promise<{ targetSessionId: string; totalExportedItems: number }> {
+  if (!sourceSession || !targetTenantId) {
+    throw new Error("Parámetros de exportación inválidos (sesión de origen o inquilino destino faltante).");
+  }
+
+  const sourceTenantId = sourceSession.tenantId || "tenant-1";
+  if (sourceTenantId === targetTenantId) {
+    throw new Error("El inquilino de origen y de destino no pueden ser el mismo.");
+  }
+
+  // 1. Determine Target Session ID and date matching key
+  let datePart = "";
+  if (sourceSession.id && sourceSession.id.startsWith("day-")) {
+    datePart = sourceSession.id.split("-").slice(-3).join("-");
+  }
+  if (!datePart || datePart.length !== 10 || !datePart.includes("-")) {
+    const dateVal = sourceSession.closedAt || sourceSession.openedAt || getMexicoISOString();
+    datePart = getOperatingDay(dateVal);
+  }
+
+  const targetSessionId = `day-${targetTenantId}-${datePart}`;
+
+  // 2. Validate that destination is empty (no existing session for that day/slot in target tenant)
+  const isOccupiedInLocal = existingSessions.some(
+    (s: any) =>
+      (s.tenantId || "tenant-1") === targetTenantId &&
+      (s.id === targetSessionId ||
+        s.id.endsWith(`-${datePart}`) ||
+        (s.closedAt || s.openedAt || "").split("T")[0] === datePart)
+  );
+
+  if (isOccupiedInLocal) {
+    throw new Error(
+      `El inquilino de destino ya cuenta con un corte de caja registrado para esta fecha (${datePart}). Para evitar sobreescritura o duplicados contables, la operación ha sido cancelada.`
+    );
+  }
+
+  // Query Firestore to verify destination in database
+  try {
+    const targetSessionRef = doc(db, "cashier_sessions_v2", targetSessionId);
+    const docSnap = await getDoc(targetSessionRef);
+    if (docSnap.exists()) {
+      throw new Error(
+        `El inquilino de destino ya cuenta con un registro de turno con ID (${targetSessionId}) en la base de datos. La exportación se canceló para evitar duplicados.`
+      );
+    }
+  } catch (err: any) {
+    if (err.message && err.message.includes("registrado")) {
+      throw err;
+    }
+    // Ignore permissions/offline query errors and continue
+  }
+
+  // 3. Prepare Batch Writes to create exact copies in destination tenant
+  let batch = writeBatch(db);
+  let opCount = 0;
+
+  const commitBatchIfNeeded = async () => {
+    if (opCount >= 450) {
+      await runWrite(batch.commit());
+      batch = writeBatch(db);
+      opCount = 0;
+    }
+  };
+
+  // A. Copy Session Header
+  const targetSessionData = cleanUndefined({
+    ...sourceSession,
+    id: targetSessionId,
+    tenantId: targetTenantId,
+    exportedFromTenantId: sourceTenantId,
+    exportedAt: getMexicoISOString(),
+    updatedAt: getMexicoISOString(),
+  });
+
+  const sessionDocRef = doc(db, "cashier_sessions_v2", targetSessionId);
+  batch.set(sessionDocRef, targetSessionData);
+  opCount++;
+
+  let totalItemsCopied = 0;
+
+  // B. Copy Session History (Closed accounts / Sales)
+  for (const item of sessionHistory) {
+    const newId = `hist_${targetTenantId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const itemCopy = cleanUndefined({
+      ...item,
+      id: newId,
+      originalHistoryId: item.id,
+      tenantId: targetTenantId,
+      sessionId: targetSessionId,
+      exportedAt: getMexicoISOString(),
+    });
+    const itemRef = doc(db, "history", newId);
+    batch.set(itemRef, itemCopy);
+    opCount++;
+    totalItemsCopied++;
+    await commitBatchIfNeeded();
+  }
+
+  // C. Copy Cash Movements (Inflows / Outflows)
+  for (const mov of sessionMovements) {
+    const newId = `mov_${targetTenantId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const movCopy = cleanUndefined({
+      ...mov,
+      id: newId,
+      originalMovementId: mov.id,
+      tenantId: targetTenantId,
+      sessionId: targetSessionId,
+      exportedAt: getMexicoISOString(),
+    });
+    const movRef = doc(db, "cash_movements", newId);
+    batch.set(movRef, movCopy);
+    opCount++;
+    totalItemsCopied++;
+    await commitBatchIfNeeded();
+  }
+
+  // D. Copy Expenses
+  for (const exp of sessionExpenses) {
+    const newId = `exp_${targetTenantId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const expCopy = cleanUndefined({
+      ...exp,
+      id: newId,
+      originalExpenseId: exp.id,
+      tenantId: targetTenantId,
+      sessionId: targetSessionId,
+      exportedAt: getMexicoISOString(),
+    });
+    const expRef = doc(db, "expenses", newId);
+    batch.set(expRef, expCopy);
+    opCount++;
+    totalItemsCopied++;
+    await commitBatchIfNeeded();
+  }
+
+  // E. Copy Purchases
+  for (const purch of sessionPurchases) {
+    const newId = `pur_${targetTenantId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const purchCopy = cleanUndefined({
+      ...purch,
+      id: newId,
+      originalPurchaseId: purch.id,
+      tenantId: targetTenantId,
+      sessionId: targetSessionId,
+      exportedAt: getMexicoISOString(),
+    });
+    const purchRef = doc(db, "purchases", newId);
+    batch.set(purchRef, purchCopy);
+    opCount++;
+    totalItemsCopied++;
+    await commitBatchIfNeeded();
+  }
+
+  if (opCount > 0) {
+    await runWrite(batch.commit());
+  }
+
+  return {
+    targetSessionId,
+    totalExportedItems: totalItemsCopied,
+  };
+}
+
+
 export function subscribeToExpenses(
   tenantId: string,
   callback: (data: any[]) => void,
@@ -1914,70 +2184,101 @@ export async function deleteExpenseFromFirebase(id: string) {
 }
 
 export async function initializeDefaultTablesForTenant(tenantId: string) {
-  // First, fetch any existing tables for this tenant and delete them to avoid collision
+  if (!tenantId) return;
   const q = query(collection(db, "tables"), where("tenantId", "==", tenantId));
   const snapshot = await getDocs(q);
-  const deleteBatch = writeBatch(db);
-  snapshot.docs.forEach((d) => {
-    deleteBatch.delete(d.ref);
-  });
-  await runWrite(deleteBatch.commit());
 
-  // Now, create the 30 default tables
+  const existingKeys = new Set<string>();
+  const existingIds = new Set<string>();
+
+  snapshot.docs.forEach((d) => {
+    const data = d.data();
+    existingIds.add(d.id);
+    let zone = data.zone || "Salón Principal";
+    if (zone === "A Domicilio") zone = "Servicio a Domicilio";
+    let rawLabel = String(data.label || "").trim();
+    let label = rawLabel.replace(/^mesa\s*/i, "").trim();
+    if (label) {
+      existingKeys.add(`${zone}::${label}`);
+    }
+  });
+
   const batch = writeBatch(db);
+  let count = 0;
 
   // 1. Salón Principal (Tables 1 - 25)
   for (let i = 1; i <= 25; i++) {
-    const ref = doc(db, "tables", `table-${tenantId}-salon-${i}`);
-    batch.set(ref, {
-      id: `table-${tenantId}-salon-${i}`,
-      uid: `table-${tenantId}-salon-${i}`,
-      label: `${i}`,
-      shape: "local",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Salón Principal",
-      tenantId: tenantId,
-      updatedAt: getMexicoISOString(),
-    });
+    const labelStr = `${i}`;
+    const key = `Salón Principal::${labelStr}`;
+    const docId = `table-${tenantId}-salon-${i}`;
+    if (!existingKeys.has(key) && !existingIds.has(docId)) {
+      const ref = doc(db, "tables", docId);
+      batch.set(ref, {
+        id: docId,
+        uid: docId,
+        label: labelStr,
+        shape: "local",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Salón Principal",
+        tenantId: tenantId,
+        updatedAt: getMexicoISOString(),
+      });
+      count++;
+    }
   }
 
   // 2. Para Llevar (Tables P1 - P5)
   for (let i = 1; i <= 5; i++) {
-    const ref = doc(db, "tables", `table-${tenantId}-takeout-${i}`);
-    batch.set(ref, {
-      id: `table-${tenantId}-takeout-${i}`,
-      uid: `table-${tenantId}-takeout-${i}`,
-      label: `P${i}`,
-      shape: "takeout",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Para Llevar",
-      tenantId: tenantId,
-      updatedAt: getMexicoISOString(),
-    });
+    const labelStr = `P${i}`;
+    const key = `Para Llevar::${labelStr}`;
+    const docId = `table-${tenantId}-takeout-${i}`;
+    if (!existingKeys.has(key) && !existingIds.has(docId)) {
+      const ref = doc(db, "tables", docId);
+      batch.set(ref, {
+        id: docId,
+        uid: docId,
+        label: labelStr,
+        shape: "takeout",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Para Llevar",
+        tenantId: tenantId,
+        updatedAt: getMexicoISOString(),
+      });
+      count++;
+    }
   }
 
   // 3. Servicio a Domicilio (Tables D1 - D5)
   for (let i = 1; i <= 5; i++) {
-    const ref = doc(db, "tables", `table-${tenantId}-delivery-${i}`);
-    batch.set(ref, {
-      id: `table-${tenantId}-delivery-${i}`,
-      uid: `table-${tenantId}-delivery-${i}`,
-      label: `D${i}`,
-      shape: "delivery",
-      status: "available",
-      waiterId: null,
-      comandas: [],
-      zone: "Servicio a Domicilio",
-      tenantId: tenantId,
-      updatedAt: getMexicoISOString(),
-    });
+    const labelStr = `D${i}`;
+    const key1 = `Servicio a Domicilio::${labelStr}`;
+    const key2 = `A Domicilio::${labelStr}`;
+    const docId = `table-${tenantId}-delivery-${i}`;
+    if (!existingKeys.has(key1) && !existingKeys.has(key2) && !existingIds.has(docId)) {
+      const ref = doc(db, "tables", docId);
+      batch.set(ref, {
+        id: docId,
+        uid: docId,
+        label: labelStr,
+        shape: "delivery",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Servicio a Domicilio",
+        tenantId: tenantId,
+        updatedAt: getMexicoISOString(),
+      });
+      count++;
+    }
   }
 
-  await runWrite(batch.commit());
+  if (count > 0) {
+    await runWrite(batch.commit());
+  }
 }
 
 export async function initializeDefaultProductsForTenant(tenantId: string) {

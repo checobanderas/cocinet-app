@@ -1,22 +1,29 @@
 {
     "PRINTER_MAP": {
         "cuentas": "CUENTAS",
-        "cocina": "COCINA",
-        "barra": "BARRA"
+        "cocina": "OneNote (Desktop)",
+        "barra": "OneNote (Desktop)"
     },
     "PRINTER_PAPER_SIZES": {
         "cuentas": "80mm",
         "cocina": "80mm",
         "barra": "80mm"
     },
-    "LOGO_PATH": "C:\\buzon\\logoroy.png",
-    "FONT_NAME": "Arial",
-    "FONT_SIZE_PT": 14,
-    "HEADER_FONT_SIZE_PT": 15,
-    "ITEM_FONT_SIZE_PT": 10.5,
-    "TOTAL_FONT_SIZE_PT": 14.5,
-    "MARGIN_LEFT_PX": 10,
-    "MARGIN_RIGHT_PX": 25,
-    "LINE_SPACING": 4,
-    "SHOW_DIVIDER": true
+    "LOGO_PATH": "logoroy.png",
+    "FONT_NAME": "Segoe UI",
+    "FONT_SIZE_PT": 11.0,
+    "ENVIRONMENT": "production",
+    "DEBUG_VERBOSE": false,
+    "DB_PATH": "restaurant.db",
+    "LOG_FILE": "sentinel.log",
+    "POLL_INTERVAL_SECONDS": 2,
+    "DEDUP_TTL_SECONDS": 10,
+    "ERROR_CODES": {
+        "PRINTER_OFFLINE": "La impresora esta apagada, desconectada o fuera de linea.",
+        "PRINTER_PAPER_OUT": "La impresora no tiene papel.",
+        "PRINTER_DOOR_OPEN": "La tapa de la impresora esta abierta.",
+        "PRINTER_PAPER_JAM": "Hay un atasco de papel en la impresora.",
+        "PRINTER_NOT_FOUND": "No se encontro la impresora especificada en el sistema Windows.",
+        "INVALID_PAYLOAD": "El formato JSON de impresion es invalido o esta malformado."
+    }
 }

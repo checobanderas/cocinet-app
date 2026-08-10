@@ -18,12 +18,13 @@ import {
   ProductCategorySetting,
   getDefaultProductCategories,
   getProductReportName,
-  getProductSortScore
+  getProductSortScore,
+  getCompanyCatalog
 } from "./utils/appHelpers";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
+import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { GoogleGenAI, Type } from "@google/genai";
 import {
   IonApp,
@@ -129,6 +130,7 @@ import { getMatchedOwnerKey, isTenantAccessAllowed } from "./accessHelpers";
 import {
   subscribeToProducts,
   subscribeToTables,
+  fetchTablesFromFirebase,
   subscribeToHistory,
   subscribeToUsers,
   subscribeToInventory,
@@ -198,6 +200,7 @@ import {
   addCashierSessionToFirebase,
   updateCashierSessionInFirebase,
   deleteCashierSessionFromFirebase,
+  exportCashierSessionToTargetTenant,
   deleteCashMovementFromFirebase,
   deletePurchaseFromFirebase,
   deleteHistoryItemFromFirebase,
@@ -244,6 +247,7 @@ import {
   subscribeToTenantBackupSnapshots,
   deleteTenantBackupSnapshot,
   restoreTenantBackupSnapshot,
+  deduplicateComandas,
 } from "./utils/firestore";
 
 
@@ -385,6 +389,7 @@ interface ClosedAccount {
   cancellationReason?: string;
   cancelledBy?: User;
   requiresInvoice?: boolean;
+  invoicePhone?: string;
 }
 
 const COMENSAL_COLORS: { [key: number]: string } = {
@@ -497,6 +502,23 @@ const MAPS_API_KEY =
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   '';
 
+function sanitizeBusinessName(name?: string): string {
+  if (!name) return "TACOS ROY";
+  let clean = name.trim();
+  clean = clean.replace(/^\d+\s*(?:x|X)\s*/gi, "");
+  clean = clean.replace(/\$?\s*\d+(?:\.\d{1,2})?\s*$/gi, "");
+  clean = clean.trim();
+  if (!clean || clean.toUpperCase() === "TRUJANO") return "TACOS ROY TRUJANO";
+  return clean;
+}
+
+function sanitizeEmail(email?: string): string {
+  if (!email) return "";
+  const clean = email.trim();
+  if (!clean.includes("@") || clean.length < 5) return "";
+  return clean;
+}
+
 const playChimeSound = () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -606,6 +628,132 @@ function createDefault30TablesList(tenantId: string) {
   }
   return list;
 }
+function normalizeZoneName(rawZone?: string): string {
+  if (!rawZone) return "Salón Principal";
+  const z = String(rawZone).trim().toLowerCase();
+  if (z.includes("domicilio") || z.includes("delivery") || z === "d" || z === "a domicilio") {
+    return "Servicio a Domicilio";
+  }
+  if (z.includes("llevar") || z.includes("takeout") || z === "p" || z === "para llevar") {
+    return "Para Llevar";
+  }
+  return "Salón Principal";
+}
+
+function ensureAll35TablesForTenant(existingTables: any[], tenantId: string) {
+  const safeTenantId = tenantId || "default-tenant";
+  const tableMap = new Map<string, any>();
+
+  (existingTables || []).forEach((t: any) => {
+    if (!t || typeof t !== "object") return;
+    let zone = normalizeZoneName(t.zone);
+    let rawLabel = String(t.label || "").trim();
+    if (!rawLabel) return;
+    
+    // Normalize label: "Mesa 1" -> "1", "Mesa P1" -> "P1", "Mesa D1" -> "D1"
+    let label = rawLabel.replace(/^mesa\s*/i, "").trim();
+    if (zone === "Servicio a Domicilio" && label.startsWith("S")) {
+      label = label.replace(/^S/i, "D");
+    }
+    const key = `${zone}::${label}`;
+
+    const existing = tableMap.get(key);
+    if (!existing) {
+      tableMap.set(key, { ...t, zone, label, comandas: t.comandas || [] });
+    } else {
+      const existingIsOccupied = existing.status === "occupied" || (existing.comandas && existing.comandas.length > 0);
+      const newIsOccupied = t.status === "occupied" || (t.comandas && t.comandas.length > 0);
+
+      if (newIsOccupied) {
+        if (!existingIsOccupied) {
+          tableMap.set(key, { ...t, zone, label, comandas: t.comandas || [] });
+        } else {
+          // Both records have data: merge comandas by folio so no order is ever lost
+          const comandasMap = new Map<number, any>();
+          (existing.comandas || []).forEach((c: any) => comandasMap.set(c.folio, c));
+          (t.comandas || []).forEach((c: any) => comandasMap.set(c.folio, c));
+          const mergedComandas = deduplicateComandas(Array.from(comandasMap.values()));
+          tableMap.set(key, {
+            ...existing,
+            ...t,
+            zone,
+            label,
+            status: "occupied",
+            comandas: mergedComandas,
+          });
+        }
+      }
+    }
+  });
+
+  // Garantizar exactamente 25 mesas en Salón Principal (1 a 25)
+  for (let i = 1; i <= 25; i++) {
+    const labelStr = `${i}`;
+    const key = `Salón Principal::${labelStr}`;
+    if (!tableMap.has(key)) {
+      tableMap.set(key, {
+        id: `table-${safeTenantId}-salon-${i}`,
+        uid: `table-${safeTenantId}-salon-${i}`,
+        label: labelStr,
+        shape: "local",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Salón Principal",
+        tenantId: safeTenantId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Garantizar mesas P1 a P5 en Para Llevar
+  for (let i = 1; i <= 5; i++) {
+    const labelStr = `P${i}`;
+    const key = `Para Llevar::${labelStr}`;
+    if (!tableMap.has(key)) {
+      tableMap.set(key, {
+        id: `table-${safeTenantId}-takeout-${i}`,
+        uid: `table-${safeTenantId}-takeout-${i}`,
+        label: labelStr,
+        shape: "takeout",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Para Llevar",
+        tenantId: safeTenantId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Garantizar mesas D1 a D5 en Servicio a Domicilio
+  for (let i = 1; i <= 5; i++) {
+    const labelStr = `D${i}`;
+    const key1 = `Servicio a Domicilio::${labelStr}`;
+    const key2 = `A Domicilio::${labelStr}`;
+    if (!tableMap.has(key1) && !tableMap.has(key2)) {
+      tableMap.set(key1, {
+        id: `table-${safeTenantId}-delivery-${i}`,
+        uid: `table-${safeTenantId}-delivery-${i}`,
+        label: labelStr,
+        shape: "delivery",
+        status: "available",
+        waiterId: null,
+        comandas: [],
+        zone: "Servicio a Domicilio",
+        tenantId: safeTenantId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  const finalResult = Array.from(tableMap.values());
+  const occupiedList = finalResult.filter((t: any) => t.status === "occupied" || (t.comandas && t.comandas.length > 0));
+  if (occupiedList.length > 0) {
+    console.log("⚡ [ENSURE_35_OUT] Occupied tables count:", occupiedList.length, occupiedList.map((t: any) => `Mesa ${t.label} (status=${t.status}, comandas=${t.comandas?.length})`));
+  }
+  return finalResult;
+}
 
 export default function App() {
   const [selectedTenant, setSelectedTenant] = useState<CompanyTenant>(() => {
@@ -633,8 +781,25 @@ export default function App() {
       const cached = localStorage.getItem("pos_selected_tenant");
       if (cached) {
         const parsed = JSON.parse(cached);
-        const found = COMPANY_CATALOG.find((c) => c.id === parsed.id);
-        if (found) return found;
+        if (parsed && parsed.id) {
+          const found = COMPANY_CATALOG.find((c) => c.id === parsed.id);
+          if (found) return found;
+          return {
+            id: parsed.id,
+            name: parsed.name || "Sucursal",
+            rfc: parsed.rfc || "XAXX010101000",
+            ownerEmail: parsed.ownerEmail || "",
+            avatar: parsed.avatar || "🏢",
+            accentColor: parsed.accentColor || "#4f46e5",
+            lightColor: parsed.lightColor || "#4f46e533",
+            bgColor: parsed.bgColor || "from-slate-50 to-indigo-100",
+            sucursalDefault: parsed.sucursalDefault || parsed.name || "Sucursal",
+            type: parsed.type || "Sucursal",
+            propietario: parsed.propietario || "PROPIETARIO",
+            ownerKey: parsed.ownerKey || "1",
+            ...parsed,
+          };
+        }
       }
 
       const ownerParam =
@@ -656,6 +821,14 @@ export default function App() {
     const santaMaria = COMPANY_CATALOG.find((c) => c.id === "tenant-7") || COMPANY_CATALOG[0];
     return santaMaria;
   });
+
+  useEffect(() => {
+    if (selectedTenant) {
+      try {
+        localStorage.setItem("pos_selected_tenant", JSON.stringify(selectedTenant));
+      } catch (e) {}
+    }
+  }, [selectedTenant]);
 
   const [showSystemsChoiceAlert, setShowSystemsChoiceAlert] = useState(false);
   const [showDeleteAllHistoryConfirm, setShowDeleteAllHistoryConfirm] = useState(false);
@@ -1241,6 +1414,33 @@ export default function App() {
   useEffect(() => {
     if (!selectedTenant) return;
     const tenantId = selectedTenant.id;
+    // Load cached tables for the new tenant immediately (don't wipe with empty array!)
+    // This shows occupied tables instantly from localStorage while Firestore syncs
+    try {
+      const cachedRaw = localStorage.getItem("pos_tables_" + tenantId) || localStorage.getItem("pos_tables");
+      if (cachedRaw) {
+        const allCached = JSON.parse(cachedRaw);
+        const tenantCached = Array.isArray(allCached)
+          ? allCached.filter((t: any) => !t.tenantId || t.tenantId === tenantId)
+          : [];
+        if (tenantCached.length > 0) {
+          const parsed = tenantCached.map((t: any) => ({
+            ...t,
+            comandas: (t.comandas || []).map((c: any) => ({
+              ...c,
+              timestamp: new Date(c.timestamp),
+            })),
+          }));
+          setTables(ensureAll35TablesForTenant(parsed, tenantId));
+        } else {
+          setTables(ensureAll35TablesForTenant([], tenantId));
+        }
+      } else {
+        setTables(ensureAll35TablesForTenant([], tenantId));
+      }
+    } catch {
+      setTables(ensureAll35TablesForTenant([], tenantId));
+    }
     setCashierSessionsLoaded(false);
     setHistoryLoaded(false);
     setCashMovementsLoaded(false);
@@ -1319,26 +1519,31 @@ export default function App() {
       setBackups(data || []);
     });
 
+    console.log("🌐 [WEBSOCKET_CONNECT] Subscribing to Firestore tables in real-time for tenant:", tenantId);
+
     const unsubTables = subscribeToTables(tenantId, (data) => {
-      // If tables are empty or incomplete for selected tenant, seed Firestore & generate local fallback immediately
+      const occupiedInRaw = (data || []).filter((t: any) => t.status === "occupied" || (t.comandas && t.comandas.length > 0));
+      console.log(`⚡ [WEBSOCKET_SNAPSHOT] Received ${data ? data.length : 0} raw table docs from Firestore. Occupied count: ${occupiedInRaw.length}`, occupiedInRaw.map((t: any) => `Mesa ${t.label} (${t.zone})`));
+
       let rawTables = data;
+
       if (!rawTables || rawTables.length === 0) {
         rawTables = createDefault30TablesList(tenantId);
         initializeDefaultTablesForTenant(tenantId).catch((err) => {
           console.warn("Error seeding tables for tenant:", err);
         });
-      } else if (rawTables.length < 30) {
-        initializeDefaultTablesForTenant(tenantId).catch((err) => {
-          console.warn("Error seeding tables for tenant:", err);
-        });
+      } else {
+        rawTables = ensureAll35TablesForTenant(rawTables, tenantId);
+        if (rawTables.length < 35) {
+          initializeDefaultTablesForTenant(tenantId).catch((err) => {
+            console.warn("Error seeding tables for tenant:", err);
+          });
+        }
       }
 
       // Parse dates and normalize legacy zones/labels to prevent crashes and jumbled groups
       const parsedServerTables = rawTables.map((t: any) => {
-        let zone = t.zone || "Salón Principal";
-        if (zone === "A Domicilio") {
-          zone = "Servicio a Domicilio";
-        }
+        let zone = normalizeZoneName(t.zone);
         let label = t.label || "";
         if (t.shape === "delivery" && label.startsWith("S")) {
           label = label.replace("S", "D");
@@ -1347,39 +1552,24 @@ export default function App() {
           ...t,
           zone,
           label,
-          comandas: (t.comandas || []).map((c: any) => ({
-            ...c,
-            timestamp:
-              c.timestamp && typeof c.timestamp.toDate === "function"
-                ? c.timestamp.toDate()
-                : new Date(c.timestamp),
-          })),
+          comandas: deduplicateComandas(
+            (t.comandas || []).map((c: any) => ({
+              ...c,
+              timestamp:
+                c.timestamp && typeof c.timestamp.toDate === "function"
+                  ? c.timestamp.toDate()
+                  : new Date(c.timestamp),
+            }))
+          ),
         };
       });
 
-      // Proactive auto-corrector for tables with ghost/zero active balances in occupied status ⚡🛠️
-      parsedServerTables.forEach((t: any) => {
-        if (t.status === "occupied" || t.status === "payment_pending") {
-          const hasActiveItems = (t.comandas || []).some((c: any) =>
-            c.items && c.items.some((item: any) => !item.isCancelled)
-          );
-          if (!hasActiveItems) {
-            console.log(`Auto-repairing ghost occupied table: ${t.label || t.id}`);
-            // Instant local repair:
-            t.status = "available";
-            t.comandas = [];
-            t.waiterId = null;
-            // Background database sync-repair:
-            releaseTableInFirebase(t.id).catch((err) => {
-              console.error("Error running background table release:", err);
-            });
-          }
-        }
-      });
+      const finalOccupied = parsedServerTables.filter((t: any) => t.status === "occupied" || (t.comandas && t.comandas.length > 0));
+      console.log(`🔴 [WEBSOCKET_SET_TABLES] Setting ${parsedServerTables.length} tables in React state. Occupied: ${finalOccupied.length}`, finalOccupied.map((t: any) => `Mesa ${t.label} (${t.zone})`));
 
       setTables(parsedServerTables);
       try {
-        localStorage.setItem("pos_tables", JSON.stringify(parsedServerTables));
+        localStorage.setItem("pos_tables_" + tenantId, JSON.stringify(parsedServerTables));
       } catch (e) {
         console.warn("Error caching tables:", e);
       }
@@ -1573,8 +1763,8 @@ export default function App() {
     const unsubCompanyConfig = subscribeToCompanyConfig(
       selectedTenant.id,
       (data: any) => {
-        const b =
-          data?.businessName || selectedTenant.name || "Taquería El Pastorcito";
+        const rawB = data?.businessName || selectedTenant.name || "TACOS ROY";
+        const b = sanitizeBusinessName(rawB);
         const r = data?.rfc || selectedTenant.rfc || "XAXX010101000";
         const s =
           data?.sucursal || selectedTenant.sucursalDefault || "Sucursal Centro";
@@ -1587,7 +1777,7 @@ export default function App() {
         const dir = data?.direccionFiscal ?? selectedTenant.direccionFiscal ?? "";
         const lug = data?.lugarExpedicion ?? selectedTenant.lugarExpedicion ?? "";
         const tel = data?.telefono ?? selectedTenant.telefono ?? "";
-        const eml = data?.email ?? selectedTenant.email ?? "";
+        const eml = sanitizeEmail(data?.email ?? selectedTenant.email ?? "");
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
@@ -1686,6 +1876,34 @@ export default function App() {
     if (!selectedTenant?.id) return;
     setTenantBackupSnapshots([]);
   }, [selectedTenant?.id]);
+
+  useEffect(() => {
+    if (currentUser && selectedTenant?.id) {
+      const tenantId = selectedTenant.id;
+      fetchTablesFromFirebase(tenantId)
+        .then((liveTables) => {
+          if (liveTables && liveTables.length > 0) {
+            const ensured = ensureAll35TablesForTenant(liveTables, tenantId);
+            const parsed = ensured.map((t: any) => ({
+              ...t,
+              zone: normalizeZoneName(t.zone),
+              comandas: (t.comandas || []).map((c: any) => ({
+                ...c,
+                timestamp:
+                  c.timestamp && typeof c.timestamp.toDate === "function"
+                    ? c.timestamp.toDate()
+                    : new Date(c.timestamp),
+              })),
+            }));
+            setTables(parsed);
+            try {
+              localStorage.setItem("pos_tables_" + tenantId, JSON.stringify(parsed));
+            } catch (e) {}
+          }
+        })
+        .catch((err) => console.warn("Error auto-refreshing tables on user change:", err));
+    }
+  }, [currentUser?.id, selectedTenant?.id]);
 
   // Sincronización continua con la base de datos local (SQLite) para el Sentinel de Impresión ⚙️⚡
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "error" | "success">("idle");
@@ -1969,6 +2187,16 @@ export default function App() {
       // Update local storage as well for offline fallback
       localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
       
+      setSelectedTenant((currentTenant) => {
+        if (!currentTenant) return merged[0];
+        const updated = merged.find((t) => t.id === currentTenant.id);
+        if (!updated) return currentTenant;
+        if (currentTenant.id === updated.id && currentTenant.name === updated.name && currentTenant.sucursalDefault === updated.sucursalDefault) {
+          return currentTenant;
+        }
+        return updated;
+      });
+
       setTenantsVersion((v) => v + 1);
 
       // 🔑 BUG FIX: Auto-add any new tenants to companiesConfig so they are visible on ALL devices
@@ -3097,15 +3325,24 @@ export default function App() {
         }
       }
 
-      // Automatically clean/purge old manual cashier sessions that do not start with "day-"
-      const oldSessions = cashierSessions.filter((s) => !s.id.startsWith("day-"));
-      if (oldSessions.length > 0) {
-        for (const oldS of oldSessions) {
-          await deleteCashierSessionFromFirebase(oldS.id);
+      // Automatically clean/purge non-canonical cashier sessions (e.g. day-tenant-2-1-2026-08-01)
+      const invalidOrDuplicateSessions = cashierSessions.filter((s) => {
+        const tId = s.tenantId || "tenant-1";
+        if (tId !== tenantId) return false;
+        if (!s.id.startsWith("day-")) return true;
+
+        const opDay = s.id.split("-").slice(-3).join("-");
+        const canonicalId = `day-${tenantId}-${opDay}`;
+        return s.id !== canonicalId;
+      });
+
+      if (invalidOrDuplicateSessions.length > 0) {
+        for (const invS of invalidOrDuplicateSessions) {
+          await deleteCashierSessionFromFirebase(invS.id);
         }
         triggerAppNotification(
           "🧹 Limpieza de Cortes",
-          "Se eliminaron turnos viejos inconsistentes y se refactorizaron cortes diarios automáticos exitosamente. ⚡",
+          "Se eliminaron turnos duplicados o inconsistentes y se consolidó el corte diario. ⚡",
           "success"
         );
       }
@@ -3856,12 +4093,7 @@ export default function App() {
         if (!dirVal) missing.push("Dirección Fiscal");
 
         if (missing.length > 0) {
-          triggerAppNotification(
-            "⛔ IMPRESIÓN DETENIDA PARA EVITAR DESPERDICIAR PAPEL",
-            `Se canceló la impresión del ticket. Faltan datos fiscales obligatorios del SAT: ${missing.join(", ")}. Ingrésalos en "Configuración del Sistema".`,
-            "warning"
-          );
-          return;
+          console.warn(`⚠️ [Impresión] Faltan datos fiscales del SAT para este ticket (${missing.join(", ")}), pero se procede a imprimir por prioridad de venta.`);
         }
       }
 
@@ -3877,7 +4109,8 @@ export default function App() {
         }
       }
 
-      const transport = await createTransport(printerName as any);
+      const targetTenantId = pedido.tenantId || selectedTenant?.id;
+      const transport = await createTransport(printerName as any, targetTenantId);
       const driver = new EscPosDriver();
       const job = new PosPrinterJob(driver, transport as any);
 
@@ -3972,7 +4205,7 @@ export default function App() {
       } else if (pedido.tipo === "cuenta") {
         job.center();
         job.setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED).bold(true);
-        const bName = (pedido.businessName || companyConfig.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+        const bName = sanitizeBusinessName(pedido.businessName || companyConfig.businessName || selectedTenant?.name || "TACOS ROY").toUpperCase();
         job.printLine(bName);
         job.setPrintMode(job.FONT_SIZE_NORMAL).bold(false);
         job.printLine("--------------------------------");
@@ -3982,7 +4215,7 @@ export default function App() {
         const lugVal = (pedido.lugarExpedicion || companyConfig.lugarExpedicion || "").toUpperCase();
         const dirVal = (pedido.direccionFiscal || companyConfig.direccionFiscal || "").toUpperCase();
         const telVal = pedido.telefono || companyConfig.telefono || "";
-        const emlVal = pedido.email || companyConfig.email || "";
+        const emlVal = sanitizeEmail(pedido.email || companyConfig.email || "");
         const sucVal = (pedido.sucursal || companyConfig.sucursal || "").toUpperCase();
 
         if (rfcVal) job.printLine(`RFC: ${rfcVal}`);
@@ -4046,6 +4279,33 @@ export default function App() {
         
         job.bold(true).printLine(`TOTAL: $${totalVal.toFixed(2)}`).bold(false);
 
+        const getPaymentLabel = (p: any) => {
+          const m = (p.paymentMethod || p.metodoPago || p.payment_method || p.formaPago || p.tipoPago || "").toString().toLowerCase().trim();
+          const ct = (p.cardType || p.tipoTarjeta || "").toString().toLowerCase().trim();
+
+          if (["cash", "efectivo"].includes(m)) return "EFECTIVO";
+          if (["card", "tarjeta", "credit", "debit", "credito", "debito"].includes(m)) {
+            if (ct === "credito" || m === "credito") return "TARJETA CRÉDITO";
+            if (ct === "debito" || m === "debito") return "TARJETA DÉBITO";
+            return "TARJETA";
+          }
+          if (["lupay", "lu-pay"].includes(m)) return "LUPAY";
+          if (["transfer", "transferencia", "spei"].includes(m)) return "TRANSFERENCIA";
+          if (m) return m.toUpperCase();
+          return "";
+        };
+
+        const payLabel = getPaymentLabel(pedido);
+        if (payLabel) {
+          job.printLine(`💳 PAGO: ${payLabel}`);
+        }
+
+        if (pedido.requiresInvoice) {
+          job.printLine("--------------------------------");
+          job.left();
+          job.bold(true).printLine(`🧾 FACTURAR: ${pedido.invoicePhone || ""}`).bold(false);
+        }
+
         job.center();
         if (companyConfig.footerMessage) {
           job.feed(1).printLine(companyConfig.footerMessage.toUpperCase());
@@ -4067,8 +4327,14 @@ export default function App() {
     const pendingPedidos = printerQueue.filter((p) => p.impreso === false || p.impreso === undefined);
 
     pendingPedidos.forEach((pedido) => {
-      if (processedPrintIdsRef.current.has(pedido.id)) return;
+      const isAlreadyProcessed =
+        processedPrintIdsRef.current.has(pedido.id) ||
+        (pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
+
+      if (isAlreadyProcessed) return;
+
       processedPrintIdsRef.current.add(pedido.id);
+      if (pedido.folio) processedPrintIdsRef.current.add(pedido.folio);
 
       console.log(`[WindowsAutoPrint] Auto-printing network ${pedido.tipo}:`, pedido.folio);
       
@@ -4283,6 +4549,7 @@ export default function App() {
   const [showPrecuentaModal, setShowPrecuentaModal] = useState(false);
   const [precuentaModalType, setPrecuentaModalType] = useState<"resumen" | "comandas" | "comensales">("resumen");
   const [printLoading, setPrintLoading] = useState<number | null>(null);
+  const [isPrintingPrecuenta, setIsPrintingPrecuenta] = useState<boolean>(false);
   const [generalNotes, setGeneralNotes] = useState<string>("");
   const [showCloseTurnConfirm, setShowCloseTurnConfirm] = useState(false);
   const [showResetSalesConfirm, setShowResetSalesConfirm] = useState(false);
@@ -6162,7 +6429,7 @@ export default function App() {
                         {company.lat && company.lng && (
                           <div className="mt-3 h-28 w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner pointer-events-none">
                             <APIProvider apiKey={MAPS_API_KEY}>
-                              <Map
+                              <GoogleMap
                                 defaultCenter={{ lat: company.lat, lng: company.lng }}
                                 defaultZoom={15}
                                 mapId="DEMO_MAP_ID"
@@ -6173,7 +6440,7 @@ export default function App() {
                                 <AdvancedMarker position={{ lat: company.lat, lng: company.lng }}>
                                   <Pin background={company.accentColor} glyphColor="#fff" />
                                 </AdvancedMarker>
-                              </Map>
+                              </GoogleMap>
                             </APIProvider>
                           </div>
                         )}
@@ -6230,7 +6497,7 @@ export default function App() {
                         {company.lat && company.lng && (
                           <div className="mt-3 h-28 w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner pointer-events-none">
                             <APIProvider apiKey={MAPS_API_KEY}>
-                              <Map
+                              <GoogleMap
                                 defaultCenter={{ lat: company.lat, lng: company.lng }}
                                 defaultZoom={15}
                                 mapId="DEMO_MAP_ID"
@@ -6241,7 +6508,7 @@ export default function App() {
                                 <AdvancedMarker position={{ lat: company.lat, lng: company.lng }}>
                                   <Pin background={company.accentColor} glyphColor="#fff" />
                                 </AdvancedMarker>
-                              </Map>
+                              </GoogleMap>
                             </APIProvider>
                           </div>
                         )}
@@ -6310,7 +6577,7 @@ export default function App() {
 
   const handleTestPrinter = async (area: "cuentas" | "cocina" | "barra" = "cuentas", printerName?: string) => {
     try {
-      await sendTestReceipt(area, printerName || "Impresora de Prueba");
+      await sendTestReceipt(area, printerName || "Impresora de Prueba", selectedTenant?.id);
       const msg = `Ticket de prueba enviado a ${area === "cuentas" ? "Cuentas" : area === "cocina" ? "Cocina" : "Barra"}`;
       window.alert(`✅ ¡Éxito!\n\n${msg}`);
       triggerAppNotification("📄 Ticket de Prueba", msg, "success");
@@ -7334,6 +7601,17 @@ export default function App() {
     useState<string>("");
   const [paymentCardLastFour, setPaymentCardLastFour] = useState<string>("");
   const [requiresInvoice, setRequiresInvoice] = useState<boolean>(false);
+  const [invoicePhone, setInvoicePhone] = useState<string>("");
+  const [showInvoicePhoneModal, setShowInvoicePhoneModal] = useState<boolean>(false);
+  const [inputInvoicePhone, setInputInvoicePhone] = useState<string>("");
+  const [inputInvoicePhoneConfirm, setInputInvoicePhoneConfirm] = useState<string>("");
+  const [invoicePhoneError, setInvoicePhoneError] = useState<string>("");
+    const [editingInvoiceAccountId, setEditingInvoiceAccountId] = useState<string | null>(null);
+  const [editingInvoicePhoneValue, setEditingInvoicePhoneValue] = useState<string>("");
+const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
+    type: "activeTable" | "closedAccount";
+    account?: any;
+  } | null>(null);
   const [showNumpad, setShowNumpad] = useState(false);
   const [showTopCortePanel, setShowTopCortePanel] = useState(false);
   const [cortePanelTab, setCortePanelTab] = useState<"cuentas" | "cargos">("cuentas");
@@ -7493,6 +7771,13 @@ export default function App() {
   const [corteActionFilter, setCorteActionFilter] = useState<"all" | "validated" | "pending">("all");
   const [expandedSessionDetails, setExpandedSessionDetails] = useState<Record<string, boolean>>({});
 
+  // 🚀 Exportar Corte a otro Tenant (Multitenant - Rol Sistemas)
+  const [exportSessionModal, setExportSessionModal] = useState<CashierSession | null>(null);
+  const [exportTargetTenantId, setExportTargetTenantId] = useState<string>("");
+  const [exportModalStep, setExportModalStep] = useState<1 | 2>(1);
+  const [isExportingSession, setIsExportingSession] = useState<boolean>(false);
+
+
 
   // ⚡ Concurrency safety: listen to realtime cashierSessions.
   // If the currently viewed open session was closed by another device, notify the user and throw them out.
@@ -7575,6 +7860,33 @@ export default function App() {
         setAppMode("floorplan");
       } else {
         setAppMode("corte-tabla");
+      }
+
+      // ⚡ AUTO-REFRESH MESAS DESDE FIREBASE AL INICIAR SESIÓN
+      if (selectedTenant?.id) {
+        const tenantId = selectedTenant.id;
+        fetchTablesFromFirebase(tenantId)
+          .then((liveTables) => {
+            if (liveTables && liveTables.length > 0) {
+              const ensured = ensureAll35TablesForTenant(liveTables, tenantId);
+              const parsed = ensured.map((t: any) => ({
+                ...t,
+                zone: normalizeZoneName(t.zone),
+                comandas: (t.comandas || []).map((c: any) => ({
+                  ...c,
+                  timestamp:
+                    c.timestamp && typeof c.timestamp.toDate === "function"
+                      ? c.timestamp.toDate()
+                      : new Date(c.timestamp),
+                })),
+              }));
+              setTables(parsed);
+              try {
+                localStorage.setItem("pos_tables_" + tenantId, JSON.stringify(parsed));
+              } catch (e) {}
+            }
+          })
+          .catch((err) => console.warn("Error auto-refreshing tables on login:", err));
       }
     } else {
       alert("PIN incorrecto");
@@ -8098,14 +8410,16 @@ export default function App() {
     const now = new Date();
     let t = "";
 
-    t += `   ${companyConfig.businessName.toUpperCase().substring(0, 26)}   \n`;
-    if (companyConfig.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
-    if (companyConfig.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
-    if (companyConfig.telefono) t += `TEL: ${companyConfig.telefono}\n`;
-    if (companyConfig.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
+    const bNameStr = (companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+
+    t += `   ${bNameStr.substring(0, 26)}   \n`;
+    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
+    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
+    if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "      CORTE DE CAJA DIARIO       \n";
     t += doubleLine + "\n";
     t += `Fecha: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}\n`;
@@ -8159,15 +8473,17 @@ export default function App() {
     const doubleLine = "================================";
     const now = new Date();
 
+    const bNameStr = (companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+
     let t = "";
-    t += `   ${companyConfig.businessName.toUpperCase().substring(0, 26)}   \n`;
-    if (companyConfig.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
-    if (companyConfig.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
-    if (companyConfig.telefono) t += `TEL: ${companyConfig.telefono}\n`;
-    if (companyConfig.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
+    t += `   ${bNameStr.substring(0, 26)}   \n`;
+    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
+    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
+    if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "    *** PRECORTE INFORMATIVO ***\n";
     t += "      (NO CIERRA EL TURNO)      \n";
     t += doubleLine + "\n";
@@ -8215,15 +8531,18 @@ export default function App() {
     const { cashSales, cardSales, transSales, total, count, canceledItems } =
       corteData;
 
+    const bNameStr = (companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+    const fMsgStr = companyConfig?.footerMessage || "¡Gracias por su preferencia!";
+
     let t = "";
-    t += `   ${companyConfig.businessName.toUpperCase().substring(0, 26)}   \n`;
-    if (companyConfig.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
-    if (companyConfig.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
-    if (companyConfig.telefono) t += `TEL: ${companyConfig.telefono}\n`;
-    if (companyConfig.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
+    t += `   ${bNameStr.substring(0, 26)}   \n`;
+    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
+    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
+    if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "SISTEMA POS - TICKET DE CORTE EXPRESS\n";
     t += doubleLine + "\n";
     t += `Fecha: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}\n`;
@@ -8311,7 +8630,7 @@ export default function App() {
       t += `DIFERENCIA:      -$${Math.abs(diff).toFixed(2)} (FALTANTE)\n`;
     }
     t += doubleLine + "\n";
-    t += `   ${companyConfig.footerMessage.substring(0, 28)}   \n`;
+    t += `   ${fMsgStr.substring(0, 28)}   \n`;
     t += "\n\n\n\n";
     return t;
   };
@@ -8325,7 +8644,7 @@ export default function App() {
 
     try {
       const driver = new EscPosDriver();
-      const transport = await createTransport("cuentas");
+      const transport = await createTransport("cuentas", selectedTenant?.id);
       const job = new PosPrinterJob(driver, transport as any);
 
       const {
@@ -8345,7 +8664,7 @@ export default function App() {
         .initialize()
         .center()
         .bold(true)
-        .printLine(companyConfig.businessName.toUpperCase())
+        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
         .printLine(
           companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
         )
@@ -8439,7 +8758,7 @@ export default function App() {
 
     try {
       const driver = new EscPosDriver();
-      const transport = await createTransport("cuentas");
+      const transport = await createTransport("cuentas", selectedTenant?.id);
       const job = new PosPrinterJob(driver, transport as any);
 
       const {
@@ -8459,7 +8778,7 @@ export default function App() {
         .initialize()
         .center()
         .bold(true)
-        .printLine(companyConfig.businessName.toUpperCase())
+        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
         .printLine(
           companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
         )
@@ -9028,7 +9347,7 @@ export default function App() {
                                 }
                                 updateDeviceRequest(req.id, { 
                                   status: "approved", 
-                                  pin: Math.floor(1000 + Math.random() * 9000).toString(), // auto assign a PIN
+                                  pin: Math.floor(1000 + Math.random() * 9000).toString(),
                                   scheduleStart: req.scheduleStart || "14:00",
                                   scheduleEnd: req.scheduleEnd || "02:00"
                                 });
@@ -9051,6 +9370,8 @@ export default function App() {
             </div>
           </IonContent>
         </IonModal>
+
+        
 
         {/* Modal informativo sobre Estructura Systemática de PINs de Acceso */}
         <IonModal
@@ -9745,8 +10066,9 @@ export default function App() {
                   width: "100%",
                   maxWidth: "100%",
                   minHeight: "100vh",
+                  maxHeight: "100vh",
                   margin: "0",
-                  padding: "2.5rem 1.5rem",
+                  padding: "1rem 1rem",
                   backgroundColor: "#f4ecd8",
                   textAlign: "center",
                   boxShadow: "inset 0 0 40px rgba(140, 124, 104, 0.3)",
@@ -9758,8 +10080,9 @@ export default function App() {
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
+                  overflow: "hidden",
                 }}
-                className="select-none"
+                className="select-none overflow-hidden"
               >
                 <div
                   style={{
@@ -9769,15 +10092,46 @@ export default function App() {
                     right: "10px",
                     bottom: "10px",
                     border: "2px solid #8c7c68",
-                    opacity: 0.5,
+                    opacity: 0.4,
                     pointerEvents: "none",
                   }}
                 ></div>
+
+                {/* 🌊 MARCA DE AGUA DEL LOGO OFICIAL COCINET */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    transform: "translate(-50%, -50%)",
+                    width: "min(85vw, 480px)",
+                    height: "min(85vh, 480px)",
+                    backgroundImage: "url('/cocinet-logo.png')",
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "center",
+                    backgroundSize: "contain",
+                    opacity: 0.12,
+                    pointerEvents: "none",
+                    zIndex: 1,
+                  }}
+                />
+
+                {/* 🎨 EMBLEMA / LOGO SUPERIOR DEL SISTEMA */}
+                <div className="relative z-10 mb-1 flex items-center justify-center">
+                  <img
+                    src="/cocinet-logo.png"
+                    alt="Logo COCINET"
+                    className="h-16 sm:h-20 max-h-[18vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
+                    style={{ filter: "drop-shadow(0px 4px 10px rgba(45, 36, 28, 0.18))" }}
+                  />
+                </div>
+
                 <h1
+                  className="relative z-10"
                   style={{
                     fontFamily: "Georgia, serif",
-                    fontSize: "5rem",
-                    margin: "1rem 0",
+                    fontSize: "clamp(2.8rem, 6vw, 4.2rem)",
+                    margin: "0.2rem 0",
                     color: "#2d241c",
                     textTransform: "uppercase",
                     lineHeight: "1",
@@ -9787,6 +10141,7 @@ export default function App() {
                   Cocinet
                 </h1>
                 <h2
+                  className="relative z-10"
                   style={{
                     background:
                       "linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)",
@@ -9796,41 +10151,41 @@ export default function App() {
                     textTransform: "uppercase",
                     margin: 0,
                     fontWeight: "900",
-                    fontSize: "1.6rem",
+                    fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
                     textShadow: "0px 4px 20px rgba(78, 205, 196, 0.4)",
                     fontFamily: "'Space Grotesk', sans-serif",
                   }}
                 >
-                  VERSIÓN JULIO 2026
+                  VERSIÓN AGOSTO 2026
                 </h2>
 
                 {/* 🔒 GRAN CANDADO PULSANTE EN EL CENTRO */}
-                <div className="my-6">
+                <div className="my-2.5 relative z-10">
                   <span
                     className="animate-lock cursor-pointer"
-                    style={{ fontSize: "3.5rem" }}
+                    style={{ fontSize: "2.8rem" }}
                     role="img"
                     aria-label="candado"
                   >
                     🔒
                   </span>
-                  <div className="text-[13px] font-black uppercase text-amber-800 tracking-wider mt-2">
+                  <div className="text-[12px] sm:text-[13px] font-black uppercase text-amber-800 tracking-wider mt-1">
                     Haga clic para acceder
                   </div>
                 </div>
 
                 {/* 📞💬🎬 FILA DE EMOJIS DE SOPORTE DIRECTO DEBAJO DEL CANDADO */}
                 <div 
-                  className="flex flex-col items-center justify-center mt-6 pt-4 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger relative z-20"
+                  className="flex flex-col items-center justify-center mt-3 pt-3 border-t border-dashed border-[#8c7c68]/40 w-full no-pin-trigger relative z-20"
                   onClick={(e) => e.stopPropagation()} // Para que hacer clic en los emojis no abra el panel del PIN
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchEnd={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <div className="text-[12px] sm:text-[13px] font-extrabold uppercase text-amber-900/80 tracking-widest mb-3">
+                  <div className="text-[11px] sm:text-[12px] font-extrabold uppercase text-amber-900/80 tracking-widest mb-2">
                     Soporte técnico
                   </div>
-                  <div className="flex items-center justify-center gap-8">
+                  <div className="flex items-center justify-center gap-7">
                     {/* Teléfono */}
                     <button
                       type="button"
@@ -9838,7 +10193,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
+                      className="text-3xl sm:text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Llamar al 951-127-3796"
                     >
                       📞
@@ -9851,7 +10206,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
+                      className="text-3xl sm:text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Enviar WhatsApp al 951-127-3796"
                     >
                       💬
@@ -9864,7 +10219,7 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
+                      className="text-3xl sm:text-4xl hover:scale-130 active:scale-95 transition-all duration-200 select-none cursor-pointer bg-transparent border-none p-0 focus:outline-none relative z-30"
                       title="Video Tutorial y Preguntas Frecuentes"
                     >
                       🎬
@@ -9874,18 +10229,18 @@ export default function App() {
 
                 {/* 📅 Reloj y Calendario en tiempo real estilo Tarjeta */}
                 <div 
-                  className="mt-6 flex flex-col items-stretch justify-center gap-5 bg-[#fcf9f2] border border-[#d2c2ad] rounded-2xl p-6 shadow-sm max-w-[450px] mx-auto w-full no-pin-trigger"
+                  className="mt-3 flex flex-col items-stretch justify-center gap-3 bg-[#fcf9f2]/90 backdrop-blur-sm border border-[#d2c2ad] rounded-2xl p-4 shadow-sm max-w-[420px] mx-auto w-full no-pin-trigger relative z-20"
                   onClick={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchEnd={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   {/* Fecha - Tipo Calendario */}
-                  <div className="flex items-center gap-4 text-[#5c4d3c] w-full pl-3">
-                    <div className="text-4xl select-none" role="img" aria-label="Calendario">📅</div>
+                  <div className="flex items-center gap-3 text-[#5c4d3c] w-full pl-2">
+                    <div className="text-3xl select-none" role="img" aria-label="Calendario">📅</div>
                     <div className="text-left">
-                      <div className="text-[12px] uppercase font-bold tracking-wider text-slate-500">Fecha</div>
-                      <div className="text-[18px] font-black uppercase text-slate-700 leading-tight">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-slate-500">Fecha</div>
+                      <div className="text-[16px] sm:text-[17px] font-black uppercase text-slate-700 leading-tight">
                         {(() => {
                           const str = new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
                           return str.charAt(0).toUpperCase() + str.slice(1);
@@ -9898,11 +10253,11 @@ export default function App() {
                   <div className="w-full h-[1px] bg-[#d2c2ad]"></div>
 
                   {/* Hora - Tipo Reloj */}
-                  <div className="flex items-center gap-4 text-[#5c4d3c] w-full pl-3">
-                    <div className="text-4xl select-none" role="img" aria-label="Reloj">⏰</div>
+                  <div className="flex items-center gap-3 text-[#5c4d3c] w-full pl-2">
+                    <div className="text-3xl select-none" role="img" aria-label="Reloj">⏰</div>
                     <div className="text-left">
-                      <div className="text-[12px] uppercase font-bold tracking-wider text-slate-500">Hora</div>
-                      <div className="text-[24px] font-black font-mono tracking-widest text-slate-800 leading-none">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-slate-500">Hora</div>
+                      <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-widest text-slate-800 leading-none">
                         {mexicoClockShort || new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </div>
                     </div>
@@ -11100,6 +11455,7 @@ export default function App() {
   const [isListeningNote, setIsListeningNote] = useState(false);
   const noteRecognitionRef = useRef<any>(null);
   const [folioCounter, setFolioCounter] = useState<number>(1001);
+  const [isRefreshingTables, setIsRefreshingTables] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -11112,8 +11468,14 @@ export default function App() {
   const feedbackTimerRef = useRef<any>(null);
 
   const effectiveTables = useMemo(() => {
-    if (tables && tables.length > 0) return tables;
-    return createDefault30TablesList(selectedTenant?.id || "default-tenant");
+    const tenantId = selectedTenant?.id || "default-tenant";
+    if (tables && tables.length > 0) {
+      const result = ensureAll35TablesForTenant(tables, tenantId);
+      const occupied = result.filter((t: any) => t.status === "occupied" || (t.comandas && t.comandas.length > 0));
+      console.log("🟡 [EFFECTIVE_TABLES] occupied in memo:", occupied.map((t: any) => `Mesa ${t.label} status=${t.status} comandas=${t.comandas?.length}`));
+      return result;
+    }
+    return createDefault30TablesList(tenantId);
   }, [tables, selectedTenant?.id]);
 
   const selectedTable = useMemo(() => {
@@ -11186,7 +11548,10 @@ export default function App() {
       setSelectedDeliveryAddress("");
     }
 
-    if (table.status === "available") {
+    const hasComandas = Array.isArray(table.comandas) && table.comandas.length > 0;
+    const isOccupied = table.status === "occupied" || hasComandas;
+
+    if (!isOccupied) {
       setAppMode("menu");
       setCart([]);
       if (table.zone === "Servicio a Domicilio") {
@@ -11441,7 +11806,7 @@ export default function App() {
         }
 
         const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
-        const transport = await createTransport(printerArea);
+        const transport = await createTransport(printerArea, selectedTenant?.id);
         const driver = new EscPosDriver();
         const job = new PosPrinterJob(driver, transport as any);
 
@@ -11719,6 +12084,7 @@ export default function App() {
 
   const generateOrder = async (goToCheckout: boolean = false) => {
     if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+    setIsGeneratingOrder(true);
 
     // Si la mesa ya tiene un folio interno asignado en esta sesión, se reutiliza directamente sin pedirlo de nuevo
     const existingTableFolio = getExistingTableFolio(selectedTable);
@@ -11744,12 +12110,14 @@ export default function App() {
     setPendingGoToCheckout(goToCheckout);
     setSuggestedLastFolio(lastFolio);
     setShowFolioModal(true);
+    setIsGeneratingOrder(false);
     setTimeout(() => {
       if (folioInputRef.current) folioInputRef.current.focus();
     }, 100);
   };
 
   const handleFolioStepSubmit = async () => {
+    if (isGeneratingOrder) return;
     const val = folioInputValue.trim();
     if (!val) {
       setFolioModalError("⚠️ Por favor ingresa el número de folio interno.");
@@ -11795,6 +12163,7 @@ export default function App() {
         localStorage.setItem("cocinet_last_internal_folio_" + tenantId, f1);
       } catch (e) {}
 
+      setIsGeneratingOrder(true);
       setShowFolioModal(false);
       await executeGenerateOrder(f1, pendingGoToCheckout);
     }
@@ -11902,6 +12271,29 @@ export default function App() {
         createdBy: currentUser || undefined,
       };
 
+      // Update local React state & cache OPTIMISTICALLY immediately! ⚡ (0ms UI latency)
+      const currentSelectedId = selectedTableId;
+      setTables((prevTables) => {
+        const updated = prevTables.map((t) => {
+          if (t.id === currentSelectedId) {
+            const existing = t.comandas || [];
+            return {
+              ...t,
+              status: "occupied",
+              comandas: deduplicateComandas([...existing, newComanda]),
+              folioInterno: folioInterno || t.folioInterno,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return t;
+        });
+        try {
+          const tid = selectedTenant?.id || "default-tenant";
+          localStorage.setItem("pos_tables_" + tid, JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+
       // Trigger automatic printing for both destinations
       const destinations = getComandaDestinations(newComanda);
 
@@ -11951,6 +12343,11 @@ export default function App() {
   const finalizePayment = async (isPaidNow: boolean = true) => {
     if (isProcessingPayment) return;
 
+    if (requiresInvoice && (!invoicePhone || invoicePhone.trim().length !== 10)) {
+      alert("⚠️ Error de Validación: Para solicitar factura es obligatorio ingresar el teléfono celular de 10 dígitos del cliente.");
+      return;
+    }
+
     if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
       return;
@@ -11988,6 +12385,14 @@ export default function App() {
       setIsProcessingPayment(true);
       try {
         if (selectedTableId) {
+          const tableSnapshot = {
+            ...selectedTable,
+            comandas: (selectedTable.comandas || []).map((c) => ({
+              ...c,
+              items: (c.items || []).map((i) => ({ ...i })),
+            })),
+          };
+
           await checkoutTableInFirebase(selectedTableId, selectedTable, {
             tableLabel: selectedTable.label,
             subtotal,
@@ -12001,6 +12406,7 @@ export default function App() {
             createdBy: currentUser?.id,
             sessionId: cashierSessions.find((s) => s.status === "open")?.id || `day-${selectedTenant?.id || "tenant-1"}-${getOperatingDay(new Date())}`,
             requiresInvoice,
+            invoicePhone: requiresInvoice ? invoicePhone : "",
           });
 
           triggerAppNotification(
@@ -12009,7 +12415,7 @@ export default function App() {
           );
 
           // Auto-print ticket upon closing the account
-          printTicket(selectedTable, "resumen");
+          await printTicket(tableSnapshot, "resumen", paymentMethod, paymentCardType);
         }
       } catch (error: any) {
         console.error("Error during checkout:", error);
@@ -12233,8 +12639,63 @@ export default function App() {
       setPaymentTipValue(account.tip);
       setPaymentMethod("cash");
       setRequiresInvoice(account.requiresInvoice || false);
+      setInvoicePhone(account.invoicePhone || "");
       setShowPaymentModal(true);
     }
+  };
+
+  const handleOpenInvoicePhoneModal = (targetType: "activeTable" | "closedAccount", account?: any) => {
+    setPendingInvoiceTarget({ type: targetType, account });
+    setInputInvoicePhone(invoicePhone || account?.invoicePhone || "");
+    setInputInvoicePhoneConfirm(invoicePhone || account?.invoicePhone || "");
+    setInvoicePhoneError("");
+    setShowInvoicePhoneModal(true);
+  };
+
+  const handleConfirmInvoicePhone = async () => {
+    const p1 = inputInvoicePhone.trim();
+    const p2 = inputInvoicePhoneConfirm.trim();
+    const cleanP1 = p1.replace(/\D/g, "");
+    const cleanP2 = p2.replace(/\D/g, "");
+
+    if (!cleanP1 || cleanP1.length !== 10) {
+      setInvoicePhoneError("⛔ El número celular debe ser válido y contener exactamente 10 dígitos. Por favor capture de nuevo ambos campos.");
+      setInputInvoicePhone("");
+      setInputInvoicePhoneConfirm("");
+      return;
+    }
+
+    if (cleanP1 !== cleanP2) {
+      setInvoicePhoneError("⛔ Los números de celular no coinciden. Por favor capture de nuevo 2 veces ambos campos.");
+      setInputInvoicePhone("");
+      setInputInvoicePhoneConfirm("");
+      return;
+    }
+
+    setInvoicePhoneError("");
+    if (pendingInvoiceTarget?.type === "activeTable") {
+      setRequiresInvoice(true);
+      setInvoicePhone(cleanP1);
+    } else if (pendingInvoiceTarget?.type === "closedAccount" && pendingInvoiceTarget.account) {
+      try {
+        await updateInvoiceRequirementInFirebase(pendingInvoiceTarget.account.id, true, cleanP1);
+        setHistory((prev) =>
+          prev.map((acc) =>
+            acc.id === pendingInvoiceTarget.account.id
+              ? { ...acc, requiresInvoice: true, invoicePhone: cleanP1 }
+              : acc
+          )
+        );
+        triggerAppNotification(
+          "🧾 FACTURACIÓN ACTUALIZADA",
+          `Cuenta ${pendingInvoiceTarget.account.tableLabel} marcada como: Requiere Factura (Cel: ${cleanP1})`
+        );
+      } catch (err) {
+        console.error("Error updating invoice requirement:", err);
+      }
+    }
+    setShowInvoicePhoneModal(false);
+    setPendingInvoiceTarget(null);
   };
 
   const handleQuickChangeAccountStatus = async (
@@ -12548,6 +13009,7 @@ export default function App() {
         cardLastFour: lastFour,
         cardType: (paymentMethod === "card") ? paymentCardType : "",
         requiresInvoice: requiresInvoice,
+        invoicePhone: requiresInvoice ? invoicePhone : "",
       });
     } catch (e) {
       console.error("Error updating payment in Firebase:", e);
@@ -12566,6 +13028,7 @@ export default function App() {
               cardLastFour: lastFour,
               cardType: (paymentMethod === "card") ? paymentCardType : "",
               requiresInvoice: requiresInvoice,
+              invoicePhone: requiresInvoice ? invoicePhone : "",
             }
           : acc,
       ),
@@ -12591,6 +13054,7 @@ export default function App() {
       cardLastFour: lastFour,
       cardType: (paymentMethod === "card") ? paymentCardType : "",
       requiresInvoice: requiresInvoice,
+      invoicePhone: requiresInvoice ? invoicePhone : "",
     };
     reprintAccount(finalizedAccount);
 
@@ -12620,7 +13084,6 @@ export default function App() {
         paymentMethod: tempPaymentMethod,
         cardLastFour: tempCardLastFour,
         cardType: tempPaymentCardType,
-        // Mantener el resto de los campos igual
         isPaid: accountToEditPayment.isPaid,
         tip: accountToEditPayment.tip || 0,
         discount: accountToEditPayment.discount || 0,
@@ -12667,12 +13130,7 @@ export default function App() {
   const reprintAccount = async (account: ClosedAccount, customFolio?: number) => {
     const missingSAT = checkMissingSATFiscalFields();
     if (missingSAT.length > 0) {
-      triggerAppNotification(
-        "⛔ IMPRESIÓN DETENIDA PARA EVITAR DESPERDICIAR PAPEL",
-        `Se detuvo la reimpresión. Faltan los siguientes datos fiscales del SAT: ${missingSAT.join(", ")}. Ingrésalos en "Configuración del Sistema".`,
-        "warning"
-      );
-      return;
+      console.warn(`⚠️ [Impresión] Faltan datos fiscales del SAT para la reimpresión (${missingSAT.join(", ")}), pero se procede a imprimir por prioridad de venta.`);
     }
 
     const allItems = (account.comandas || [])
@@ -12680,7 +13138,7 @@ export default function App() {
       .filter((i) => !i.isCancelled);
 
     try {
-      const transport = await createTransport("cuentas");
+      const transport = await createTransport("cuentas", selectedTenant?.id);
       const driver = new EscPosDriver();
       const job = new PosPrinterJob(driver, transport as any);
 
@@ -12689,9 +13147,9 @@ export default function App() {
       const lugVal = (companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion || "").toUpperCase();
       const dirVal = (companyConfig.direccionFiscal || selectedTenant?.direccionFiscal || "").toUpperCase();
       const telVal = companyConfig.telefono || selectedTenant?.telefono || "";
-      const emlVal = companyConfig.email || selectedTenant?.email || "";
+      const emlVal = sanitizeEmail(companyConfig.email || selectedTenant?.email || "");
       const sucVal = (companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase();
-      const bName = (companyConfig.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
+      const bName = sanitizeBusinessName(companyConfig.businessName || selectedTenant?.name || "TACOS ROY").toUpperCase();
 
       job.initialize();
       job.center();
@@ -12789,6 +13247,12 @@ export default function App() {
         .printLine(`TOTAL: $${account.total.toFixed(2)}`)
         .bold(false);
 
+      if (account.requiresInvoice) {
+        job.printLine("--------------------------------");
+        job.left();
+        job.bold(true).printLine(`🧾 FACTURAR: ${account.invoicePhone || ""}`).bold(false);
+      }
+
       job.printLine(" ");
       job.center();
       job.printLine(companyConfig.footerMessage.toUpperCase());
@@ -12802,16 +13266,16 @@ export default function App() {
   const printTicket = async (
     table: TableData,
     view: "resumen" | "comandas" | "comensales" = "resumen",
+    explicitPaymentMethod?: string,
+    explicitCardType?: string,
   ) => {
     const missingSAT = checkMissingSATFiscalFields();
     if (missingSAT.length > 0) {
-      triggerAppNotification(
-        "⛔ IMPRESIÓN CANCELADA PARA EVITAR DESPERDICIAR PAPEL",
-        `Faltan los siguientes datos fiscales obligatorios del SAT: ${missingSAT.join(", ")}. Ingrésalos en "Configuración del Sistema".`,
-        "warning"
-      );
-      return;
+      console.warn(`⚠️ [Impresión] Faltan datos fiscales del SAT para la precuenta (${missingSAT.join(", ")}), pero procediendo a imprimir.`);
     }
+
+    const activePayMethod = explicitPaymentMethod || paymentMethod || (table as any).paymentMethod || (table as any).metodoPago || "";
+    const activeCardType = explicitCardType || paymentCardType || (table as any).cardType || (table as any).tipoTarjeta || "";
 
     const allItems = table.comandas.flatMap((c) => c.items);
     const currentSubtotal = allItems
@@ -12859,8 +13323,13 @@ export default function App() {
           propina: paymentTipValue,
           descuento: currentDiscountAmount,
           total: currentTotal,
+          paymentMethod: activePayMethod,
+          metodoPago: activePayMethod,
+          cardType: activeCardType,
           tipo: "cuenta",
           area: "caja",
+          requiresInvoice: requiresInvoice,
+          invoicePhone: requiresInvoice ? invoicePhone : "",
           timestamp: getMexicoISOString(),
           atendidoPor: currentUser?.name || "S/M",
           deliveryClientName: dClient,
@@ -12875,28 +13344,27 @@ export default function App() {
           telefono: telVal,
           email: emlVal,
           sucursal: sucVal,
-        }).catch((err: any) => console.warn("Centinela Ticket Sync Error:", err));
+        }).catch((err) => console.warn("Centinela Ticket Error:", err));
 
         let deliverySubStr = "";
-        if (dClient || dAddr) {
-          deliverySubStr = ` | 🛵 CLIENTE: ${String(dClient).toUpperCase()}`;
-          if (dPhone) deliverySubStr += ` (Tel: ${dPhone})`;
-          if (dAddr) {
-            let cleanA = dAddr;
-            let refT = "";
-            if (dAddr.includes("(Ref:")) {
-              const parts = dAddr.split("(Ref:");
-              cleanA = parts[0].trim();
+        if (dClient) deliverySubStr += ` | Cliente: ${dClient}`;
+        if (dPhone) deliverySubStr += ` | Tel: ${dPhone}`;
+        if (dAddr) {
+          if (typeof dAddr === "string") {
+            deliverySubStr += ` | Dir: ${dAddr}`;
+          } else {
+            const cleanA = dAddr.street || dAddr.address || dAddr.formatted || "";
+            let refT = dAddr.notes || dAddr.reference || "";
+            if (!refT && cleanA.includes("(Ref:")) {
+              const parts = cleanA.split("(Ref:");
               refT = parts[1].replace(")", "").trim();
-            } else if (dAddr.includes("| Ref:")) {
-              const parts = dAddr.split("| Ref:");
-              cleanA = parts[0].trim();
+            } else if (!refT && cleanA.includes(",")) {
+              const parts = cleanA.split(",");
               refT = parts[1].trim();
             }
             deliverySubStr += ` | Dir: ${cleanA}`;
             if (refT) deliverySubStr += ` | Ref: ${refT}`;
           }
-          if (dNotes) deliverySubStr += ` | Notas: ${dNotes}`;
         }
 
         triggerAppNotification(
@@ -12932,6 +13400,9 @@ export default function App() {
                 propina: paymentTipValue,
                 descuento: currentDiscountAmount,
                 total: currentTotal,
+                paymentMethod: activePayMethod,
+                metodoPago: activePayMethod,
+                cardType: activeCardType,
                 deliveryClientName: dClient,
                 deliveryClientPhone: dPhone,
                 deliveryAddress: dAddr,
@@ -12957,13 +13428,11 @@ export default function App() {
             }
           }
         );
+
+        processedPrintIdsRef.current.add(preFolio);
       }
 
-      if (systemLocalWindowsAutoPrint) {
-        return;
-      }
-
-      const transport = await createTransport("cuentas");
+      const transport = await createTransport("cuentas", selectedTenant?.id);
       const driver = new EscPosDriver();
       const job = new PosPrinterJob(driver, transport as any);
 
@@ -12972,7 +13441,7 @@ export default function App() {
       job
         .setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED)
         .bold(true)
-        .printLine(companyConfig.businessName.toUpperCase())
+        .printLine(bName)
         .setPrintMode(job.FONT_SIZE_NORMAL)
         .bold(false);
       job.printLine("--------------------------------");
@@ -13116,22 +13585,29 @@ export default function App() {
           job.printLine(`TEL: ${dPhoneEsc}`);
         }
         if (dAddrEsc) {
-          let cleanAddr = dAddrEsc;
+          let cleanAddr = "";
           let refText = "";
-          if (dAddrEsc.includes("(Ref:")) {
-            const parts = dAddrEsc.split("(Ref:");
-            cleanAddr = parts[0].trim();
-            refText = parts[1].replace(")", "").trim();
-          } else if (dAddrEsc.includes("| Ref:")) {
-            const parts = dAddrEsc.split("| Ref:");
-            cleanAddr = parts[0].trim();
-            refText = parts[1].trim();
+          if (typeof dAddrEsc === "string") {
+            cleanAddr = dAddrEsc;
+            if (dAddrEsc.includes("(Ref:")) {
+              const parts = dAddrEsc.split("(Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].replace(")", "").trim();
+            } else if (dAddrEsc.includes("| Ref:")) {
+              const parts = dAddrEsc.split("| Ref:");
+              cleanAddr = parts[0].trim();
+              refText = parts[1].trim();
+            }
+          } else if (typeof dAddrEsc === "object" && dAddrEsc !== null) {
+            cleanAddr = (dAddrEsc as any).street || (dAddrEsc as any).address || (dAddrEsc as any).formatted || "";
+            refText = (dAddrEsc as any).notes || (dAddrEsc as any).reference || "";
           }
-          job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
-          if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
+
+          if (cleanAddr) job.printLine(`DIR: ${String(cleanAddr).toUpperCase()}`);
+          if (refText) job.printLine(`REF: ${String(refText).toUpperCase()}`);
         }
         if (dNotesEsc) {
-          job.printLine(`NOTAS: ${dNotesEsc.toUpperCase()}`);
+          job.printLine(`NOTAS: ${String(dNotesEsc).toUpperCase()}`);
         }
         job.printLine("--------------------------------");
       }
@@ -13147,8 +13623,27 @@ export default function App() {
         .printLine(`TOTAL: $${currentTotal.toFixed(2)}`)
         .bold(false);
 
+      if (explicitPaymentMethod || (table as any).isPaid) {
+        const payMethodToUse = explicitPaymentMethod || (table as any).paymentMethod || activePayMethod;
+        if (payMethodToUse) {
+          let pLabel = String(payMethodToUse).toUpperCase();
+          if (["CASH", "EFECTIVO"].includes(pLabel)) pLabel = "EFECTIVO";
+          else if (["CARD", "TARJETA"].includes(pLabel)) pLabel = activeCardType === "credito" ? "TARJETA CRÉDITO" : activeCardType === "debito" ? "TARJETA DÉBITO" : "TARJETA";
+          else if (["TRANSFER", "TRANSFERENCIA", "SPEI"].includes(pLabel)) pLabel = "TRANSFERENCIA";
+          
+          job.printLine(`PAGADO: $${currentTotal.toFixed(2)}`);
+          job.printLine(`PAGO CON: ${pLabel}`);
+        }
+      }
+
+      if (requiresInvoice) {
+        job.printLine("--------------------------------");
+        job.left();
+        job.bold(true).printLine(`🧾 FACTURAR: ${invoicePhone || ""}`).bold(false);
+      }
+
       job.center();
-      job.feed(1).printLine(companyConfig.footerMessage.toUpperCase());
+      job.feed(1).printLine((companyConfig?.footerMessage || "¡Gracias por su visita!").toUpperCase());
       job.feed(3).cut();
 
       job.execute();
@@ -13349,6 +13844,45 @@ export default function App() {
       return orderA - orderB;
     });
 
+  const handleManualRefreshTables = async () => {
+    if (!selectedTenant?.id) return;
+    const tenantId = selectedTenant.id;
+    setIsRefreshingTables(true);
+    triggerAppNotification("🔄 REFRESCANDO MESAS", "Consultando Firestore en vivo...", "info");
+    try {
+      const liveTables = await fetchTablesFromFirebase(tenantId);
+      const ensured = ensureAll35TablesForTenant(liveTables || [], tenantId);
+      const parsed = ensured.map((t: any) => ({
+        ...t,
+        zone: normalizeZoneName(t.zone),
+        comandas: (t.comandas || []).map((c: any) => ({
+          ...c,
+          timestamp:
+            c.timestamp && typeof c.timestamp.toDate === "function"
+              ? c.timestamp.toDate()
+              : new Date(c.timestamp),
+        })),
+      }));
+      setTables(parsed);
+      try {
+        localStorage.setItem("pos_tables_" + tenantId, JSON.stringify(parsed));
+      } catch (e) {}
+      const occupied = parsed.filter(
+        (t: any) => t.status === "occupied" || (t.comandas && t.comandas.length > 0),
+      );
+      triggerAppNotification(
+        "✅ MESAS ACTUALIZADAS",
+        `Se cargaron ${occupied.length} mesas ocupadas desde la nube.`,
+        "success",
+      );
+    } catch (err) {
+      console.warn("Error refreshing tables manually:", err);
+      triggerAppNotification("⚠️ ERROR DE REFRESCO", "No se pudieron obtener las mesas de la nube", "warning");
+    } finally {
+      setIsRefreshingTables(false);
+    }
+  };
+
   const renderFloorplan = () => (
     <IonPage>
       {renderMaterialHeader({
@@ -13520,7 +14054,7 @@ export default function App() {
                       return (
                         <IonCol
                           size="2.4"
-                          key={table.id}
+                          key={`${table.id}-${table.status}-${table.comandas?.length || 0}`}
                           className="ion-text-center"
                           style={{ padding: "8px 4px", minHeight: "125px" }}
                         >
@@ -13611,8 +14145,8 @@ export default function App() {
                               </div>
                             )}
                           </div>
-                          {/* Elegante etiqueta del mesero o meseros debajo del círculo 🤵 */}
-                          {waiterNames.length > 0 ? (
+                          {/* Elegante etiqueta del mesero o estado debajo del círculo 🤵 */}
+                          {hasActiveOrders || table.status === "occupied" ? (
                             <div
                               style={{
                                 marginTop: "8px",
@@ -13627,34 +14161,61 @@ export default function App() {
                                 textTransform: "uppercase",
                               }}
                             >
-                              <span
-                                style={{
-                                  fontSize: "0.55rem",
-                                  color: "#64748b",
-                                  fontWeight: "normal",
-                                }}
-                              >
-                                🤵{" "}
-                                {waiterNames.length > 1
-                                  ? "Meseros:"
-                                  : "Mesero:"}
-                              </span>
-                              <span
-                                style={{
-                                  color: "#e11d48",
-                                  maxWidth: "100%",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  padding: "1px 6px",
-                                  background: "#ffe4e6",
-                                  borderRadius: "6px",
-                                  border: "1px solid #fecdd3",
-                                }}
-                                title={waiterNames.join(" & ")}
-                              >
-                                {waiterNames.join(" & ")}
-                              </span>
+                              {waiterNames.length > 0 ? (
+                                <>
+                                  <span
+                                    style={{
+                                      fontSize: "0.55rem",
+                                      color: "#64748b",
+                                      fontWeight: "normal",
+                                    }}
+                                  >
+                                    🤵{" "}
+                                    {waiterNames.length > 1
+                                      ? "Meseros:"
+                                      : "Mesero:"}
+                                  </span>
+                                  <span
+                                    style={{
+                                      color: "#e11d48",
+                                      maxWidth: "100%",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                      padding: "1px 6px",
+                                      background: "#ffe4e6",
+                                      borderRadius: "6px",
+                                      border: "1px solid #fecdd3",
+                                    }}
+                                    title={waiterNames.join(" & ")}
+                                  >
+                                    {waiterNames.join(" & ")}
+                                  </span>
+                                </>
+                              ) : (
+                                <span
+                                  style={{
+                                    color: "#e11d48",
+                                    padding: "1px 6px",
+                                    background: "#ffe4e6",
+                                    borderRadius: "6px",
+                                    border: "1px solid #fecdd3",
+                                  }}
+                                >
+                                  Ocupada 🔴
+                                </span>
+                              )}
+                            </div>
+                          ) : table.status === "payment_pending" ? (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                fontSize: "0.6rem",
+                                color: "#d97706",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Cuenta Solicitada 🟠
                             </div>
                           ) : (
                             <div
@@ -14533,7 +15094,7 @@ export default function App() {
                                         : account.paymentMethod === "lupay"
                                           ? "Lúpay"
                                           : "Transferencia") +
-                                    (account.requiresInvoice ? " - Requiere Factura" : "")
+                                    (account.requiresInvoice ? ` - Requiere Factura (${account.invoicePhone || "Sin tel."})` : "")
                                   }
                                 >
                                   {account.paymentMethod === "cash"
@@ -14543,7 +15104,7 @@ export default function App() {
                                       : account.paymentMethod === "lupay"
                                         ? "⚡"
                                         : "🏦"}
-                                  {account.requiresInvoice && " 🧾"}
+                                  {account.requiresInvoice && (account.invoicePhone ? ` 🧾 (${account.invoicePhone})` : " 🧾")}
                                 </span>
                               </td>
                               <td style={{ padding: "12px 16px" }}>
@@ -14839,34 +15400,99 @@ export default function App() {
                                         </IonButton>
                                       )}
                                     {account.status !== "cancelled" && (
-                                      <IonButton
-                                        size="small"
-                                        fill="outline"
-                                        color={account.requiresInvoice ? "warning" : "medium"}
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          const newValue = !account.requiresInvoice;
-                                          try {
-                                            await updateInvoiceRequirementInFirebase(account.id, newValue);
-                                            setHistory((prev) =>
-                                              prev.map((acc) =>
-                                                acc.id === account.id
-                                                  ? { ...acc, requiresInvoice: newValue }
-                                                  : acc
-                                              )
-                                            );
-                                            triggerAppNotification(
-                                              "🧾 FACTURACIÓN ACTUALIZADA",
-                                              `Cuenta ${account.tableLabel} marcada como: ${newValue ? "Requiere Factura" : "No requiere Factura"}`
-                                            );
-                                          } catch (err) {
-                                            console.error("Error updating invoice requirement:", err);
-                                          }
-                                        }}
-                                      >
-                                        🧾 {account.requiresInvoice ? "Quitar Factura" : "Requiere Factura"}
-                                      </IonButton>
-                                    )}
+                                       editingInvoiceAccountId === account.id ? (
+                                         <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-xl border-2 border-amber-300 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                                           <span className="text-xs font-black text-amber-950">📱 Celular:</span>
+                                           <input
+                                             type="tel"
+                                             inputMode="numeric"
+                                             maxLength={10}
+                                             placeholder="Ej. 6621234567"
+                                             value={editingInvoicePhoneValue}
+                                             onChange={(e) => setEditingInvoicePhoneValue(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                             className="bg-white border-2 border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono font-black text-slate-900 w-36 outline-none focus:border-amber-600"
+                                             autoFocus
+                                           />
+                                           <button
+                                             type="button"
+                                             onClick={async (e) => {
+                                               e.stopPropagation();
+                                               if (editingInvoicePhoneValue.length !== 10) {
+                                                 alert("El número celular debe tener exactamente 10 dígitos.");
+                                                 return;
+                                               }
+                                               try {
+                                                 await updateInvoiceRequirementInFirebase(account.id, true, editingInvoicePhoneValue);
+                                                 setHistory((prev) =>
+                                                   prev.map((acc) =>
+                                                     acc.id === account.id
+                                                       ? { ...acc, requiresInvoice: true, invoicePhone: editingInvoicePhoneValue }
+                                                       : acc
+                                                   )
+                                                 );
+                                                 triggerAppNotification(
+                                                   "🧾 FACTURACIÓN ACTUALIZADA",
+                                                   `Cuenta ${account.tableLabel} marcada como: Requiere Factura (Cel: ${editingInvoicePhoneValue})`
+                                                 );
+                                                 setEditingInvoiceAccountId(null);
+                                                 setEditingInvoicePhoneValue("");
+                                               } catch (err) {
+                                                 console.error(err);
+                                               }
+                                             }}
+                                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer transition active:scale-95 flex items-center gap-1"
+                                           >
+                                             <span>Guardar</span> ✓
+                                           </button>
+                                           <button
+                                             type="button"
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               setEditingInvoiceAccountId(null);
+                                               setEditingInvoicePhoneValue("");
+                                             }}
+                                             className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer transition"
+                                           >
+                                             ✕
+                                           </button>
+                                         </div>
+                                       ) : (
+                                         <button
+                                           type="button"
+                                           onClick={async (e) => {
+                                             e.stopPropagation();
+                                             if (account.requiresInvoice) {
+                                               try {
+                                                 await updateInvoiceRequirementInFirebase(account.id, false, "");
+                                                 setHistory((prev) =>
+                                                   prev.map((acc) =>
+                                                     acc.id === account.id
+                                                       ? { ...acc, requiresInvoice: false, invoicePhone: "" }
+                                                       : acc
+                                                   )
+                                                 );
+                                                 triggerAppNotification(
+                                                   "🧾 FACTURACIÓN ACTUALIZADA",
+                                                   `Cuenta ${account.tableLabel} marcada como: No requiere Factura`
+                                                 );
+                                               } catch (err) {
+                                                 console.error("Error updating invoice requirement:", err);
+                                               }
+                                             } else {
+                                               setEditingInvoiceAccountId(account.id);
+                                               setEditingInvoicePhoneValue(account.invoicePhone || "");
+                                             }
+                                           }}
+                                           className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                                             account.requiresInvoice
+                                               ? "bg-amber-500 hover:bg-amber-600 text-slate-900 border-amber-600"
+                                               : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                                           }`}
+                                         >
+                                           🧾 {account.requiresInvoice ? "Quitar Factura" : "Requiere Factura"}
+                                         </button>
+                                       )
+                                     )}
 
                                     {account.status !== "cancelled" && (
                                       <IonButton
@@ -18360,19 +18986,31 @@ Instrucciones:
                     expand="block"
                     color="primary"
                     fill="outline"
-                    onClick={() => {
-                      setPrecuentaModalType(precuentaTab);
-                      
-                      // 🖨️ Mandar a imprimir precuenta inmediatamente según la pestaña seleccionada
-                      if (selectedTable) {
-                        printTicket(selectedTable, precuentaTab);
-                      }
+                    disabled={isPrintingPrecuenta}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (isPrintingPrecuenta) return;
+                      setIsPrintingPrecuenta(true);
 
-                      triggerAppNotification(
-                        "🖨️ Ticket Enviado",
-                        `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para Mesa ${selectedTable?.label || ""}... ⚡🍽️`,
-                        "success"
-                      );
+                      try {
+                        setPrecuentaModalType(precuentaTab);
+                        
+                        // 🖨️ Mandar a imprimir precuenta inmediatamente según la pestaña seleccionada
+                        if (selectedTable) {
+                          await printTicket(selectedTable, precuentaTab);
+                        }
+
+                        triggerAppNotification(
+                          "🖨️ Ticket Enviado",
+                          `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para Mesa ${selectedTable?.label || ""}... ⚡🍽️`,
+                          "success"
+                        );
+                      } catch (err: any) {
+                        console.error("Error al imprimir precuenta:", err);
+                      } finally {
+                        setTimeout(() => setIsPrintingPrecuenta(false), 1200);
+                      }
                     }}
                     style={{
                       height: "65px",
@@ -18382,11 +19020,13 @@ Instrucciones:
                     }}
                   >
                     <IonIcon icon={printOutline} slot="start" />
-                    {precuentaTab === "resumen"
-                      ? "Precuenta"
-                      : precuentaTab === "comandas"
-                        ? "Comandas"
-                        : "Comensales"}
+                    {isPrintingPrecuenta
+                      ? "Imprimiendo..."
+                      : precuentaTab === "resumen"
+                        ? "Precuenta"
+                        : precuentaTab === "comandas"
+                          ? "Comandas"
+                          : "Comensales"}
                   </IonButton>
 
                   <IonButton
@@ -19530,26 +20170,84 @@ Instrucciones:
                           )}
 
                           {/* Requiere factura checkbox/toggle option in active table checkout panel */}
-                          <div className="mt-4 mb-4">
-                            <label className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition">
+                          <div className="mt-4 mb-4 flex flex-col gap-2">
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (requiresInvoice) {
+                                  setRequiresInvoice(false);
+                                  setInvoicePhone("");
+                                } else {
+                                  setRequiresInvoice(true);
+                                }
+                              }}
+                              className={`flex items-center justify-between p-3.5 border rounded-2xl cursor-pointer transition-all shadow-xs active:scale-[0.99] ${
+                                requiresInvoice
+                                  ? "bg-amber-50 border-amber-300 ring-2 ring-amber-400/20"
+                                  : "bg-slate-50 border-slate-200 hover:bg-slate-100/80"
+                              }`}
+                            >
                               <div className="flex items-center gap-2.5">
                                 <span className="text-xl">🧾</span>
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-bold text-slate-700">Requiere Factura</span>
-                                  <span className="text-[10px] text-slate-500">¿El cliente solicita factura de esta venta?</span>
+                                <div className="flex flex-col text-left">
+                                  <span className="text-xs font-bold text-slate-800">Requiere Factura</span>
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    ¿El cliente solicita factura de esta venta?
+                                  </span>
                                 </div>
                               </div>
-                              <div className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={requiresInvoice}
-                                  onChange={(e) => setRequiresInvoice(e.target.checked)}
-                                  className="sr-only peer"
+
+                              {/* Switch interactivo */}
+                              <div
+                                className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
+                                  requiresInvoice ? "bg-emerald-600" : "bg-slate-300"
+                                }`}
+                              >
+                                <div
+                                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                                    requiresInvoice ? "translate-x-6" : "translate-x-0"
+                                  }`}
                                 />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                               </div>
-                            </label>
-                          </div>
+                            </div>
+
+                            {/* Campo de teléfono integrado en línea */}
+                            {requiresInvoice && (
+                              <div className="p-3.5 bg-amber-50/90 border-2 border-amber-300 rounded-2xl flex flex-col gap-2 shadow-xs">
+                                <label className="text-xs font-black text-amber-950 flex items-center justify-between">
+                                  <span>📱 Teléfono Celular (10 dígitos)</span>
+                                  <span className="font-mono text-[10px] text-amber-800 font-bold">
+                                    {invoicePhone.length}/10
+                                  </span>
+                                </label>
+                                <div className="relative flex items-center">
+                                  <input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    maxLength={10}
+                                    placeholder="Ej. 6621234567"
+                                    value={invoicePhone}
+                                    onChange={(e) => {
+                                      const clean = e.target.value.replace(/\D/g, "").slice(0, 10);
+                                      setInvoicePhone(clean);
+                                    }}
+                                    className="w-full bg-white border-2 border-amber-400 rounded-xl px-4 py-2.5 text-slate-900 font-mono font-black text-lg tracking-widest focus:outline-none focus:border-amber-600 transition shadow-inner"
+                                    autoFocus
+                                  />
+                                </div>
+                                {invoicePhone.length > 0 && invoicePhone.length < 10 && (
+                                  <p className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                                    ⏳ Ingrese los 10 dígitos (faltan {10 - invoicePhone.length})
+                                  </p>
+                                )}
+                                {invoicePhone.length === 10 && (
+                                  <p className="text-[11px] font-black text-emerald-700 flex items-center gap-1 bg-emerald-100/80 p-1.5 rounded-lg border border-emerald-300">
+                                    ✅ Teléfono registrado: {invoicePhone}
+                                  </p>
+                                 )}
+                               </div>
+                             )}
+                           </div>
 
                           <div style={{ display: "flex", gap: "8px" }}>
                             <IonButton
@@ -20395,8 +21093,10 @@ Instrucciones:
                     <button
                       onClick={async () => {
                         try {
+                          const cleanName = sanitizeBusinessName(ticketBusinessName.trim() || selectedTenant.name);
+                          const cleanEmail = sanitizeEmail(ticketEmail.trim());
                           const updatedCfg = {
-                            businessName: ticketBusinessName.trim() || selectedTenant.name,
+                            businessName: cleanName,
                             rfc: ticketRfc.trim() || selectedTenant.rfc,
                             sucursal: ticketSucursal.trim() || selectedTenant.sucursalDefault,
                             footerMessage: ticketFooterMessage.trim() || "¡Gracias por su visita! Vuelva pronto 🌮",
@@ -20405,7 +21105,7 @@ Instrucciones:
                             direccionFiscal: ticketDireccionFiscal.trim(),
                             lugarExpedicion: ticketLugarExpedicion.trim(),
                             telefono: ticketTelefono.trim(),
-                            email: ticketEmail.trim(),
+                            email: cleanEmail,
                             useRawBt: systemUseRawBt,
                             printerConfig: tenantPrinterConfig,
                             productCategories: productCategories,
@@ -26457,6 +27157,72 @@ Instrucciones:
   } | null>(null);
   const [treeDragOverTargetKey, setTreeDragOverTargetKey] = useState<string | null>(null);
 
+  const [editingTreeSectionName, setEditingTreeSectionName] = useState<string | null>(null);
+  const [editingTreeSectionValue, setEditingTreeSectionValue] = useState<string>("");
+  const [editingTreeSubgroupKey, setEditingTreeSubgroupKey] = useState<string | null>(null);
+  const [editingTreeSubgroupValue, setEditingTreeSubgroupValue] = useState<string>("");
+
+  const handleRenameTreeSection = (oldSecName: string, newSecName: string) => {
+    const trimmedNew = newSecName.trim();
+    if (!trimmedNew || trimmedNew === oldSecName) {
+      setEditingTreeSectionName(null);
+      return;
+    }
+    setRelationMatches(prev => prev.map(item => {
+      const currentSec = (item.proposedSubcategory || "Sin Sección").trim() || "Sin Sección";
+      if (currentSec === oldSecName) {
+        return { ...item, proposedSubcategory: trimmedNew };
+      }
+      return item;
+    }));
+    setCollapsedTreeSections(prev => {
+      const next = { ...prev };
+      if (next[oldSecName] !== undefined) {
+        next[trimmedNew] = next[oldSecName];
+        delete next[oldSecName];
+      }
+      return next;
+    });
+    triggerAppNotification(
+      "Sección Actualizada",
+      `Se cambió el nombre de la sección "${oldSecName}" a "${trimmedNew}" en todos sus productos.`,
+      "success"
+    );
+    setEditingTreeSectionName(null);
+  };
+
+  const handleRenameTreeSubgroup = (secName: string, oldSubName: string, newSubName: string) => {
+    const trimmedNew = newSubName.trim();
+    if (!trimmedNew || trimmedNew === oldSubName) {
+      setEditingTreeSubgroupKey(null);
+      return;
+    }
+    setRelationMatches(prev => prev.map(item => {
+      const currentSec = (item.proposedSubcategory || "Sin Sección").trim() || "Sin Sección";
+      const currentSub = (item.proposedSubgroup || "Sin Subgrupo").trim() || "Sin Subgrupo";
+      if (currentSec === secName && currentSub === oldSubName) {
+        return { ...item, proposedSubgroup: trimmedNew };
+      }
+      return item;
+    }));
+    const oldFullKey = `${secName}___${oldSubName}`;
+    const newFullKey = `${secName}___${trimmedNew}`;
+    setCollapsedTreeSubgroups(prev => {
+      const next = { ...prev };
+      if (next[oldFullKey] !== undefined) {
+        next[newFullKey] = next[oldFullKey];
+        delete next[oldFullKey];
+      }
+      return next;
+    });
+    triggerAppNotification(
+      "Subgrupo Actualizado",
+      `Se cambió el nombre del subgrupo "${oldSubName}" a "${trimmedNew}" en todos sus productos.`,
+      "success"
+    );
+    setEditingTreeSubgroupKey(null);
+  };
+
   const toggleTreeSectionCollapse = (secName: string) => {
     setCollapsedTreeSections(prev => ({ ...prev, [secName]: !prev[secName] }));
   };
@@ -30006,7 +30772,7 @@ Instrucciones:
                                            : h.paymentMethod === "lupay"
                                              ? "Lúpay"
                                              : "Transferencia") +
-                                       (h.requiresInvoice ? " - Requiere Factura" : "")
+                                       (h.requiresInvoice ? ` - Requiere Factura (${h.invoicePhone || "Sin tel."})` : "")
                                      }
                                    >
                                      {h.paymentMethod === "cash"
@@ -30016,7 +30782,7 @@ Instrucciones:
                                          : h.paymentMethod === "lupay"
                                            ? "⚡"
                                            : "🏦"}
-                                     {h.requiresInvoice && " 🧾"}
+                                     {h.requiresInvoice && (h.invoicePhone ? ` 🧾 (${h.invoicePhone})` : " 🧾")}
                                   </span>
                                 </span>
                               </td>
@@ -32839,6 +33605,103 @@ Instrucciones:
     setShowSystemsChoiceAlert(true);
   };
 
+  const handleOpenExportModal = (session: CashierSession) => {
+    setExportSessionModal(session);
+    setExportTargetTenantId("");
+    setExportModalStep(1);
+  };
+
+  const handleExecuteExportTenantCorte = async () => {
+    if (!exportSessionModal || !exportTargetTenantId) {
+      triggerAppNotification("Error ❌", "Selecciona un inquilino destino válido.", "warning");
+      return;
+    }
+
+    const isSistemasRole =
+      currentUser?.role === "sistemas" ||
+      currentUser?.role === "Sistemas" ||
+      currentUser?.id?.endsWith("-sistemas") ||
+      isSystemsMode;
+
+    if (!isSistemasRole) {
+      triggerAppNotification(
+        "Acceso Denegado 🔒",
+        "Esta función requiere privilegios exclusivos del rol Sistemas.",
+        "warning"
+      );
+      return;
+    }
+
+    const targetTenant = getCompanyCatalog().find((t) => t.id === exportTargetTenantId);
+    if (!targetTenant) {
+      triggerAppNotification("Error ❌", "No se encontró la información del inquilino destino.", "warning");
+      return;
+    }
+
+    setIsExportingSession(true);
+
+    try {
+      const sId = exportSessionModal.id;
+      const sOpened = new Date(exportSessionModal.openedAt);
+      const sClosed = exportSessionModal.closedAt ? new Date(exportSessionModal.closedAt) : null;
+
+      const sessionHistory = history.filter((h) => {
+        if (h.sessionId && h.sessionId === sId) return true;
+        const hTime = new Date(h.timestamp);
+        return hTime >= sOpened && (!sClosed || hTime <= sClosed);
+      });
+
+      const sessionMovements = cashMovements.filter((m) => {
+        if (m.sessionId && m.sessionId === sId) return true;
+        const mTime = new Date(m.timestamp || m.date || new Date());
+        return mTime >= sOpened && (!sClosed || mTime <= sClosed);
+      });
+
+      const sessionExpenses = expenses.filter((e) => {
+        if (e.sessionId && e.sessionId === sId) return true;
+        if (!e.createdAt) return false;
+        const eTime = new Date(e.createdAt);
+        return eTime >= sOpened && (!sClosed || eTime <= sClosed);
+      });
+
+      const sessionPurchases = purchases.filter((p) => {
+        if (p.sessionId && p.sessionId === sId) return true;
+        const pTime = new Date(p.timestamp || new Date());
+        return pTime >= sOpened && (!sClosed || pTime <= sClosed);
+      });
+
+      const result = await exportCashierSessionToTargetTenant({
+        sourceSession: exportSessionModal,
+        targetTenantId: exportTargetTenantId,
+        sessionHistory,
+        sessionMovements,
+        sessionExpenses,
+        sessionPurchases,
+        existingSessions: cashierSessions,
+      });
+
+      triggerAppNotification(
+        "¡Corte Exportado Exitosamente! 🚀✅",
+        `El corte de caja se transfirió correctamente a "${targetTenant.name}". Se crearon ${result.totalExportedItems} registros contables duplicados sin modificar el origen.`,
+        "success"
+      );
+
+      setExportSessionModal(null);
+      setExportTargetTenantId("");
+      setExportModalStep(1);
+    } catch (err: any) {
+      console.error("Error al exportar corte a otro tenant:", err);
+      triggerAppNotification(
+        "Error en Exportación ❌",
+        err.message || "Ocurrió un error inesperado al realizar la transferencia entre inquilinos.",
+        "warning"
+      );
+    } finally {
+      setIsExportingSession(false);
+    }
+  };
+
+
 
 
     if (shouldShowSelector) {
@@ -33386,6 +34249,24 @@ Instrucciones:
                                     </button>
                                   )}
 
+                                  {/* Accion: EXPORTAR CORTE A OTRO TENANT (Exclusivo Rol Sistemas) */}
+                                  {(currentUser?.role === "sistemas" ||
+                                    currentUser?.role === "Sistemas" ||
+                                    currentUser?.id?.endsWith("-sistemas") ||
+                                    isSystemsMode) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenExportModal(session);
+                                      }}
+                                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-xl text-[12px] transition border-none cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                      title="Exportar una copia de este corte de caja hacia otro inquilino (Exclusivo Sistemas)"
+                                    >
+                                      <IonIcon icon={swapHorizontalOutline} className="text-xs text-white" />
+                                      <span>Exportar a otro tenant</span>
+                                    </button>
+                                  )}
+
                                   {/* Accion: BORRAR CORTE Y NO LOS MOVIMIENTOS */}
                                   <button
                                     onClick={async (e) => {
@@ -33425,9 +34306,252 @@ Instrucciones:
 
             </div>
           </IonContent>
+
+          {/* Modal de Exportación de Corte entre Inquilinos (2 Pasos - Rol Sistemas) */}
+          <IonModal
+            isOpen={!!exportSessionModal}
+            onDidDismiss={() => {
+              if (!isExportingSession) {
+                setExportSessionModal(null);
+                setExportTargetTenantId("");
+                setExportModalStep(1);
+              }
+            }}
+            className="ion-modal-custom"
+          >
+            <div className="p-4 sm:p-6 bg-slate-900 text-white min-h-full flex flex-col justify-between overflow-y-auto">
+              <div>
+                {/* Header */}
+                <div className="flex justify-between items-start border-b border-slate-800 pb-4 mb-4">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-indigo-400 flex items-center gap-2">
+                      <span>🚀</span> Exportar Corte a otro Tenant
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                      {exportModalStep === 1
+                        ? "Paso 1 de 2: Seleccionar Inquilino Destino"
+                        : "Paso 2 de 2: Confirmación Final y Responsabilidad"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!isExportingSession) {
+                        setExportSessionModal(null);
+                        setExportTargetTenantId("");
+                        setExportModalStep(1);
+                      }
+                    }}
+                    disabled={isExportingSession}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl border-none cursor-pointer transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Paso 1: Selección de Origen y Destino */}
+                {exportModalStep === 1 && exportSessionModal && (
+                  <div className="space-y-4">
+                    {/* Card Origen */}
+                    <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl space-y-2">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest block">
+                        🏢 Inquilino de Origen (Fuente):
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl p-2 bg-slate-700 rounded-xl">
+                          {selectedTenant?.avatar || "🏢"}
+                        </span>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-white">
+                            {selectedTenant?.name || "Inquilino Actual"}
+                          </h4>
+                          <span className="text-xs text-indigo-300 font-semibold block">
+                            Sucursal: {selectedTenant?.sucursalDefault || "Matriz"} (ID: {selectedTenant?.id || exportSessionModal.tenantId || "tenant-1"})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Resumen del Corte Seleccionado */}
+                    <div className="bg-slate-800/50 border border-slate-700/60 p-4 rounded-2xl space-y-1.5 text-xs">
+                      <span className="text-[11px] font-black text-indigo-300 uppercase tracking-widest block mb-2">
+                        📊 Resumen del Corte de Caja a Transferir:
+                      </span>
+                      <div className="flex justify-between text-slate-300">
+                        <span>📅 Fecha / Cierre:</span>
+                        <span className="font-bold text-white">
+                          {exportSessionModal.closedAt
+                            ? new Date(exportSessionModal.closedAt).toLocaleString("es-MX")
+                            : exportSessionModal.openedAt
+                            ? new Date(exportSessionModal.openedAt).toLocaleString("es-MX")
+                            : "Fecha N/A"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>👤 Operador de Caja:</span>
+                        <span className="font-bold text-white">{exportSessionModal.userName}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>💵 Ventas Efectivo:</span>
+                        <span className="font-bold text-emerald-400">
+                          ${Number(exportSessionModal.cashSales || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>💳 Ventas Electrónicas:</span>
+                        <span className="font-bold text-blue-400">
+                          ${Number((exportSessionModal.cardSales || 0) + (exportSessionModal.transSales || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Selector Inquilino Destino */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-amber-400 uppercase tracking-widest block">
+                        🎯 Seleccionar Inquilino de Destino:
+                      </label>
+                      <select
+                        value={exportTargetTenantId}
+                        onChange={(e) => setExportTargetTenantId(e.target.value)}
+                        className="w-full bg-slate-800 border-2 border-indigo-500/50 text-white font-bold p-3 rounded-xl text-xs focus:border-indigo-400 focus:outline-none"
+                      >
+                        <option value="">-- Selecciona el inquilino de destino --</option>
+                        {getCompanyCatalog()
+                          .filter((t) => t.id !== (selectedTenant?.id || exportSessionModal.tenantId || "tenant-1"))
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.avatar || "🏢"} {t.name} ({t.sucursalDefault || "Sucursal"})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paso 2: Alerta de Advertencia y Confirmación Final */}
+                {exportModalStep === 2 && exportSessionModal && (
+                  <div className="space-y-4">
+                    {/* Warning Callout Box */}
+                    <div className="bg-amber-950/70 border-2 border-amber-500/80 p-4 rounded-2xl space-y-2">
+                      <div className="flex items-center gap-2 text-amber-400 font-black text-sm uppercase tracking-wider">
+                        <span className="text-xl">⚠️</span>
+                        <span>Advertencia de Responsabilidad (Rol Sistemas)</span>
+                      </div>
+                      <p className="text-xs text-amber-100 font-semibold leading-relaxed">
+                        Esta operación es una <strong className="text-white underline">acción administrativa protegida</strong>. Al confirmar, el sistema ejecutará una transferencia en la base de datos entre inquilinos.
+                      </p>
+                      <ul className="text-[11px] text-amber-200/90 font-medium space-y-1.5 pl-4 list-disc">
+                        <li>
+                          <strong>Sin mutación de origen:</strong> Los datos del inquilino origen <em>({selectedTenant?.name})</em> NO serán modificados ni eliminados.
+                        </li>
+                        <li>
+                          <strong>Copia integral:</strong> Se copiará la sesión de caja junto con todas las ventas, cobros, egresos y compras asociadas.
+                        </li>
+                        <li>
+                          <strong>Validación de duplicados:</strong> El sistema validará que el destino no posea ya un corte en la misma fecha para evitar registros duplicados.
+                        </li>
+                        <li>
+                          <strong>Responsabilidad:</strong> El usuario de Sistemas asume la responsabilidad total de esta clonación contable.
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Resumen de Confirmación */}
+                    <div className="bg-slate-800 p-4 rounded-2xl space-y-2 border border-slate-700 text-xs">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest block">
+                        📋 Resumen de la Operación:
+                      </span>
+                      <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-700">
+                        <span>Origen:</span>
+                        <span className="font-black text-indigo-300">{selectedTenant?.name}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-700">
+                        <span>Destino:</span>
+                        <span className="font-black text-emerald-400">
+                          {getCompanyCatalog().find((t) => t.id === exportTargetTenantId)?.name || exportTargetTenantId}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-300 py-1">
+                        <span>Fecha del Corte:</span>
+                        <span className="font-bold text-white">
+                          {exportSessionModal.closedAt
+                            ? new Date(exportSessionModal.closedAt).toLocaleDateString("es-MX")
+                            : exportSessionModal.openedAt
+                            ? new Date(exportSessionModal.openedAt).toLocaleDateString("es-MX")
+                            : "Hoy"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="border-t border-slate-800 pt-4 mt-6 flex justify-between items-center gap-3">
+                {exportModalStep === 1 ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setExportSessionModal(null);
+                        setExportTargetTenantId("");
+                        setExportModalStep(1);
+                      }}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!exportTargetTenantId) {
+                          triggerAppNotification("Atención ⚠️", "Por favor selecciona el inquilino de destino.", "warning");
+                          return;
+                        }
+                        setExportModalStep(2);
+                      }}
+                      disabled={!exportTargetTenantId}
+                      className={`font-black px-5 py-2.5 rounded-xl text-xs border-none cursor-pointer transition flex items-center gap-2 ${
+                        exportTargetTenantId
+                          ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30"
+                          : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                      }`}
+                    >
+                      <span>Siguiente: Confirmar</span>
+                      <span>➡️</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setExportModalStep(1)}
+                      disabled={isExportingSession}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer transition"
+                    >
+                      ⬅️ Regresar
+                    </button>
+                    <button
+                      onClick={handleExecuteExportTenantCorte}
+                      disabled={isExportingSession}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2.5 rounded-xl text-xs border-none cursor-pointer transition shadow-lg shadow-emerald-600/30 flex items-center gap-2"
+                    >
+                      {isExportingSession ? (
+                        <>
+                          <IonIcon icon={syncOutline} className="animate-spin text-sm" />
+                          <span>Exportando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🚀 Confirmar y Ejecutar Transferencia</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </IonModal>
         </IonPage>
       );
     }
+
 
     // Now if we reach here, we have a sessionToRender (implicitly selected or auto-selected)
     const isClosed = sessionToRender?.status === "closed";
@@ -33651,7 +34775,7 @@ Instrucciones:
 
       try {
         const driver = new EscPosDriver();
-        const transport = await createTransport("cuentas");
+        const transport = await createTransport("cuentas", selectedTenant?.id);
         const job = new PosPrinterJob(driver, transport as any);
 
         const dateStr = new Date().toLocaleString("es-MX");
@@ -36124,7 +37248,7 @@ Instrucciones:
                             <td className="py-3 px-4">
                               {acc.requiresInvoice ? (
                                 <span className="bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded-md text-[11px] font-black">
-                                  📄 Sí (Factura)
+                                  📄 Sí (Factura) {acc.invoicePhone ? `📞 ${acc.invoicePhone}` : ""}
                                 </span>
                               ) : (
                                 <span className="text-stone-400 font-semibold">No</span>
@@ -41153,6 +42277,7 @@ Instrucciones:
                 ref={folioInputRef}
                 type="text"
                 value={folioInputValue}
+                disabled={isGeneratingOrder}
                 onChange={(e) => {
                   setFolioInputValue(e.target.value);
                   if (folioModalError) setFolioModalError(null);
@@ -41160,11 +42285,11 @@ Instrucciones:
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    handleFolioStepSubmit();
+                    if (!isGeneratingOrder) handleFolioStepSubmit();
                   }
                 }}
                 placeholder={folioStep === 1 ? "Ingresa folio (ej: 105)" : "Confirma el folio"}
-                className="w-full bg-slate-900 border-2 border-emerald-500 focus:border-amber-400 rounded-xl px-4 py-3 text-2xl text-center font-mono font-bold text-white outline-none transition-all placeholder:text-slate-600 placeholder:text-base"
+                className="w-full bg-slate-900 border-2 border-emerald-500 focus:border-amber-400 rounded-xl px-4 py-3 text-2xl text-center font-mono font-bold text-white outline-none transition-all placeholder:text-slate-600 placeholder:text-base disabled:opacity-50"
                 autoFocus
               />
               <span className="block text-[11px] text-slate-500 mt-2 font-medium">
@@ -41175,23 +42300,140 @@ Instrucciones:
 
           <div className="mt-6 flex gap-3">
             <button
+              disabled={isGeneratingOrder}
               onClick={() => {
                 setShowFolioModal(false);
                 setFolioModalError(null);
               }}
-              className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all text-sm"
+              className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all text-sm disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
+              disabled={isGeneratingOrder}
               onClick={handleFolioStepSubmit}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2"
+              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>{folioStep === 1 ? "Siguiente ➔" : "Confirmar y Enviar 🍳"}</span>
+              <span>
+                {isGeneratingOrder
+                  ? "Procesando..."
+                  : folioStep === 1
+                    ? "Siguiente ➔"
+                    : "Confirmar y Enviar 🍳"}
+              </span>
             </button>
           </div>
         </div>
       </IonModal>
+
+      {/* Modal para solicitar Teléfono Celular de Referencia al requerir factura */}
+        <IonModal
+          isOpen={showInvoicePhoneModal}
+          onDidDismiss={() => {
+            setShowInvoicePhoneModal(false);
+            setPendingInvoiceTarget(null);
+          }}
+          style={{
+            "--height": "auto",
+            "--max-height": "90vh",
+            "--width": "92%",
+            "--max-width": "460px",
+            "--border-radius": "28px",
+            "--z-index": "99999",
+            "zIndex": 99999,
+          }}
+        >
+          <IonContent className="ion-padding" style={{ "--background": "#0f172a" }}>
+
+          <div className="flex flex-col bg-slate-900 text-white p-6 justify-between rounded-3xl">
+            <div>
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-bold border border-amber-500/30">
+                    🧾
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Facturación</h2>
+                    <p className="text-xs text-slate-400">Celular de Referencia</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInvoicePhoneModal(false);
+                    setPendingInvoiceTarget(null);
+                  }}
+                  className="w-9 h-9 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-lg hover:bg-slate-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300 mb-4 leading-relaxed bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
+                Para registrar la solicitud de factura, ingrese el celular de referencia del cliente. <span className="font-bold text-amber-400">Por seguridad debe capturarlo 2 veces.</span>
+              </p>
+
+              {invoicePhoneError && (
+                <div className="mb-4 p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <span>{invoicePhoneError}</span>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    1. Teléfono Celular (10 dígitos)
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="Ej. 6671234567"
+                    value={inputInvoicePhone}
+                    onChange={(e) => setInputInvoicePhone(e.target.value.replace(/\D/g, ""))}
+                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    2. Confirmar Teléfono Celular (Repetir)
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="Ej. 6671234567"
+                    value={inputInvoicePhoneConfirm}
+                    onChange={(e) => setInputInvoicePhoneConfirm(e.target.value.replace(/\D/g, ""))}
+                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInvoicePhoneModal(false);
+                  setPendingInvoiceTarget(null);
+                }}
+                className="flex-1 bg-slate-800 text-slate-300 font-bold py-3.5 rounded-xl hover:bg-slate-700 transition text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmInvoicePhone}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition text-sm"
+              >
+                Guardar y Requerir
+              </button>
+            </div>
+          </div>
+          </IonContent>
+
+        </IonModal>
 
       <IonToast
         isOpen={showMenuToast}

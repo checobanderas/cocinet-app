@@ -110,6 +110,14 @@ try {
   // Column probably already exists or table is empty
 }
 
+try {
+  db.prepare('ALTER TABLE print_queue ADD COLUMN hash TEXT').run();
+} catch (e) {}
+
+try {
+  db.prepare('ALTER TABLE print_queue ADD COLUMN printed_at TIMESTAMP').run();
+} catch (e) {}
+
 // Seed Initial Data if empty
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as any;
 if (userCount.count === 0) {

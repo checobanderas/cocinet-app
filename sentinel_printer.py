@@ -11,6 +11,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REQUIRED_PACKAGES = {
     "flask": "Flask",
     "flask_cors": "flask-cors",
+    "flask_sock": "flask-sock",
     "win32print": "pywin32",
     "win32serviceutil": "pywin32",
     "PIL": "Pillow",
@@ -41,30 +42,12 @@ if not running_as_service_cmd or sys.argv[1].lower() == "debug":
 import urllib.parse
 import threading
 import logging
+from logging.handlers import RotatingFileHandler
 import hashlib
 import time
 import sqlite3
 import re
 from datetime import datetime
-
-# Fix DLL search path for pywin32 in elevated UAC environment
-try:
-    pywin32_sys32 = os.path.join(sys.prefix, "Lib", "site-packages", "pywin32_system32")
-    win32_dir = os.path.join(sys.prefix, "Lib", "site-packages", "win32")
-    sys32_win = os.environ.get("SystemRoot", r"C:\Windows") + r"\System32"
-    for d in (pywin32_sys32, win32_dir, sys32_win):
-        if os.path.exists(d) and hasattr(os, "add_dll_directory"):
-            try:
-                os.add_dll_directory(d)
-            except Exception:
-                pass
-except Exception:
-    pass
-
-try:
-    import pywintypes
-except Exception:
-    pass
 
 import win32print
 import win32serviceutil
@@ -72,6 +55,10 @@ import win32service
 import win32event
 import servicemanager
 import socket
+
+# Importaciones para renderizado GDI
+import win32ui
+import win32con
 
 # PIL
 try:
@@ -81,10 +68,112 @@ except ImportError:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_sock import Sock
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "6.0.0"
+VERSION = "6.1.0-WS"
+
+# MODO DE IMPRESIÓN PREDETERMINADO: "gdi" o "raw"
+PRINT_MODE = "gdi"
+
+# ─── Logging Rotativo ──────────────────────────────────────────────
+LOG_FILE = os.path.join(BASE_DIR, "sentinel_printer.log")
+
+def get_logger():
+    logger = logging.getLogger("sentinel")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+    
+    # Manejador con rotación automática (Máximo 5MB por archivo, conserva 3 respaldos)
+    fh = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3, encoding="utf-8")
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+    
+    if sys.stdout and sys.stdout.isatty():
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
+    return logger
+
+log = get_logger()
+
+# ─── Flask App & WebSockets (Puerto 3010) ─────────────────────────
+app = Flask(__name__)
+CORS(app)
+sock = Sock(app)
+
+app.logger.disabled = True
+log_flask = logging.getLogger("werkzeug")
+log_flask.setLevel(logging.ERROR)
+
+ws_clients = set()
+ws_lock = threading.Lock()
+
+def notify_step(step_code: str, message: str, status: str = "INFO", extra_data: dict = None):
+    """
+    Guarda el evento en sentinel_printer.log y transmite la traza paso a paso
+    en tiempo real a través de WebSockets para la etapa de pruebas.
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "timestamp": timestamp,
+        "step": step_code,
+        "message": message,
+        "status": status,
+        "data": extra_data or {}
+    }
+    
+    log_msg = f"[{step_code}] [{status}] {message}"
+    if extra_data:
+        log_msg += f" | {json.dumps(extra_data, ensure_ascii=False)}"
+        
+    if status == "ERROR":
+        log.error(log_msg)
+    elif status == "WARNING":
+        log.warning(log_msg)
+    else:
+        log.info(log_msg)
+
+    # Broadcast a clientes WebSockets conectados
+    dead_clients = set()
+    with ws_lock:
+        for client in list(ws_clients):
+            try:
+                client.send(json.dumps(payload, ensure_ascii=False))
+            except Exception:
+                dead_clients.add(client)
+        ws_clients.difference_update(dead_clients)
+
+@sock.route('/ws')
+def websocket_endpoint(ws):
+    """Endpoint WebSocket bidireccional: ws://localhost:3010/ws"""
+    with ws_lock:
+        ws_clients.add(ws)
+    notify_step("WS_CONNECT", "Cliente conectado al socket de monitoreo", status="INFO")
+    try:
+        while True:
+            raw_msg = ws.receive()
+            if raw_msg:
+                try:
+                    data = json.loads(raw_msg)
+                    if data.get("action") == "ping":
+                        ws.send(json.dumps({
+                            "action": "pong",
+                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }))
+                    elif data.get("action") == "echo":
+                        notify_step("WS_ECHO", f"Prueba bidireccional recibida: {data.get('payload')}")
+                except Exception as ex:
+                    notify_step("WS_ERROR", f"Error procesando mensaje WS entrante: {ex}", status="WARNING")
+    except Exception:
+        pass
+    finally:
+        with ws_lock:
+            ws_clients.discard(ws)
+        notify_step("WS_DISCONNECT", "Cliente desconectado del socket de monitoreo", status="INFO")
 
 # ─── Helpers Pro: Total en Letra & Detección de Emojis ──────────────────────
 def numero_a_letras(monto: float) -> str:
@@ -161,11 +250,6 @@ def has_emoji(text: str) -> bool:
             return True
     return False
 
-# MODO DE IMPRESIÓN PREDETERMINADO: "gdi" o "raw"
-#   "gdi" → Renderizado gráfico con fuentes de Windows (más elegante, profesional y compatible con cualquier tipo de impresora)
-#   "raw" → Envío de bytes ESC/POS crudos directamente a la impresora
-PRINT_MODE = "gdi"
-
 # ─── Configuración de Impresoras y Tamaños de Papel ────────────────────────────
 CONFIG_FILE = os.path.join(BASE_DIR, "printer_config.json")
 
@@ -221,7 +305,7 @@ def load_printer_config():
                 if "SHOW_DIVIDER" in data:
                     default_config["SHOW_DIVIDER"] = bool(data["SHOW_DIVIDER"])
         except Exception as e:
-            print(f"Error cargando config de impresoras: {e}")
+            log.error(f"Error cargando config de impresoras: {e}")
     else:
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -237,40 +321,13 @@ LOGO_PATH = config_printers["LOGO_PATH"]
 FONT_NAME = config_printers["FONT_NAME"]
 FONT_SIZE_PT = config_printers["FONT_SIZE_PT"]
 
-# ─── Flask app ─────────────────────────────────────────────────────
-app = Flask(__name__)
-CORS(app)
-app.logger.disabled = True
-log_flask = logging.getLogger("werkzeug")
-log_flask.setLevel(logging.ERROR)
-
 def sanitize_text(text: str) -> str:
     """Remueve cualquier caracter de control binario residual de ESC/POS (como \x1b, \x1d, LE1, E1, etc.)."""
     if not text:
         return ""
-    # Remover secuencias residuales comunes de ESC/POS
     text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
     text = re.sub(r'(?:LE[01]|E[01]|!\d+)', '', text)
     return text.strip()
-
-LOG_FILE = os.path.join(BASE_DIR, "sentinel_printer.log")
-
-def get_logger():
-    logger = logging.getLogger("sentinel")
-    if logger.handlers:
-        return logger
-    logger.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
-    fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
-    if sys.stdout and sys.stdout.isatty():
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(fmt)
-        logger.addHandler(ch)
-    return logger
-
-log = get_logger()
 
 # ─── Parser de Comandos ESC/POS ───────────────────────────────────
 def parse_escpos(raw_bytes: bytes) -> list:
@@ -306,7 +363,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
         if b == 0x1b:
             if i + 1 < n:
                 cmd = raw_bytes[i + 1]
-                # ESC @ (Inicializar impresora)
                 if cmd == 0x40:
                     flush_current()
                     align = 0
@@ -314,14 +370,12 @@ def parse_escpos(raw_bytes: bytes) -> list:
                     size = 'normal'
                     i += 2
                     continue
-                # ESC a (Alineación)
                 elif cmd == 0x61:
                     if i + 2 < n:
                         flush_current()
                         align = raw_bytes[i + 2]
                         i += 3
                         continue
-                # ESC ! (Modo de impresión general)
                 elif cmd == 0x21:
                     if i + 2 < n:
                         mode = raw_bytes[i + 2]
@@ -333,7 +387,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
                             size = new_size
                         i += 3
                         continue
-                # ESC E (Negrita)
                 elif cmd == 0x45:
                     if i + 2 < n:
                         new_bold = bool(raw_bytes[i + 2])
@@ -342,7 +395,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
                             bold = new_bold
                         i += 3
                         continue
-                # ESC d (Avanzar N líneas)
                 elif cmd == 0x64:
                     if i + 2 < n:
                         feed_count = raw_bytes[i + 2]
@@ -356,7 +408,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
                             })
                         i += 3
                         continue
-                # Descartar otros comandos ESC de 2 o 3 bytes
                 elif cmd in (0x4a, 0x33, 0x32, 0x4d, 0x7b, 0x56):
                     i += 3
                     continue
@@ -367,7 +418,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
         elif b == 0x1d:
             if i + 1 < n:
                 cmd = raw_bytes[i + 1]
-                # GS V (Corte de papel)
                 if cmd == 0x56:
                     if i + 2 < n and raw_bytes[i + 2] in (65, 66):
                         i += 4
@@ -381,12 +431,10 @@ def parse_escpos(raw_bytes: bytes) -> list:
             i += 2
             continue
             
-        # Salto de línea (LF = 0x0a / 10)
         elif b == 0x0a:
             flush_current()
             i += 1
             
-        # Retorno de carro (CR = 0x0d / 13)
         elif b == 0x0d:
             if i + 1 < n and raw_bytes[i + 1] == 0x0a:
                 i += 1
@@ -394,10 +442,8 @@ def parse_escpos(raw_bytes: bytes) -> list:
                 flush_current()
                 i += 1
             
-        # Caracteres normales del ticket
         else:
             decoded = False
-            # Intentar decodificar secuencias UTF-8 multibyte (hasta 4 bytes) para preservar Emojis (🌮, 🍺, 🔔, 💰, etc.)
             for length in (4, 3, 2, 1):
                 if i + length <= n:
                     try:
@@ -418,7 +464,6 @@ def parse_escpos(raw_bytes: bytes) -> list:
             
     flush_current()
         
-    # Sanitizar todas las líneas para remover basura binaria
     cleaned_lines = []
     for l in lines:
         cleaned_text = sanitize_text(l['text'])
@@ -445,31 +490,28 @@ def resolve_printer_name(key: str) -> str:
     if not installed:
         raise ValueError("No hay impresoras instaladas en el sistema Windows.")
         
-    # 1. Coincidencia exacta
     for p in installed:
         if p.upper() == target.upper():
             return p
             
-    # 2. Coincidencia parcial (subcadena)
     for p in installed:
         if target.upper() in p.upper() or p.upper() in target.upper():
             return p
             
-    # 3. Fallback a la impresora predeterminada de Windows
     try:
         default_win = win32print.GetDefaultPrinter()
         if default_win in installed:
-            log.info(f"⚠️ Impresora '{target}' no mapeada explícitamente. Redirigiendo a la predeterminada de Windows: '{default_win}'")
+            notify_step("PRINTER_WARN", f"Impresora '{target}' no mapeada. Usando predeterminada: '{default_win}'", status="WARNING")
             return default_win
     except Exception:
         pass
         
-    # 4. Fallback a la primera impresora instalada
     first_printer = installed[0]
-    log.info(f"⚠️ Impresora '{target}' no encontrada. Redirigiendo a la primera impresora disponible: '{first_printer}'")
+    notify_step("PRINTER_WARN", f"Impresora '{target}' no encontrada. Usando primera disponible: '{first_printer}'", status="WARNING")
     return first_printer
 
 def send_raw_to_printer(printer_name: str, data_bytes: bytes):
+    notify_step("3_PRINT_RAW", f"Enviando bytes RAW al spooler de Windows para [{printer_name}]", status="INFO")
     hPrinter = win32print.OpenPrinter(printer_name)
     try:
         job_name = f"COCINET-RAW-{datetime.now().strftime('%H%M%S')}"
@@ -484,32 +526,11 @@ def send_raw_to_printer(printer_name: str, data_bytes: bytes):
         win32print.ClosePrinter(hPrinter)
 
 def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi_y: int) -> int:
-    """Carga y dibuja el logotipo centrado en el DC del ticket, retornando la nueva coordenada Y."""
-    target_logo = None
-    possible_paths = [
-        logo_path,
-        "C:\\buzon\\logoroy.png",
-        "C:\\buzon\\logo.png",
-        "C:\\buzon\\logo.jpg",
-        "C:\\buzon\\INSTALADOR_SENTINELA\\logoroy.png",
-        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.png",
-        "C:\\buzon\\INSTALADOR_SENTINELA\\logo.jpg",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logoroy.png"),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.jpg"),
-    ]
-    for p in possible_paths:
-        if p and os.path.exists(p):
-            target_logo = p
-            break
-
-    if not target_logo:
-        log.warning("No se encontró logotipo físico en ninguna de las rutas de búsqueda.")
+    if not logo_path or not os.path.exists(logo_path):
         return y_start
-
     try:
         from PIL import Image, ImageWin
-        img = Image.open(target_logo)
+        img = Image.open(logo_path)
         if img.mode != "RGB":
             img = img.convert("RGB")
             
@@ -520,29 +541,27 @@ def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi
         new_h = int(h * scale)
         
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        margin_left = 25
-        x_start = margin_left + max(0, (printable_width - new_w) // 2)
+        x_start = (printable_width - new_w) // 2
         
         hdc_handle = hDC.GetSafeHdc()
         dib = ImageWin.Dib(img)
         dib.draw(hdc_handle, (x_start, y_start, x_start + new_w, y_start + new_h))
         return y_start + new_h + 15
     except Exception as e:
-        log.error(f"Error renderizando el logotipo GDI ({target_logo}): {e}")
+        notify_step("LOGO_ERROR", f"Error renderizando el logotipo GDI: {e}", status="WARNING")
         return y_start
 
 def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, printable_width: int, y: int, align: int = 0, line_spacing: int = 4) -> int:
-    """Renderiza texto con ajuste de línea automático para evitar recortes en los bordes del papel."""
     if not text:
         return y
         
     text_w, text_h = hDC.GetTextExtent(text)
     if text_w <= printable_width:
-        if align == 1:    # Centro
+        if align == 1:
             x = margin_left + (printable_width - text_w) // 2
-        elif align == 2:  # Derecha
+        elif align == 2:
             x = margin_left + printable_width - text_w
-        else:             # Izquierda
+        else:
             x = margin_left
         hDC.TextOut(x, y, text)
         return y + text_h + line_spacing
@@ -577,11 +596,11 @@ def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, prin
         
     for l_text in lines_to_draw:
         tw, th = hDC.GetTextExtent(l_text)
-        if align == 1:    # Centro
+        if align == 1:
             x = margin_left + (printable_width - tw) // 2
-        elif align == 2:  # Derecha
+        elif align == 2:
             x = margin_left + printable_width - tw
-        else:             # Izquierda
+        else:
             x = margin_left
         hDC.TextOut(x, y, l_text)
         y += th + line_spacing
@@ -589,11 +608,6 @@ def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, prin
     return y
 
 def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
-    """Parsea el ticket de comandos ESC/POS y lo dibuja vectorialmente usando el GDI de Windows."""
-    import pywintypes
-    import win32ui
-    import win32con
-
     global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT
     config_printers = load_printer_config()
     PRINTER_MAP = config_printers["PRINTER_MAP"]
@@ -602,6 +616,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     FONT_NAME = config_printers["FONT_NAME"]
     FONT_SIZE_PT = config_printers["FONT_SIZE_PT"]
 
+    notify_step("2_PROCESS_GDI", f"Parseando comandos ESC/POS para renderizado GDI en [{printer_name}]", status="INFO")
     parsed_lines = parse_escpos(data_bytes)
     
     printer_key = "cuentas"
@@ -619,7 +634,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     
     dpi_y = hDC.GetDeviceCaps(win32con.LOGPIXELSY) or 203
     
-    # Obtener el ancho real de la superficie de impresión informada por el driver de Windows (DC)
     dev_width = hDC.GetDeviceCaps(win32con.HORZRES) or hDC.GetDeviceCaps(win32con.PHYSICALWIDTH)
     if dev_width and dev_width > 150:
         width = dev_width
@@ -630,6 +644,8 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     margin_right = 15 if paper_size == "58mm" else 25
     printable_width = width - margin_left - margin_right
     job_name = f"COCINET-GDI-{paper_size}-{datetime.now().strftime('%H%M%S')}"
+    
+    notify_step("3_PRINT_GDI_SPOOL", f"Iniciando documento vectorial GDI en [{printer_name}] ({paper_size})", status="INFO")
     hDC.StartDoc(job_name)
     hDC.StartPage()
     
@@ -653,16 +669,13 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
     y = 20
     
-    # Dibujar logotipo para todos los tickets comerciales (cuentas/precuentas/caja)
-    if ticket_type.lower() not in ["cocina", "barra"]:
+    if ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
         y = draw_logo_on_dc(hDC, LOGO_PATH, width, y, dpi_y)
     
-    # Escalar tamaño base de tipografía
     base_pt = FONT_SIZE_PT
     if paper_size == "58mm":
         base_pt = base_pt * 0.82
         
-    # Pre-procesamiento: separar renglones concatenados
     expanded_lines = []
     for l in parsed_lines:
         txt = l['text'].strip()
@@ -670,7 +683,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             expanded_lines.append(l)
             continue
             
-        # 1. Separar si vienen múltiples productos concatenados
         item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
         found_items = re.findall(item_split_pattern, txt, flags=re.IGNORECASE)
         if len(found_items) > 1:
@@ -679,8 +691,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     expanded_lines.append({**l, 'text': item_str.strip()})
             continue
 
-        # 2. Evitar recortar 'SUBTOTAL' en 'SUB' + 'TOTAL' usando Lookbehind Negativo (?<!SUB)
-        keywords_pattern = r'(?=(?:RFC|REGIMEN FISCAL|REGIMEN|LUGAR EXPEDICION|LUGAR|DIR|TEL|EMAIL|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
+        keywords_pattern = r'(?=(?:RFC|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
         found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
         if len(found_parts) > 1:
             for p in found_parts:
@@ -689,33 +700,16 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         else:
             expanded_lines.append(l)
 
-    # 3. Fusionar líneas de producto que se hayan dividido entre cantidad/nombre y precio
-    merged_lines = []
-    idx = 0
-    while idx < len(expanded_lines):
-        curr = expanded_lines[idx]
-        curr_text = curr['text'].strip()
-        has_qty_only = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', curr_text, re.IGNORECASE)) and not bool(re.search(r'\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', curr_text))
-        if has_qty_only and idx + 1 < len(expanded_lines):
-            nxt_text = expanded_lines[idx + 1]['text'].strip()
-            if bool(re.match(r'^\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', nxt_text)):
-                merged_lines.append({**curr, 'text': f"{curr_text} {nxt_text}"})
-                idx += 2
-                continue
-        merged_lines.append(curr)
-        idx += 1
-
     header_drawn = False
     in_table_phase = False
         
-    for line in merged_lines:
+    for line in expanded_lines:
         text = line['text'].strip()
         alignment = line['align']
         size_mode = line['size']
         is_bold = line['bold']
         line_has_emoji = has_emoji(text)
         
-        # 1. Líneas divisorias vectoriales elegantes
         if len(text) >= 10 and all(c in ('-', '=', '_', '*') for c in text):
             pen = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x94a3b8)
             hDC.SelectObject(pen)
@@ -724,7 +718,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             y += 14
             continue
             
-        # 2. Renglon vacío
         if not text:
             f = get_font(FONT_NAME, base_pt, False)
             hDC.SelectObject(f)
@@ -732,7 +725,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             y += text_height
             continue
             
-        # Determinar el tamaño de tipografía (pt)
         if size_mode == 'big':
             pt = base_pt * 1.30
             bold_to_use = True
@@ -746,43 +738,60 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        # 3. Detectar Renglón de Producto
-        is_item_line = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE)) or bool(re.search(r'\$?[0-9]+(?:\.[0-9]{1,2})?\s*$', text))
+        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", "METODO DE PAGO", "FORMA DE PAGO", "DIR:", "TEL:", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:"]
         
-        if is_item_line and not any(k in text.upper() for k in ["TOTAL", "SUBTOTAL", "PROPINA", "DESCUENTO", "CAMBIO", "FECHA", "HORA", "MESA", "FOLIO", "SUC", "RFC", "REGIMEN", "LUGAR", "DIR", "TEL", "EMAIL", "LE ATENDIO", "LE ATENDIÓ", "ATENDIDO POR", "MESERO"]):
+        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
+        has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
+        
+        is_item_line = bool(
+            (has_qty or has_price) and
+            not any(text.upper().startswith(k) for k in EXCLUDED_KEYS) and
+            not any(c in ('-', '=', '_', '*') for c in text)
+        )
+
+        if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
+            header_drawn = True
             in_table_phase = True
             
-            # Encabezado de tabla si es la primera vez
-            if not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
-                header_drawn = True
-                y += 6
-                pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
-                hDC.SelectObject(pen_tbl)
-                hDC.MoveTo(margin_left, y + 2)
-                hDC.LineTo(width - margin_right, y + 2)
-                y += 8
-                fh = get_font(FONT_NAME, base_pt * 0.88, True)
-                hDC.SelectObject(fh)
-                hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
-                w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
-                x_imp = max(margin_left + 150, width - margin_right - w_imp)
-                hDC.TextOut(x_imp, y, "IMPORTE")
-                y += h_imp + 4
-                hDC.MoveTo(margin_left, y + 2)
-                hDC.LineTo(width - margin_right, y + 2)
-                y += 10
-                hDC.SelectObject(f)
+            y += 6
+            pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
+            hDC.SelectObject(pen_tbl)
+            hDC.MoveTo(margin_left, y + 2)
+            hDC.LineTo(width - margin_right, y + 2)
+            y += 8
             
-            # Extraer Cantidad/Descripción/Precio
-            qty_match = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', text, re.IGNORECASE)
-            qty_val = qty_match.group(1) if qty_match else "1"
-            rem_text = qty_match.group(2).strip() if qty_match else text.strip()
-            imp_match = re.search(r'(\$?[0-9]+(?:\.[0-9]{1,2})?)\s*$', rem_text)
-            imp_str = imp_match.group(1) if imp_match else ""
-            desc = rem_text[:imp_match.start()].strip() if imp_match else rem_text
+            fh = get_font(FONT_NAME, base_pt * 0.88, True)
+            hDC.SelectObject(fh)
+            hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
+            w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
+            x_imp = max(margin_left + 150, width - margin_right - w_imp)
+            hDC.TextOut(x_imp, y, "IMPORTE")
+            y += h_imp + 4
+            
+            hDC.MoveTo(margin_left, y + 2)
+            hDC.LineTo(width - margin_right, y + 2)
+            y += 10
+
+        if is_item_line:
+            desc = text.strip()
+            price_str = None
+            qty_str = None
+            
+            p_m = re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', desc)
+            if p_m:
+                price_str = p_m.group(1)
+                desc = desc[:p_m.start()].strip()
                 
-            item_pt = base_pt * 0.88
-            fp = get_font(FONT_NAME, item_pt, True)
+            q_m = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', desc, re.IGNORECASE)
+            if q_m:
+                qty_str = q_m.group(1)
+                desc = q_m.group(2).strip()
+                
+            qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
+            price_num = float(price_str.replace(',', '')) if price_str else 0.0
+            
+            imp_str = f"${price_num:.2f}" if price_num > 0 else ""
+            fp = get_font(FONT_NAME, pt * 0.95, True)
             hDC.SelectObject(fp)
             
             if imp_str:
@@ -790,26 +799,51 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 x_right = max(margin_left + 120, width - margin_right - pr_w)
                 hDC.TextOut(x_right, y, imp_str)
             else:
+                pr_w, pr_h = 0, int(pt * dpi_y / 72)
                 x_right = width - margin_right
                 
-            full_desc = f"{qty_val}x {desc}"
+            full_desc_left = f"{qty_val}x {desc}"
+            fd = get_font(FONT_NAME, pt * 0.95, True, use_emoji_font=has_emoji(full_desc_left))
+            hDC.SelectObject(fd)
+            
             max_desc_w = x_right - margin_left - 10
-            while full_desc and hDC.GetTextExtent(full_desc)[0] > max_desc_w:
-                full_desc = full_desc[:-1]
-            hDC.TextOut(margin_left, y, full_desc)
-            _, desc_h = hDC.GetTextExtent(full_desc)
-            y += max(desc_h, int(item_pt * dpi_y / 72)) + 5
+            curr_desc = full_desc_left
+            
+            if max_desc_w > 40:
+                while curr_desc and hDC.GetTextExtent(curr_desc)[0] > max_desc_w:
+                    curr_desc = curr_desc[:-1]
+                if len(curr_desc) < len(full_desc_left):
+                    curr_desc = curr_desc.rstrip() + "..."
+            
+            hDC.TextOut(margin_left, y, curr_desc)
+            _, desc_h = hDC.GetTextExtent(curr_desc)
+            
+            y += max(desc_h, pr_h, int(pt * dpi_y / 72)) + 5
             continue
         
-        # 3.5. Formatear Fecha y Hora
-        if any(k in text.upper() for k in ["FECHA:", "HORA:"]):
+        if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
+            clean_date_text = text
+            if "FECHA:" in clean_date_text.upper():
+                date_val = re.sub(r'^FECHA:\s*', '', clean_date_text, flags=re.IGNORECASE).strip()
+                if ',' in date_val:
+                    parts = date_val.split(',', 1)
+                    f_part = parts[0].strip()
+                    h_part = parts[1].strip()
+                    formatted_dt = f"📅 {f_part}   ⏰ {h_part}"
+                else:
+                    formatted_dt = f"📅 {date_val}"
+            elif clean_date_text.upper().startswith("HORA:"):
+                hora_val = clean_date_text[5:].strip()
+                formatted_dt = f"⏰ {hora_val}"
+            else:
+                formatted_dt = text
+
             f_dt = get_font(FONT_NAME, pt * 1.05, True, use_emoji_font=True)
             hDC.SelectObject(f_dt)
-            y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
+            y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
             continue
         
-        # 4. Totales
-        total_match = re.search(r'^(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA MESEROS|PROPINA VOLUNTARIA|PROPINA|DESCUENTO|FORMA DE PAGO|PAGO|PAGA CON|RECIBIDO|CAMBIO|LE ATENDIO|LE ATENDIÓ|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|FORMA DE PAGO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA)\s*:?\s*(.*)$', text, re.IGNORECASE)
         has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
         
         if has_total_keyword:
@@ -822,21 +856,31 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y += 12
 
             if total_match:
-                label = total_match.group(1).upper() + ":"
+                match_keyword = total_match.group(1).upper()
+                if "PAGADO CON" in match_keyword or "PAGO CON" in match_keyword or "METODO" in match_keyword or "FORMA" in match_keyword:
+                    label = "💳 PAGO CON:"
+                elif "PAGADO" in match_keyword:
+                    label = "PAGADO:"
+                elif "PAGO" in match_keyword:
+                    label = "💳 PAGO CON:"
+                else:
+                    label = match_keyword + ":"
                 val = total_match.group(2).strip()
             else:
                 parts = text.split(":", 1)
                 label = parts[0].strip().upper() + ":"
                 val = parts[1].strip() if len(parts) > 1 else ""
 
-            is_total_label = ("TOTAL" in label or "TOTAL" in text.upper()) and "SUBTOTAL" not in text.upper()
+            is_total_label = ("TOTAL" in label or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper())) and not label.startswith("PAGADO") and not label.startswith("💳 PAGO")
             
             lbl_pt = pt * 1.15 if is_total_label else pt
-            lbl_str = "TOTAL A PAGAR:" if is_total_label else label
+            if is_total_label:
+                lbl_str = "TOTAL A PAGAR:"
+            else:
+                lbl_str = label
             fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold, use_emoji_font=has_emoji(lbl_str))
             hDC.SelectObject(fl)
             
-            # Posicionar etiquetas al margen izquierdo para evitar colisión con importes a la derecha
             lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
             x_lbl = margin_left
             hDC.TextOut(x_lbl, y, lbl_str)
@@ -849,7 +893,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.TextOut(x_val, y, val)
             y += max(lbl_h, val_height) + 6
             
-            # SI ES EL TOTAL PRINCIPAL, DIBUJAR AUTOMÁTICAMENTE EL TOTAL EN LETRA DEBAJO
             if is_total_label:
                 monto_match = re.search(r'([0-9.,]+)', val)
                 if monto_match:
@@ -866,18 +909,16 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                             hDC.MoveTo(margin_left, y + 2)
                             hDC.LineTo(width - margin_right, y + 2)
                             y += 12
-                    except Exception as e:
-                        log.error(f"Error calculando total en letra: {e}")
+                    except Exception as ex_l:
+                        notify_step("CONVERT_ERROR", f"Error convirtiendo total a letra: {ex_l}", status="WARNING")
             continue
 
-        # 5. Renderizar notas del producto (líneas con asterisco *) con itálicas e indentadas
         if text.startswith('*') or text.startswith('>'):
             f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
             hDC.SelectObject(f_italic)
             y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
             continue
             
-        # 6. Renderizar líneas comunes y pie de página con envoltorio automático
         f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f_line)
         y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
@@ -890,10 +931,10 @@ def print_data(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda
     """Bypass unificado para imprimir en RAW o renderizar vectorialmente en GDI."""
     if PRINT_MODE.lower() == "gdi":
         try:
-            log.info(f"Imprimiendo vía GDI vectorial ({ticket_type}) en: '{printer_name}'")
+            notify_step("2_PROCESS_EXEC", f"Renderizando en modo GDI ({ticket_type}) para [{printer_name}]", status="INFO")
             send_gdi_to_printer(printer_name, data_bytes, ticket_type)
         except Exception as e:
-            log.error(f"Fallo en GDI: {e}. Reintentando con bypass RAW...")
+            notify_step("PRINT_FALLBACK", f"Fallo en GDI: {e}. Reintentando con bypass RAW...", status="WARNING")
             send_raw_to_printer(printer_name, data_bytes)
     else:
         send_raw_to_printer(printer_name, data_bytes)
@@ -909,6 +950,7 @@ def manage_config():
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(current, f, indent=4, ensure_ascii=False)
             load_printer_config()
+            notify_step("CONFIG_UPDATE", "Configuración de impresoras actualizada")
             return jsonify({"success": True, "config": current})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
@@ -952,6 +994,7 @@ def get_status():
         "version": VERSION,
         "port": PORT,
         "print_mode": PRINT_MODE,
+        "ws_clients": len(ws_clients),
         "config": config_printers,
         "installed_printers": installed,
         "mapped_printers": mapped,
@@ -977,16 +1020,19 @@ def print_ticket():
     raw_data_url = data.get("raw_data", "")
     raw_bytes    = urllib.parse.unquote_to_bytes(raw_data_url)
     
+    notify_step("1_RECEIVE", f"Solicitud de impresión recibida vía POST /print para clave '{printer_key}'", extra_data={"bytes_len": len(raw_bytes)})
+
     if check_duplicate_and_register(raw_bytes):
-        log.info(f"⚠️ Ticket duplicado detectado vía API POST /print. Omitiendo impresión física.")
+        notify_step("2_PROCESS_DUP", "Ticket duplicado detectado por Hash, omitiendo impresión", status="WARNING")
         return jsonify({"success": True, "ignored": True, "reason": "duplicate", "bytes_sent": 0})
         
     try:
         printer_name = resolve_printer_name(printer_key)
         print_data(printer_name, raw_bytes, ticket_type=printer_key)
+        notify_step("4_COMPLETE", f"🎉 Impresión completada exitosamente en [{printer_name}]", status="SUCCESS")
         return jsonify({"success": True, "printer_used": printer_name, "bytes_sent": len(raw_bytes)})
     except Exception as e:
-        log.error(f"❌ Error en API /print: {e}")
+        notify_step("4_ERROR", f"❌ Error durante proceso de impresión: {e}", status="ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/test-print", methods=["POST"])
@@ -994,6 +1040,8 @@ def test_print():
     try:
         data         = request.get_json(silent=True) or {}
         printer_key  = data.get("printer", "cuentas")
+        notify_step("1_RECEIVE_TEST", f"Iniciando impresión de prueba para clave '{printer_key}'")
+
         printer_name = resolve_printer_name(printer_key)
 
         ESC = b"\x1b"
@@ -1030,10 +1078,10 @@ def test_print():
         )
 
         print_data(printer_name, test_bytes, ticket_type=printer_key)
-        log.info(f"[TEST] Pagina de prueba impresa en '{printer_name}'")
+        notify_step("4_COMPLETE_TEST", f"🎉 Página de prueba emitida correctamente en [{printer_name}]", status="SUCCESS")
         return jsonify({"success": True, "printer_used": printer_name})
     except Exception as e:
-        log.error(f"test-print error: {e}")
+        notify_step("4_ERROR_TEST", f"❌ Error en test-print: {e}", status="ERROR")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/diag-print", methods=["POST"])
@@ -1043,7 +1091,7 @@ def diag_print():
         timestamp = datetime.now().strftime('%H:%M:%S')
         full_msg = f"{timestamp} - {msg}"
         logs.append(full_msg)
-        log.info(f"[DIAG] {msg}")
+        notify_step("DIAG_STEP", msg)
 
     try:
         data = request.get_json(silent=True) or {}
@@ -1122,13 +1170,13 @@ def check_duplicate_and_register(raw_bytes: bytes, job_id: str = None) -> bool:
         conn.close()
         return False
     except Exception as e:
-        log.error(f"Error en validación de deduplicación: {e}")
+        notify_step("DUP_CHECK_ERROR", f"Error en validación de deduplicación: {e}", status="WARNING")
         return False
 
 # ─── Polling DB ───────────────────────────────────────────────────
 def db_polling_loop():
     db_path = os.path.join(BASE_DIR, "restaurant.db")
-    log.info(f"🔌 Iniciando polling de base de datos en: {db_path}")
+    notify_step("DB_POLL_START", f"Iniciando polling de base de datos SQLite en: {db_path}")
     while True:
         try:
             conn = sqlite3.connect(db_path, timeout=30)
@@ -1164,11 +1212,12 @@ def db_polling_loop():
             
             for job_id, printer_key, raw_data in jobs:
                 try:
+                    notify_step("1_RECEIVE_DB", f"Trabajo recuperado de cola DB (ID: {job_id}) para '{printer_key}'")
                     raw_bytes = urllib.parse.unquote_to_bytes(raw_data)
                     ticket_hash = generar_hash(raw_bytes)
                     
                     if check_duplicate_and_register(raw_bytes, job_id):
-                        log.info(f"⚠️ Ticket duplicado detectado en cola, no se imprime (ID: {job_id})")
+                        notify_step("2_PROCESS_DB_DUP", f"Ticket duplicado omitido en DB cola (ID: {job_id})", status="WARNING")
                         continue
                     
                     printer_name = resolve_printer_name(printer_key)
@@ -1183,10 +1232,10 @@ def db_polling_loop():
                     """, (ticket_hash, job_id))
                     conn2.commit()
                     conn2.close()
-                    log.info(f"✅ Ticket impreso con éxito (ID: {job_id}, Impresora: {printer_name})")
+                    notify_step("4_COMPLETE_DB", f"🎉 Ticket DB impreso con éxito (ID: {job_id}, Impresora: {printer_name})", status="SUCCESS")
                     
                 except Exception as ex:
-                    log.error(f"❌ Error al procesar trabajo de impresión {job_id}: {ex}")
+                    notify_step("4_ERROR_DB", f"❌ Error procesando trabajo DB {job_id}: {ex}", status="ERROR")
                     conn2 = sqlite3.connect(db_path, timeout=30)
                     cursor2 = conn2.cursor()
                     cursor2.execute("UPDATE print_queue SET status='failed', updated_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
@@ -1195,21 +1244,21 @@ def db_polling_loop():
             
             time.sleep(2)
         except Exception as e:
-            log.error(f"❌ Error en bucle de polling: {e}")
+            notify_step("DB_POLL_ERROR", f"Error en bucle de polling: {e}", status="WARNING")
             time.sleep(5)
 
 # ─── Servicio Windows ─────────────────────────────────────────────
 class CocinetPrinterService(win32serviceutil.ServiceFramework):
     _svc_name_ = "CocinetPrinterSentinel"
     _svc_display_name_ = "COCINET PRO - Print Sentinel"
-    _svc_description_ = "Servidor local HTTP de impresión ESC/POS para COCINET PRO."
+    _svc_description_ = "Servidor local HTTP & WebSockets de impresión ESC/POS para COCINET PRO."
 
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
         self.stop_event = win32event.CreateEvent(None, 0, 0, None)
 
     def SvcStop(self):
-        log.info("Servicio detenido por Windows SCM.")
+        notify_step("SERVICE_STOP", "Servicio detenido por el Administrador de Servicios de Windows (SCM).")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         stop_flask()
         win32event.SetEvent(self.stop_event)
@@ -1220,7 +1269,7 @@ class CocinetPrinterService(win32serviceutil.ServiceFramework):
             servicemanager.PYS_SERVICE_STARTED,
             (self._svc_name_, ""),
         )
-        log.info("Servicio iniciado por Windows SCM.")
+        notify_step("SERVICE_START", "Servicio iniciado en segundo plano por Windows SCM.")
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
@@ -1231,7 +1280,7 @@ def run_flask():
     from werkzeug.serving import make_server
     global _flask_server
     _flask_server = make_server("0.0.0.0", PORT, app)
-    log.info(f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT}")
+    notify_step("SERVICE_ONLINE", f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT} (HTTP/WS)")
     _flask_server.serve_forever()
 
 def stop_flask():
@@ -1244,10 +1293,11 @@ def stop_flask():
 def run_console():
     print()
     print("============================================================")
-    print("   COCINET PRO - Windows Print Sentinel  v3.4")
+    print(f"   COCINET PRO - Windows Print Sentinel  v{VERSION}")
     print("============================================================")
-    print(f"   URL:  http://localhost:{PORT}")
-    print(f"   Modo: GDI Vectorial (Arial / Segoe UI)")
+    print(f"   HTTP API:  http://localhost:{PORT}")
+    print(f"   WebSocket: ws://localhost:{PORT}/ws")
+    print(f"   Modo:      GDI Vectorial & Traza Paso a Paso")
     print("------------------------------------------------------------")
     try:
         installed = get_installed_printers()
@@ -1263,7 +1313,7 @@ def run_console():
     try:
         run_flask()
     except KeyboardInterrupt:
-        print("\n  Servidor detenido.")
+        print("\n  Servidor detenido por consola.")
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:

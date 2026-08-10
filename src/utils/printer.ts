@@ -26,23 +26,23 @@ export function getActiveTenantId(): string {
   return "default";
 }
 
-export function getTenantPrintDestination(): string {
-  const tenantId = getActiveTenantId();
-  return localStorage.getItem(`system_print_destination_${tenantId}`) || 
+export function getTenantPrintDestination(tenantId?: string): string {
+  const tId = tenantId || getActiveTenantId();
+  return localStorage.getItem(`system_print_destination_${tId}`) || 
          localStorage.getItem("system_print_destination") || 
          "windows";
 }
 
-export function getTenantPrinterPort(): string {
-  const tenantId = getActiveTenantId();
-  return localStorage.getItem(`windows_printer_port_${tenantId}`) || 
+export function getTenantPrinterPort(tenantId?: string): string {
+  const tId = tenantId || getActiveTenantId();
+  return localStorage.getItem(`windows_printer_port_${tId}`) || 
          localStorage.getItem("windows_printer_port") || 
          "3010";
 }
 
 /** URL base del sentinel de impresión en Windows (puerto configurable) */
-export function getSentinelUrl(): string {
-  const port = getTenantPrinterPort();
+export function getSentinelUrl(tenantId?: string): string {
+  const port = getTenantPrinterPort(tenantId);
   return `http://localhost:${port}`;
 }
 
@@ -136,8 +136,8 @@ export function getTenantPrinterSettings(tenantId?: string): TenantPrinterSettin
     }
   } catch (e) {}
 
-  const globalDest = getTenantPrintDestination();
-  const defaultPort = getTenantPrinterPort();
+  const globalDest = getTenantPrintDestination(tId);
+  const defaultPort = getTenantPrinterPort(tId);
 
   const bCuentas = localStorage.getItem(`bluetooth_printer_cuentas_${tId}`) || localStorage.getItem("bluetooth_printer_cuentas") || "cuentas";
   const bCocina = localStorage.getItem(`bluetooth_printer_cocina_${tId}`) || localStorage.getItem("bluetooth_printer_cocina") || "cocina";
@@ -205,15 +205,21 @@ export async function createTransport(
   area: PrinterArea = "cuentas",
   tenantId?: string
 ): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
-  const settings = getTenantPrinterSettings(tenantId);
-  const areaConfig = settings[area] || { mode: "windows", printerName: area, windowsPort: "3010" };
+  const tId = tenantId || getActiveTenantId();
+  const settings = getTenantPrinterSettings(tId);
+  const areaConfig = settings[area] || { mode: isWindows() ? "windows" : "rawbt", printerName: area, windowsPort: "3010" };
+
+  // En Windows, si WebBluetooth no está conectado y no es RawBT explícito, enviar al Sentinela local (puerto 3010)
+  if (isWindows() && areaConfig.mode !== "rawbt" && !WebBluetoothTransport.isConnected(area)) {
+    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
+  }
 
   if (areaConfig.mode === "disabled") {
     return new ConsoleMockTransport(area);
   }
 
   if (areaConfig.mode === "windows") {
-    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area);
+    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
   }
 
   if (areaConfig.mode === "rawbt") {
@@ -301,6 +307,7 @@ export class WindowsSpoolerTransport {
   printerKey: string;
   customPort?: string;
   customPrinterName?: string;
+  tenantId?: string;
 
   private static KEY_MAP: Record<string, string> = {
     cuentas: "cuentas",
@@ -308,20 +315,23 @@ export class WindowsSpoolerTransport {
     barra:   "barra",
   };
 
-  constructor(printerKey: string = "cuentas", customPort?: string, customPrinterName?: string) {
+  constructor(printerKey: string = "cuentas", customPort?: string, customPrinterName?: string, tenantId?: string) {
     this.printerKey = printerKey;
     this.customPort = customPort;
     this.customPrinterName = customPrinterName;
+    this.tenantId = tenantId;
   }
 
   send(prn: string) {
     const key = this.customPrinterName || (WindowsSpoolerTransport.KEY_MAP[this.printerKey.toLowerCase()] ?? this.printerKey);
-    const port = this.customPort || getTenantPrinterPort();
+    const port = this.customPort || getTenantPrinterPort(this.tenantId) || "3010";
 
     const payload = {
       printer: key,
       raw_data: prn,
     };
+
+    console.log(`🖨️ [WindowsSpoolerTransport] Enviando ticket a http://localhost:${port}/print (Impresora: '${key}', Tenant: '${this.tenantId || 'activo'}')`);
 
     fetch(`http://localhost:${port}/print`, {
       method: "POST",
@@ -332,10 +342,12 @@ export class WindowsSpoolerTransport {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: res.statusText }));
           console.error("[Printer] Error del sentinel:", err);
+        } else {
+          console.log(`✅ [Printer] Respuesta exitosa de Sentinela en puerto ${port} para '${key}'`);
         }
       })
       .catch((err) => {
-        console.warn("[Printer] Sentinel offline o inaccesible:", err);
+        console.warn(`[Printer] Sentinel local en http://localhost:${port} offline o inaccesible:`, err);
       });
   }
 }
@@ -505,9 +517,9 @@ export function sendTestReceipt(logicalKey: string, customName: string, tenantId
   const driver = new EscPosDriver();
   const targetPrinterName = areaConfig.printerName || customName || area;
 
-  if (areaConfig.mode === "windows") {
+  if (areaConfig.mode === "windows" || isWindows()) {
     const port = areaConfig.windowsPort || "3010";
-    const transport = new WindowsSpoolerTransport(area, port, targetPrinterName);
+    const transport = new WindowsSpoolerTransport(area, port, targetPrinterName, tenantId);
     const job = new PosPrinterJob(driver, transport as any);
     buildTestJob(job, area, targetPrinterName, `Puerto de Windows (Puerto ${port})`).execute();
     return {
@@ -643,6 +655,29 @@ export class EscPosDriver {
     s += this.encodeByte(27) + this.encodeByte(40) + "A" + this.encodeByte(4) + this.encodeByte(0) + "04" + this.encodeByte(1) + this.encodeByte(1);
     return s;
   }
+
+  qrCode(url: string) {
+    const bytes = new TextEncoder().encode(url);
+    const storeLen = bytes.length + 3;
+    const pL = storeLen % 256;
+    const pH = Math.floor(storeLen / 256);
+    let s = "";
+
+    // Set QR code model (Model 2)
+    s += this.encodeByte(29) + "(k" + this.encodeByte(4) + this.encodeByte(0) + "1A" + this.encodeByte(50) + this.encodeByte(0);
+    // Set module size (size 6)
+    s += this.encodeByte(29) + "(k" + this.encodeByte(3) + this.encodeByte(0) + "1C" + this.encodeByte(6);
+    // Set error correction level (Level M)
+    s += this.encodeByte(29) + "(k" + this.encodeByte(3) + this.encodeByte(0) + "1E" + this.encodeByte(49);
+    // Store data in symbol storage area
+    s += this.encodeByte(29) + "(k" + this.encodeByte(pL) + this.encodeByte(pH) + "1P0";
+    bytes.forEach((b) => {
+      s += this.encodeByte(b);
+    });
+    // Print symbol data
+    s += this.encodeByte(29) + "(k" + this.encodeByte(3) + this.encodeByte(0) + "1Q0";
+    return s;
+  }
 }
 
 // ─── Job de impresión ─────────────────────────────────────────────────────────
@@ -776,6 +811,11 @@ export class PosPrinterJob {
 
   center() {
     this.buffer.push(this.driver.alignment(this.ALIGNMENT_CENTER));
+    return this;
+  }
+
+  printQR(url: string) {
+    this.buffer.push(this.driver.qrCode(url));
     return this;
   }
 }
