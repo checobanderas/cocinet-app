@@ -871,7 +871,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 label = parts[0].strip().upper() + ":"
                 val = parts[1].strip() if len(parts) > 1 else ""
 
-            is_total_label = ("TOTAL" in label or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper())) and not label.startswith("PAGADO") and not label.startswith("💳 PAGO")
+            is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳 PAGO") and not label.startswith("PAGO")
             
             lbl_pt = pt * 1.15 if is_total_label else pt
             if is_total_label:
