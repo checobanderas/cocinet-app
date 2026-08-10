@@ -742,15 +742,25 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
         hDC.SelectObject(f)
 
-        EXCLUDED_KEYS = ["MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", "METODO DE PAGO", "FORMA DE PAGO", "DIR:", "TEL:", "TEL", "CELULAR", "CLIENTE:", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", "SUC:", "RFC:", "DATOS DE ENVIO", "SON:", "EFECTIVO", "TARJETA", "TRANSFERENCIA", "DESTINO:", "GRACIAS", "VISITA", "VUELVA", "OBS:", "FACTURAR", "FACTURA"]
+        HEADER_KEYS = [
+            "MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", 
+            "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", 
+            "METODO DE PAGO", "FORMA DE PAGO", "DIR", "TEL", "CELULAR", 
+            "CLIENTE", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", 
+            "SUC", "RFC", "DATOS DE ENVIO", "SON", "EFECTIVO", "TARJETA", 
+            "TRANSFERENCIA", "DESTINO", "GRACIAS", "VISITA", "VUELVA", "OBS", 
+            "FACTURAR", "FACTURA", "REGIMEN", "LUGAR", "EXPEDICION"
+        ]
         
-        clean_key_text = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip()
-        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)?\s+', text, re.IGNORECASE))
-        has_price = bool(re.search(r'\$?([0-9]+(?:[\.,][0-9]{1,2})?)\s*$', text))
+        first_word = re.sub(r'[^A-Z]', '', clean_upper.split(':')[0]) if ':' in clean_upper else (re.sub(r'[^A-Z]', '', clean_upper.split()[0]) if clean_upper else "")
+        is_header_keyword = any(first_word == k or first_word.startswith(k) for k in HEADER_KEYS)
+        
+        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
+        has_price = bool(re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', text))
         
         is_item_line = bool(
+            not is_header_keyword and
             (has_qty or has_price) and
-            not any(clean_key_text.upper().startswith(k) for k in EXCLUDED_KEYS) and
             not any(c in ('-', '=', '_', '*') for c in text)
         )
 
@@ -769,7 +779,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.SelectObject(fh)
             hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
             w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
-            x_imp = max(margin_left + 150, width - margin_right - w_imp)
+            x_imp = width - margin_right - w_imp
             hDC.TextOut(x_imp, y, "IMPORTE")
             y += h_imp + 4
             
