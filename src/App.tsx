@@ -4303,7 +4303,7 @@ export default function App() {
         if (pedido.requiresInvoice) {
           job.printLine("--------------------------------");
           job.left();
-          job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(pedido.invoicePhone)}`).bold(false);
+          job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
         }
 
         job.center();
@@ -13250,7 +13250,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (account.requiresInvoice) {
         job.printLine("--------------------------------");
         job.left();
-        job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(account.invoicePhone)}`).bold(false);
+        job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
       }
 
       job.printLine(" ");
@@ -13639,7 +13639,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (requiresInvoice) {
         job.printLine("--------------------------------");
         job.left();
-        job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(invoicePhone)}`).bold(false);
+        job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
       }
 
       job.center();
