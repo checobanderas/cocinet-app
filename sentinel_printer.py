@@ -854,6 +854,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     label = "💳 PAGO CON:"
                 elif "FACTURAR" in match_keyword or "FACTURA" in match_keyword:
                     label = "🧾 FACTURAR:"
+                    clean_p = re.sub(r'\D', '', val)
+                    if len(clean_p) == 10:
+                        val = f"({clean_p[:3]}) {clean_p[3:6]}-{clean_p[6:]}"
                 else:
                     label = match_keyword + ":"
                 val = total_match.group(2).strip()

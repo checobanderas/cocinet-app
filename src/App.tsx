@@ -116,7 +116,7 @@ import {
   checkmarkOutline,
 } from "ionicons/icons";
 
-import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport, WebBluetoothTransport, sendTestReceipt, getWindowsPrinters, PrinterArea, TenantPrinterSettings, getTenantPrinterSettings, saveTenantPrinterSettingsToLocal, PrinterMode, AreaPrinterSetting } from "./utils/printer";
+import { EscPosDriver, RawBtTransport, PosPrinterJob, WindowsSpoolerTransport, isWindows, createTransport, WebBluetoothTransport, sendTestReceipt, getWindowsPrinters, PrinterArea, TenantPrinterSettings, getTenantPrinterSettings, saveTenantPrinterSettingsToLocal, PrinterMode, AreaPrinterSetting, formatPhone } from "./utils/printer";
 import {
   getLocalProducts,
   saveLocalProducts,
@@ -4303,7 +4303,7 @@ export default function App() {
         if (pedido.requiresInvoice) {
           job.printLine("--------------------------------");
           job.left();
-          job.bold(true).printLine(`🧾 FACTURAR: ${pedido.invoicePhone || ""}`).bold(false);
+          job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(pedido.invoicePhone)}`).bold(false);
         }
 
         job.center();
@@ -13250,7 +13250,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (account.requiresInvoice) {
         job.printLine("--------------------------------");
         job.left();
-        job.bold(true).printLine(`🧾 FACTURAR: ${account.invoicePhone || ""}`).bold(false);
+        job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(account.invoicePhone)}`).bold(false);
       }
 
       job.printLine(" ");
@@ -13639,7 +13639,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (requiresInvoice) {
         job.printLine("--------------------------------");
         job.left();
-        job.bold(true).printLine(`🧾 FACTURAR: ${invoicePhone || ""}`).bold(false);
+        job.bold(true).printLine(`🧾 FACTURAR: ${formatPhone(invoicePhone)}`).bold(false);
       }
 
       job.center();

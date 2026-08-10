@@ -53,6 +53,15 @@ export function isWindows(): boolean {
   return /Win/i.test(platform) || /Windows/i.test(userAgent);
 }
 
+export function formatPhone(phone?: string): string {
+  if (!phone) return "";
+  const clean = String(phone).replace(/\D/g, "");
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
+  }
+  return phone;
+}
+
 /** Devuelve true si el navegador corre en Android */
 export function isAndroid(): boolean {
   return /Android/i.test(navigator.userAgent);
