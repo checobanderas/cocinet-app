@@ -1,5 +1,150 @@
 // Archivos incrustados del Sentinela
 export const EMBEDDED_INSTALLER_FILES: Record<string, string> = {
-  "instalador.bat": "@echo off\nchcp 65001 > nul\nsetlocal enabledelayedexpansion\ntitle INSTALADOR SENTINELA COCINET PRO\n\n:: Verificar si el script ya se esta ejecutando como Administrador\nnet session >nul 2>&1\nif !errorlevel! neq 0 (\n    echo.\n    echo [INFO] Solicitando elevacion de privilegios de Administrador...\n    echo [INFO] Por favor presiona 'Si' en el dialogo de Windows que aparecera a continuacion.\n    echo.\n    powershell -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\"\n    exit /b\n)\n\ncd /d \"%~dp0\"\n\necho =======================================================================\necho   [+] COCINET PRO - INICIANDO INSTALADOR DEL SENTINELA DE IMPRESION\necho =======================================================================\necho.\necho [INFO] Detectando instalacion de Python compatible (v3.11 / v3.12)...\n\nset \"PYTHON_CMD=\"\n\n:: 1. Priorizar Python 3.11 o 3.12 mediante el lanzador oficial 'py'\npy -3.11 --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=py -3.11\"\n    goto :PYTHON_FOUND\n)\n\npy -3.12 --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=py -3.12\"\n    goto :PYTHON_FOUND\n)\n\n:: 2. Buscar ejecutable directo de Python 3.11 o 3.12 en el sistema\nif exist \"C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"C:\\Users\\CAJA\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Users\\CAJA\\AppData\\Local\\Programs\\Python\\Python311\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"%LOCALAPPDATA%\\Programs\\Python\\Python311\\python.exe\" (\n    set \"PYTHON_CMD=\"%LOCALAPPDATA%\\Programs\\Python\\Python311\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"C:\\Program Files\\Python311\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Program Files\\Python311\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Users\\DELL\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"%LOCALAPPDATA%\\Programs\\Python\\Python312\\python.exe\" (\n    set \"PYTHON_CMD=\"%LOCALAPPDATA%\\Programs\\Python\\Python312\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\nif exist \"C:\\Program Files\\Python312\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Program Files\\Python312\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\n\n:: 3. Probar lanzador generico 'py -3' o 'python'\npy -3 --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=py -3\"\n    goto :PYTHON_FOUND\n)\n\npython --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=python\"\n    goto :PYTHON_FOUND\n)\n\n:PYTHON_NOT_FOUND\necho.\necho [AVISO] No se detecto Python 3.11 / 3.12 instalado en el sistema.\necho [INFO] Descargando e instalando Python 3.11.9 de forma automatica...\necho.\n\nset \"INSTALLER_PATH=%TEMP%\\python_installer_setup.exe\"\n\ncurl -L \"https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe\" -o \"!INSTALLER_PATH!\"\nif not exist \"!INSTALLER_PATH!\" (\n    powershell -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe', '!INSTALLER_PATH!')\"\n)\n\nif not exist \"!INSTALLER_PATH!\" (\n    echo [ERROR] No se pudo descargar el instalador de Python automaticamente.\n    echo [INFO] Revisa tu conexion a Internet o descarga Python 3.11 manualmente de https://www.python.org/downloads/\n    pause\n    exit /b 1\n)\n\necho.\necho [INFO] Instalando Python 3.11 de forma silenciosa para todos los usuarios...\n\"!INSTALLER_PATH!\" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0\n\nif exist \"!INSTALLER_PATH!\" del /f /q \"!INSTALLER_PATH!\" >nul 2>&1\n\npy -3.11 --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=py -3.11\"\n    goto :PYTHON_FOUND\n)\n\nif exist \"C:\\Program Files\\Python311\\python.exe\" (\n    set \"PYTHON_CMD=\"C:\\Program Files\\Python311\\python.exe\"\"\n    goto :PYTHON_FOUND\n)\n\npython --version >nul 2>&1\nif !errorlevel! equ 0 (\n    set \"PYTHON_CMD=python\"\n    goto :PYTHON_FOUND\n)\n\necho [ERROR] La instalacion automatica de Python no finalizo correctamente.\npause\nexit /b 1\n\n:PYTHON_FOUND\necho [OK] Python compatible detectado correctamente: !PYTHON_CMD!\necho [INFO] Ejecutando proceso de instalacion del servicio del Sentinela...\n!PYTHON_CMD! \"%~dp0instalador_sentinela.py\"\nif !errorlevel! neq 0 (\n    echo.\n    echo [ERROR] Hubo un problema durante el proceso de instalacion.\n    echo.\n    pause\n    exit /b !errorlevel!\n)\necho.\necho =======================================================================\necho   [OK] INSTALACION FINALIZADA CON EXITO! PUEDES CERRAR ESTA VENTANA\necho =======================================================================\npause\n",
-  "instalador_sentinela.py": "# -*- coding: utf-8 -*-\n\"\"\"\n================================================================================\n   \ud83d\ude80 COCINET PRO - Instalador y Actualizador del Sentinela de Windows v3.1 \ud83d\ude80\n================================================================================\nEste script detiene, desinstala, actualiza dependencias y reinstala de forma\nlimpia el servicio de Windows del Sentinela de Impresi\u00f3n COCINET PRO.\n\nRequisitos:\n  - Ejecutar en Windows con Python 3 instalado.\n  - Se auto-elevar\u00e1 a permisos de Administrador autom\u00e1ticamente si es necesario.\n================================================================================\n\"\"\"\n\nimport os\nimport sys\nimport time\nimport subprocess\nimport urllib.request\nimport json\n\n# Asegurar codificaci\u00f3n UTF-8 en consola de Windows para evitar errores con Emojis\nif hasattr(sys.stdout, 'reconfigure'):\n    try:\n        sys.stdout.reconfigure(encoding='utf-8', errors='replace')\n        sys.stderr.reconfigure(encoding='utf-8', errors='replace')\n    except Exception:\n        pass\n\n# Nombre exacto del servicio de Windows\nSERVICE_NAME = \"CocinetPrinterSentinel\"\nSENTINEL_SCRIPT = \"sentinel_printer.py\"\nPORT = 3010\n\ndef is_admin():\n    \"\"\"Verifica si el script tiene privilegios de Administrador.\"\"\"\n    try:\n        import ctypes\n        return ctypes.windll.shell32.IsUserAnAdmin() != 0\n    except Exception:\n        return False\n\ndef elevate_privileges():\n    \"\"\"Intenta re-ejecutar el script actual con permisos de Administrador manteniendo la consola visible.\"\"\"\n    import ctypes\n    # Si ya es admin, no hacemos nada\n    if is_admin():\n        return True\n    \n    print(\"\ud83d\udd11 [INFO] Solicitando elevaci\u00f3n de privilegios de Administrador... Por favor acepta el di\u00e1logo de Windows.\")\n    try:\n        script = os.path.abspath(sys.argv[0])\n        script_dir = os.path.dirname(script)\n        params = \" \".join(sys.argv[1:])\n        cmd_args = f'/k cd /d \"{script_dir}\" && \"{sys.executable}\" \"{script}\" {params}'\n        result = ctypes.windll.shell32.ShellExecuteW(None, \"runas\", \"cmd.exe\", cmd_args, script_dir, 1)\n        if int(result) > 32:\n            print(\"\ud83d\ude80 [OK] Re-lanzando proceso con permisos de administrador en nueva consola...\")\n            sys.exit(0)\n        else:\n            print(\"\u274c [ERROR] No se concedieron los permisos de Administrador necesarios.\")\n            return False\n    except Exception as e:\n        print(f\"\u274c [ERROR] Error al intentar elevar privilegios: {e}\")\n        return False\n\ndef print_banner():\n    print(\"\\n\" + \"=\"*80)\n    print(\"   \ud83c\udf1f COCINET PRO - ACTUALIZADOR DE SERVICIO DE WINDOWS PARA EL SENTINELA \ud83c\udf1f\")\n    print(\"=\"*80 + \"\\n\")\n\ndef run_command(args, step_name, ignore_error=False):\n    \"\"\"Ejecuta un comando del sistema informando detalladamente con emojis.\"\"\"\n    print(f\"\u23f3 [PROCESANDO] Paso: {step_name}...\")\n    try:\n        # Usamos shell=True para comandos internos o scripts\n        result = subprocess.run(\n            args, \n            stdout=subprocess.PIPE, \n            stderr=subprocess.PIPE, \n            text=True, \n            timeout=30,\n            shell=True\n        )\n        if result.returncode == 0:\n            print(f\"\u2705 [\u00c9XITO] Paso '{step_name}' completado correctamente.\")\n            return True\n        else:\n            if ignore_error:\n                print(f\"\u26a0\ufe0f [AVISO] Paso '{step_name}' finaliz\u00f3 con c\u00f3digo {result.returncode} (Ignorado).\")\n                return True\n            print(f\"\u274c [ERROR] Fall\u00f3 el paso: {step_name}\")\n            print(f\"   Detalles del sistema: {result.stderr.strip() or result.stdout.strip()}\")\n            return False\n    except subprocess.TimeoutExpired:\n        print(f\"\u23f0 [TIMEOUT] Se agot\u00f3 el tiempo de espera (30s) para: {step_name}\")\n        return False\n    except Exception as e:\n        print(f\"\ud83d\udca5 [CR\u00cdTICO] Excepci\u00f3n en '{step_name}': {e}\")\n        return False\n\ndef check_sentinel_file():\n    \"\"\"Verifica que el archivo del sentinela exista en la misma carpeta.\"\"\"\n    current_dir = os.path.dirname(os.path.abspath(__file__))\n    target_path = os.path.join(current_dir, SENTINEL_SCRIPT)\n    if os.path.exists(target_path):\n        return target_path\n    \n    # Buscar en el directorio actual de ejecuci\u00f3n\n    if os.path.exists(SENTINEL_SCRIPT):\n        return os.path.abspath(SENTINEL_SCRIPT)\n        \n    return None\n\ndef verify_service_status():\n    \"\"\"Realiza una petici\u00f3n HTTP al puerto del Sentinela para verificar que est\u00e9 activo.\"\"\"\n    print(f\"\ud83d\udd0d [VERIFICACI\u00d3N] Conectando con el Sentinela en http://localhost:{PORT}/status ...\")\n    time.sleep(2) # Esperar a que el servicio se asiente\n    try:\n        url = f\"http://localhost:{PORT}/status\"\n        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})\n        with urllib.request.urlopen(req, timeout=3) as response:\n            if response.status == 200:\n                data = json.loads(response.read().decode('utf-8'))\n                print(\"\\n\ud83c\udf89 \u00a1EL SENTINELA SE ENCUENTRA EN L\u00cdNEA Y OPERANDO CON \u00c9XITO! \ud83c\udf89\")\n                print(f\"   \ud83d\udce1 Estado: {data.get('status', 'desconocido').upper()}\")\n                print(f\"   \ud83d\udee0\ufe0f  Servicio: {data.get('service', 'N/A')}\")\n                print(f\"   \ud83c\udff7\ufe0f  Versi\u00f3n Instalada: v{data.get('version', '6.0.0')}\")\n                print(f\"   \ud83d\udd0c Puerto: {data.get('port', PORT)}\")\n                print(f\"   \ud83d\udccb Impresoras Mapeadas: {list(data.get('mapped_printers', {}).keys())}\")\n                print(\"   \u2728 Novedades v6.0.0:\")\n                print(\"      \u2022 Desconcatenaci\u00f3n autom\u00e1tica de productos pegados en el mismo rengl\u00f3n.\")\n                print(\"      \u2022 Despliegue estricto de 1 l\u00ednea por producto con montos y suma exactos.\")\n                print(\"================================================================================\")\n                print(\"\ud83d\udca1 \u00a1Listo! El Sentinela de Windows ya est\u00e1 actualizado e impresoras listas.\")\n                print(\"================================================================================\\n\")\n                return True\n    except Exception as e:\n        print(f\"\u26a0\ufe0f [AVISO] No se pudo obtener respuesta HTTP directa del Sentinela ({e}).\")\n        print(\"   Sin embargo, el servicio de Windows se ha configurado e iniciado en segundo plano.\")\n        print(\"   Puedes revisar los logs detallados en 'sentinel_printer.log' para confirmar su operaci\u00f3n.\")\n        return False\n\ndef configure_printer_sizes(target_dir):\n    \"\"\"Pregunta al usuario por consola interactiva los nombres, anchos de papel, logotipo y fuentes de las impresoras.\"\"\"\n    config_file = os.path.join(target_dir, \"printer_config.json\")\n    \n    # Valores base por defecto\n    current_config = {\n        \"PRINTER_MAP\": {\n            \"cuentas\": \"CUENTAS\",\n            \"cocina\":  \"COCINA\",\n            \"barra\":   \"BARRA\",\n        },\n        \"PRINTER_PAPER_SIZES\": {\n            \"cuentas\": \"80mm\",\n            \"cocina\":  \"80mm\",\n            \"barra\":   \"80mm\",\n        },\n        \"LOGO_PATH\": \"C:\\\\buzon\\\\logo.jpg\",\n        \"FONT_NAME\": \"Arial\",\n        \"FONT_SIZE_PT\": 16.0\n    }\n    \n    # Leer el existente si existe para conservar la config anterior del usuario\n    if os.path.exists(config_file):\n        try:\n            with open(config_file, \"r\", encoding=\"utf-8\") as f:\n                data = json.load(f)\n                if \"PRINTER_MAP\" in data:\n                    current_config[\"PRINTER_MAP\"].update(data[\"PRINTER_MAP\"])\n                if \"PRINTER_PAPER_SIZES\" in data:\n                    current_config[\"PRINTER_PAPER_SIZES\"].update(data[\"PRINTER_PAPER_SIZES\"])\n                if \"LOGO_PATH\" in data:\n                    current_config[\"LOGO_PATH\"] = data[\"LOGO_PATH\"]\n                if \"FONT_NAME\" in data:\n                    current_config[\"FONT_NAME\"] = data[\"FONT_NAME\"]\n                if \"FONT_SIZE_PT\" in data:\n                    current_config[\"FONT_SIZE_PT\"] = float(data[\"FONT_SIZE_PT\"])\n        except Exception:\n            pass\n            \n    print(\"\\n\" + \"=\"*80)\n    print(\"    \u2699\ufe0f  CONFIGURACI\u00d3N DE IMPRESORAS, ANCHOS DE PAPEL Y LOGOTIPO \u2699\ufe0f\")\n    print(\"=\"*80)\n    \n    # Listar impresoras instaladas en Windows\n    installed_list = []\n    try:\n        import win32print\n        flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS\n        installed_list = [p[2] for p in win32print.EnumPrinters(flags)]\n        if installed_list:\n            print(\"\ud83d\udda8\ufe0f  Impresoras detectadas en este equipo:\")\n            for p in installed_list:\n                print(f\"   \u2022 {p}\")\n            print(\"\")\n    except Exception:\n        pass\n\n    print(\"Por favor, ingresa los datos correspondientes.\\n\")\n    \n    # Preguntar ruta del logotipo\n    default_logo = current_config.get(\"LOGO_PATH\", \"C:\\\\buzon\\\\logo.jpg\")\n    logo_input = input(f\"\u27a4 Ruta f\u00edsica del logotipo (.jpg) (Enter para '{default_logo}'): \").strip()\n    new_logo = logo_input if logo_input else default_logo\n    print(f\"   \u21b3 Logotipo configurado en: '{new_logo}'\\n\")\n    \n    # Preguntar tipograf\u00eda y tama\u00f1o\n    default_font = current_config.get(\"FONT_NAME\", \"Arial\")\n    font_input = input(f\"\u27a4 Nombre de la tipograf\u00eda (Enter para '{default_font}'): \").strip()\n    new_font = font_input if font_input else default_font\n    \n    default_size = current_config.get(\"FONT_SIZE_PT\", 16.0)\n    size_input = input(f\"\u27a4 Tama\u00f1o de letra base en puntos (Enter para '{default_size}'): \").strip()\n    try:\n        new_size = float(size_input) if size_input else default_size\n    except Exception:\n        new_size = default_size\n        \n    print(f\"   \u21b3 Tipograf\u00eda configurada: '{new_font}' con tama\u00f1o {new_size} pt.\\n\")\n    \n    new_map = {}\n    new_sizes = {}\n    \n    for area in [\"cuentas\", \"cocina\", \"barra\"]:\n        default_name = current_config[\"PRINTER_MAP\"].get(area, \"CUENTAS\")\n        # Si la predeterminada no coincide con ninguna instalada, sugerir la primera disponible de Windows\n        if installed_list and not any(p.upper() == default_name.upper() for p in installed_list):\n            default_name = installed_list[0]\n\n        name = input(f\"\u27a4 Nombre de impresora en Windows para '{area}' (Enter para '{default_name}'): \").strip()\n        new_map[area] = name if name else default_name\n        \n        default_size = current_config[\"PRINTER_PAPER_SIZES\"][area]\n        size_in = input(f\"   \u00bfAncho de papel de esta impresora? (Enter para '{default_size}', o ingresa '58' o '80'): \").strip()\n        if size_in == \"58\":\n            new_sizes[area] = \"58mm\"\n        elif size_in == \"80\":\n            new_sizes[area] = \"80mm\"\n        else:\n            new_sizes[area] = default_size\n            \n        print(f\"   \u21b3 Guardado: Impresora '{new_map[area]}' con papel {new_sizes[area]}.\\n\")\n        \n    config_payload = {\n        \"PRINTER_MAP\": new_map,\n        \"PRINTER_PAPER_SIZES\": new_sizes,\n        \"LOGO_PATH\": new_logo,\n        \"FONT_NAME\": new_font,\n        \"FONT_SIZE_PT\": new_size\n    }\n    \n    try:\n        with open(config_file, \"w\", encoding=\"utf-8\") as f:\n            json.dump(config_payload, f, indent=4, ensure_ascii=False)\n        print(f\"\u2705 [OK] Configuraci\u00f3n guardada en: {config_file}\\n\")\n    except Exception as e:\n        print(f\"\u26a0\ufe0f [AVISO] No se pudo escribir el archivo de configuraci\u00f3n ({e}).\")\n\ndef main():\n    print_banner()\n\n    # 1. Asegurar elevaci\u00f3n de privilegios de Administrador\n    if not is_admin():\n        if not elevate_privileges():\n            print(\"\ud83d\uded1 [PASO 1 FALLADO] El script REQUIERE ejecutarse con permisos de Administrador para instalar servicios.\")\n            print(\"\ud83d\udca1 Sugerencia: Haz clic derecho sobre el instalador y selecciona 'Ejecutar como Administrador'.\")\n            input(\"\\nPresiona Enter para salir...\")\n            sys.exit(1)\n        sys.exit(0)\n    else:\n        print(\"\ud83d\udd13 [PASO 1 OK] Permisos de Administrador detectados y validados.\")\n\n    # 2. Localizar archivo sentinel_printer.py\n    sentinel_path = check_sentinel_file()\n    if not sentinel_path:\n        print(f\"\ud83d\uded1 [PASO 2 FALLADO] No se encontr\u00f3 el archivo '{SENTINEL_SCRIPT}' en la carpeta actual.\")\n        print(\"\ud83d\udca1 Sugerencia: Aseg\u00farate de extraer este instalador en el mismo directorio donde est\u00e1 el sentinela.\")\n        input(\"\\nPresiona Enter para salir...\")\n        sys.exit(1)\n    else:\n        print(f\"\ud83d\udcc2 [PASO 2 OK] Archivo del Sentinela localizado en: {sentinel_path}\")\n\n    # Cambiar al directorio del script para evitar fallos de rutas relativas\n    os.chdir(os.path.dirname(sentinel_path))\n\n    # 3. Detener y cerrar forzadamente cualquier servicio o proceso previo del Sentinela\n    print(\"\ud83d\uded1 [PROCESANDO] Deteniendo y liberando memoria del Sentinela previo...\")\n    run_command(f'\"{sys.executable}\" \"{SENTINEL_SCRIPT}\" stop', \"Detener servicio mediante script\", ignore_error=True)\n    run_command(f'sc stop {SERVICE_NAME}', \"Detener servicio mediante SCM de Windows\", ignore_error=True)\n    run_command('taskkill /F /FI \"SERVICES eq COCINETPrintSentinel\"', \"Cierre forzado por SCM\", ignore_error=True)\n    run_command('taskkill /F /IM pythonservice.exe', \"Cierre forzado de pythonservice.exe\", ignore_error=True)\n    time.sleep(2.0)\n\n    # 4. Desinstalar servicio existente\n    print(\"\ud83d\uddd1\ufe0f [PROCESANDO] Limpiando registro del servicio previo de Windows...\")\n    run_command(f'\"{sys.executable}\" \"{SENTINEL_SCRIPT}\" remove', \"Eliminar servicio mediante script\", ignore_error=True)\n    run_command(f'sc delete {SERVICE_NAME}', \"Eliminar servicio mediante SCM de Windows\", ignore_error=True)\n    time.sleep(1.5)\n\n    # 5. Instalar/Actualizar Dependencias del Sistema\n    print(\"\ud83d\udce6 [PROCESANDO] Instalando y actualizando librer\u00edas de Python requeridas...\")\n    deps = [\"pywin32\", \"Flask\", \"flask-cors\"]\n    for dep in deps:\n        if not run_command(f'\"{sys.executable}\" -m pip install --upgrade {dep}', f\"Instalar/Actualizar paquete '{dep}'\"):\n            print(f\"\ud83d\uded1 [PASO 5 FALLADO] No se pudo instalar la dependencia cr\u00edtica: {dep}\")\n            print(\"\ud83d\udca1 Sugerencia: Revisa tu conexi\u00f3n a Internet y aseg\u00farate de que 'pip' est\u00e9 en tu PATH.\")\n            input(\"\\nPresiona Enter para salir...\")\n            sys.exit(1)\n    \n    # 6. Ejecutar script de post-instalaci\u00f3n de pywin32 para registrar DLLs en System32\n    print(\"\u2699\ufe0f [PROCESANDO] Registrando variables del sistema para servicios de Python en Windows...\")\n    try:\n        import shutil\n        sys32_path = os.environ.get(\"SystemRoot\", r\"C:\\Windows\") + r\"\\System32\"\n        pywin32_sys32 = os.path.join(sys.prefix, \"Lib\", \"site-packages\", \"pywin32_system32\")\n        if os.path.exists(pywin32_sys32):\n            for f in os.listdir(pywin32_sys32):\n                if f.lower().endswith(\".dll\"):\n                    src = os.path.join(pywin32_sys32, f)\n                    try:\n                        shutil.copy2(src, os.path.join(sys32_path, f))\n                        shutil.copy2(src, os.path.join(sys.prefix, f))\n                    except Exception:\n                        pass\n    except Exception:\n        pass\n\n    post_install_cmd = f'\"{sys.executable}\" -c \"import os, sys; print(os.path.join(sys.prefix, \\'Scripts\\', \\'pywin32_postinstall.py\\'))\"'\n    try:\n        post_path = subprocess.check_output(post_install_cmd, shell=True, text=True).strip()\n        if os.path.exists(post_path):\n            run_command(f'\"{sys.executable}\" \"{post_path}\" -install', \"Ejecutar post-instalaci\u00f3n de pywin32\", ignore_error=True)\n        else:\n            # Buscar en el entorno virtual si aplica\n            alt_path = os.path.join(sys.prefix, \"Scripts\", \"pywin32_postinstall.py\")\n            if os.path.exists(alt_path):\n                run_command(f'\"{sys.executable}\" \"{alt_path}\" -install', \"Ejecutar post-instalaci\u00f3n de pywin32 alternativo\", ignore_error=True)\n    except Exception as e:\n        print(f\"\u26a0\ufe0f [AVISO] No se pudo registrar pywin32_postinstall de forma automatizada ({e}). Continuando de todos modos...\")\n\n    # 6.5. Configuraci\u00f3n de Impresoras y Tama\u00f1os de Papel (58mm / 80mm)\n    configure_printer_sizes(os.path.dirname(sentinel_path))\n\n    # 7. Instalar el nuevo servicio de Windows\n    print(\"\ud83d\udd0c [PROCESANDO] Instalando el renovado servicio de Windows del Sentinela v3.6.0...\")\n    # Instalamos con inicio retrasado o autom\u00e1tico para que el spooler de Windows est\u00e9 listo al iniciar\n    if not run_command(f'\"{sys.executable}\" \"{SENTINEL_SCRIPT}\" install', \"Registrar Servicio de Windows\"):\n        print(\"\ud83d\uded1 [PASO 7 FALLADO] Error al registrar el servicio de Windows.\")\n        print(\"\ud83d\udca1 Sugerencia: Aseg\u00farate de que no haya procesos de Python fantasma bloqueando y de que ejecutas como Administrador.\")\n        input(\"\\nPresiona Enter para salir...\")\n        sys.exit(1)\n\n    # Configurar el servicio para que se inicie de forma autom\u00e1tica en Windows\n    run_command(f'sc config {SERVICE_NAME} start= auto', \"Configurar servicio en modo autom\u00e1tico\", ignore_error=True)\n\n    # 8. Iniciar el servicio de Windows\n    print(\"\u26a1 [PROCESANDO] Inicializando el servicio en segundo plano de Windows...\")\n    if not run_command(f'\"{sys.executable}\" \"{SENTINEL_SCRIPT}\" start', \"Iniciar Servicio de Windows\"):\n        # Intentar forzar con SC\n        if not run_command(f'sc start {SERVICE_NAME}', \"Iniciar Servicio de Windows con SCM\"):\n            print(\"\ud83d\uded1 [PASO 8 FALLADO] No se pudo iniciar el servicio de Windows reci\u00e9n instalado.\")\n            print(\"\ud83d\udca1 Sugerencia: Revisa los logs de Windows Event Viewer o ejecuta 'python sentinel_printer.py' en consola para ver errores.\")\n            input(\"\\nPresiona Enter para salir...\")\n            sys.exit(1)\n\n    # 9. Verificaci\u00f3n final de salud del servicio HTTP\n    print(\"\ud83c\udfaf [PROCESANDO] Realizando pruebas de conexi\u00f3n finales...\")\n    verify_service_status()\n\n    print(\"\ud83c\udf88 \u00a1ACTUALIZACI\u00d3N v6.0.0 FINALIZADA CON \u00c9XITO! \ud83c\udf88\")\n    print(\"================================================================================\")\n    print(\"  VERSION INSTALADA: v6.0.0\")\n    print(\"  CAMBIOS APLICADOS:\")\n    print(\"  \u2022 Separaci\u00f3n autom\u00e1tica de productos que vengan pegados en un mismo rengl\u00f3n.\")\n    print(\"  \u2022 Impresi\u00f3n limpia de 1 l\u00ednea por producto y suma totalmente coincidente.\")\n    print(\"================================================================ drop-down\\n\")\n    input(\"Presiona Enter para finalizar el instalador... \ud83c\udf1f\")\n\nif __name__ == \"__main__\":\n    main()\n"
+  "instalador.bat": `@echo off
+chcp 65001 > nul
+setlocal enabledelayedexpansion
+title INSTALADOR SENTINELA COCINET PRO
+
+:: Verificar si el script ya se esta ejecutando como Administrador
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    echo.
+    echo [INFO] Solicitando elevacion de privilegios de Administrador...
+    echo [INFO] Por favor presiona 'Si' en el dialogo de Windows que aparecera a continuacion.
+    echo.
+    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+cd /d "%~dp0"
+
+echo =======================================================================
+echo   [+] COCINET PRO - INICIANDO INSTALADOR DEL SENTINELA DE IMPRESION
+echo =======================================================================
+echo.
+echo [INFO] Detectando instalacion de Python compatible (v3.11 / v3.12)...
+
+set "PYTHON_CMD="
+
+py -3.11 --version >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=py -3.11"
+    goto :PYTHON_FOUND
+)
+
+py -3.12 --version >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=py -3.12"
+    goto :PYTHON_FOUND
+)
+
+py -3 --version >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=py -3"
+    goto :PYTHON_FOUND
+)
+
+python --version >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=python"
+    goto :PYTHON_FOUND
+)
+
+:PYTHON_NOT_FOUND
+echo.
+echo [AVISO] No se detecto Python 3.11 / 3.12 instalado en el sistema.
+pause
+exit /b 1
+
+:PYTHON_FOUND
+echo [OK] Python compatible detectado correctamente: !PYTHON_CMD!
+echo [INFO] Ejecutando proceso de instalacion del servicio del Sentinela...
+!PYTHON_CMD! "%~dp0instalador_sentinela.py"
+if !errorlevel! neq 0 (
+    echo.
+    echo [ERROR] Hubo un problema durante el proceso de instalacion.
+    echo.
+    pause
+    exit /b !errorlevel!
+)
+echo.
+echo =======================================================================
+echo   [OK] INSTALACION FINALIZADA CON EXITO! PUEDES CERRAR ESTA VENTANA
+echo =======================================================================
+pause
+`,
+  "instalador_sentinela.py": `# -*- coding: utf-8 -*-
+import os, sys, time, subprocess, urllib.request, json
+
+SERVICE_NAME = "CocinetPrinterSentinel"
+SENTINEL_SCRIPT = "sentinel_printer.py"
+PORT = 3010
+
+def is_admin():
+    try:
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
+def elevate_privileges():
+    import ctypes
+    if is_admin():
+        return True
+    try:
+        script = os.path.abspath(sys.argv[0])
+        script_dir = os.path.dirname(script)
+        params = " ".join(sys.argv[1:])
+        cmd_args = f'/k cd /d "{script_dir}" && "{sys.executable}" "{script}" {params}'
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", cmd_args, script_dir, 1)
+        return int(result) > 32
+    except Exception:
+        return False
+
+def print_banner():
+    print("\\n" + "="*80)
+    print("   🌟 COCINET PRO - SERVICIO SENTINELA DE IMPRESIÓN v7.0.0-PRO 🌟")
+    print("="*80 + "\\n")
+
+def run_command(args, step_name, ignore_error=False):
+    print(f"⏳ [PROCESANDO] Paso: {step_name}...")
+    try:
+        result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, shell=True)
+        return result.returncode == 0 or ignore_error
+    except Exception:
+        return ignore_error
+
+def main():
+    print_banner()
+    if not is_admin():
+        elevate_privileges()
+        sys.exit(0)
+
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" stop', "Detener servicio", ignore_error=True)
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" remove', "Eliminar servicio", ignore_error=True)
+    run_command(f'"{sys.executable}" -m pip install --upgrade pywin32 Flask flask-cors pillow', "Instalar dependencias", ignore_error=True)
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" install', "Registrar Servicio")
+    run_command(f'sc config {SERVICE_NAME} start= auto', "Modo automático", ignore_error=True)
+    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" start', "Iniciar Servicio")
+
+    print("\\n🎈 ¡INSTALACIÓN Y ACTUALIZACIÓN v7.0.0-PRO FINALIZADA CON ÉXITO! 🎈")
+    print("================================================================================")
+    print("  VERSIÓN INSTALADA: v7.0.0-PRO (Sentinela de Impresión Cocinet)")
+    print("")
+    print("  PROPÓSITO Y USO DEL SERVICIO:")
+    print("  • Servicio de fondo (Puerto 3010) para recepción de comanda/cuenta desde Cocinet.")
+    print("  • Impresión térmica vectorizada GDI y ESC/POS en papel 58mm y 80mm por área.")
+    print("  • Servidor de alta disponibilidad para comandas de Cocina, Cuentas y Barra.")
+    print("")
+    print("  NOVEDADES Y ACTUALIZACIONES APLICADAS (v7.0.0-PRO):")
+    print("  • 🛡️ Registro automático de diagnósticos de caídas en 'sentinel_crash.log'.")
+    print("  • 🔄 Reconexión automática en puerto 3010 y tolerancia a fallos de red.")
+    print("  • ⚡ Encolado de contingencia en SQLite si la impresora está desconectada.")
+    print("  • 🖨️ Formateo limpio de 1 línea por producto con montos y sumas exactos.")
+    print("================================================================================\\n")
+    input("Presiona Enter para finalizar el instalador... 🌟")
+
+if __name__ == "__main__":
+    main()
+`
 };

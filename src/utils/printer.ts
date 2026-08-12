@@ -53,6 +53,46 @@ export function isWindows(): boolean {
   return /Win/i.test(platform) || /Windows/i.test(userAgent);
 }
 
+export type PrinterEventPayload = {
+  title: string;
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+};
+
+export function notifyPrinterEvent(payload: PrinterEventPayload) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("cocinet-printer-event", { detail: payload }));
+  }
+}
+
+let sentinelHealthTimer: any = null;
+let lastSentinelStatus: boolean | null = null;
+
+export function startPrinterSentinelMonitor(port: string = "3010", intervalMs: number = 30000) {
+  if (typeof window === "undefined") return;
+  if (sentinelHealthTimer) clearInterval(sentinelHealthTimer);
+
+  const checkHealth = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      const res = await fetch(`http://localhost:${port}/status`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        lastSentinelStatus = true;
+      } else {
+        lastSentinelStatus = false;
+      }
+    } catch {
+      lastSentinelStatus = false;
+    }
+  };
+
+  setTimeout(checkHealth, 3000);
+  sentinelHealthTimer = setInterval(checkHealth, intervalMs);
+}
+
 export function formatPhone(phone?: string): string {
   if (!phone) return "";
   const clean = String(phone).replace(/\D/g, "");
@@ -331,7 +371,7 @@ export class WindowsSpoolerTransport {
     this.tenantId = tenantId;
   }
 
-  send(prn: string) {
+  async send(prn: string): Promise<boolean> {
     const key = this.customPrinterName || (WindowsSpoolerTransport.KEY_MAP[this.printerKey.toLowerCase()] ?? this.printerKey);
     const port = this.customPort || getTenantPrinterPort(this.tenantId) || "3010";
 
@@ -342,22 +382,62 @@ export class WindowsSpoolerTransport {
 
     console.log(`🖨️ [WindowsSpoolerTransport] Enviando ticket a http://localhost:${port}/print (Impresora: '${key}', Tenant: '${this.tenantId || 'activo'}')`);
 
-    fetch(`http://localhost:${port}/print`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then(async (res) => {
+    const maxRetries = 2;
+    let lastErrorMsg = "";
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const res = await fetch(`http://localhost:${port}/print`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: res.statusText }));
-          console.error("[Printer] Error del sentinel:", err);
+          console.error(`[Printer] Error del sentinel en intento ${attempt}:`, err);
+          lastErrorMsg = err?.error || res.statusText;
         } else {
-          console.log(`✅ [Printer] Respuesta exitosa de Sentinela en puerto ${port} para '${key}'`);
+          console.log(`✅ [Printer] Impresión rápida exitosa en puerto ${port} para '${key}'`);
+          return true;
         }
-      })
-      .catch((err) => {
-        console.warn(`[Printer] Sentinel local en http://localhost:${port} offline o inaccesible:`, err);
+      } catch (err: any) {
+        lastErrorMsg = err?.message || String(err);
+        console.warn(`[Printer] Intento ${attempt}/${maxRetries} fallido enviando a http://localhost:${port}/print:`, err);
+      }
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+
+    // 🔴 Si fallaron los retries, notificar al mesero/usuario con una alerta clara en pantalla
+    console.error(`❌ [Printer Error] Todos los intentos de impresión en puerto ${port} fallaron. Notificando error.`);
+
+    notifyPrinterEvent({
+      title: "❌ Error de Impresión - Sentinela Caído",
+      message: `No se pudo conectar al Sentinela local en http://localhost:${port}. Verifica que el servicio (sentinel_printer.py) esté iniciado (${lastErrorMsg || "Sin conexión"}).`,
+      type: "error",
+    });
+
+    // Intentar encolar en el backend local por contingencia
+    try {
+      await fetch(`/api/print-queue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ printer_key: key, raw_data: prn }),
       });
+      console.log(`📌 [Printer Fallback] Ticket guardado en la cola de contingencia de la base de datos.`);
+    } catch (e) {
+      console.warn(`[Printer Fallback] Tampoco se pudo guardar en la cola de contingencia:`, e);
+    }
+
+    return false;
   }
 }
 

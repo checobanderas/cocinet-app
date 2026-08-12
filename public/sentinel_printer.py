@@ -72,13 +72,31 @@ from flask_sock import Sock
 
 # ─── Configuración ─────────────────────────────────────────────────
 PORT    = 3010
-VERSION = "6.1.0-WS"
+VERSION = "7.0.0-PRO"
 
 # MODO DE IMPRESIÓN PREDETERMINADO: "gdi" o "raw"
 PRINT_MODE = "gdi"
 
-# ─── Logging Rotativo ──────────────────────────────────────────────
+# ─── Logging Rotativo & Registro de Caídas (Crash Log) ──────────────
 LOG_FILE = os.path.join(BASE_DIR, "sentinel_printer.log")
+CRASH_LOG_FILE = os.path.join(BASE_DIR, "sentinel_crash.log")
+
+def write_crash_log(event_type: str, message: str, details: str = ""):
+    """Registra detalladamente la causa de caídas, errores o fallos en sentinel_crash.log."""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = (
+            f"========================================================================\n"
+            f"[{timestamp}] [CRASH / ERROR: {event_type}]\n"
+            f"MENSAJE: {message}\n"
+        )
+        if details:
+            entry += f"TRAZA DETALLADA:\n{details}\n"
+        entry += "========================================================================\n\n"
+        with open(CRASH_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(entry)
+    except Exception as e:
+        print(f"Error escribiendo en crash log: {e}")
 
 def get_logger():
     logger = logging.getLogger("sentinel")
@@ -132,6 +150,7 @@ def notify_step(step_code: str, message: str, status: str = "INFO", extra_data: 
         
     if status == "ERROR":
         log.error(log_msg)
+        write_crash_log(step_code, message, json.dumps(extra_data, ensure_ascii=False) if extra_data else "")
     elif status == "WARNING":
         log.warning(log_msg)
     else:
@@ -265,7 +284,7 @@ def load_printer_config():
             "cocina":  "80mm",
             "barra":   "80mm",
         },
-        "LOGO_PATH": "C:\\buzon\\logo.jpg",
+        "LOGO_PATH": "logo.png",
         "FONT_NAME": "Segoe UI",
         "FONT_SIZE_PT": 11.0,
         "HEADER_FONT_SIZE_PT": 16.0,
@@ -473,9 +492,23 @@ def parse_escpos(raw_bytes: bytes) -> list:
     return cleaned_lines
 
 # ─── Motores de Impresión ─────────────────────────────────────────
-def get_installed_printers() -> list:
-    flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-    return [p[2] for p in win32print.EnumPrinters(flags)]
+_installed_printers_cache = []
+_installed_printers_cache_time = 0
+
+def get_installed_printers(force_refresh: bool = False) -> list:
+    global _installed_printers_cache, _installed_printers_cache_time
+    now = time.time()
+    if not force_refresh and _installed_printers_cache and (now - _installed_printers_cache_time < 60):
+        return _installed_printers_cache
+    try:
+        flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        _installed_printers_cache = [p[2] for p in win32print.EnumPrinters(flags)]
+        _installed_printers_cache_time = now
+    except Exception as e:
+        log.warning(f"Error enumerando impresoras: {e}")
+        if not _installed_printers_cache:
+            _installed_printers_cache = []
+    return _installed_printers_cache
 
 def resolve_printer_name(key: str) -> str:
     global PRINTER_MAP
@@ -488,7 +521,7 @@ def resolve_printer_name(key: str) -> str:
     target = PRINTER_MAP.get(key.lower(), key)
     installed = get_installed_printers()
     if not installed:
-        raise ValueError("No hay impresoras instaladas en el sistema Windows.")
+        return target or key
         
     for p in installed:
         if p.upper() == target.upper():
@@ -525,30 +558,50 @@ def send_raw_to_printer(printer_name: str, data_bytes: bytes):
     finally:
         win32print.ClosePrinter(hPrinter)
 
-def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi_y: int) -> int:
-    if not logo_path or not os.path.exists(logo_path):
+def draw_logo_on_dc(hDC, logo_path: str, printable_width: int, y_start: int, dpi_y: int, full_width: int = None) -> int:
+    if not logo_path:
         return y_start
+    
+    target_path = logo_path if os.path.isabs(logo_path) else os.path.join(BASE_DIR, logo_path)
+    if not os.path.exists(target_path):
+        alt_paths = [
+            os.path.join("C:\\buzon", os.path.basename(logo_path)),
+            os.path.join(BASE_DIR, "logoroy.png"),
+            os.path.join(BASE_DIR, "logo.png"),
+            os.path.join("C:\\buzon", "logoroy.png")
+        ]
+        found = False
+        for alt in alt_paths:
+            if os.path.exists(alt):
+                target_path = alt
+                found = True
+                break
+        if not found:
+            notify_step("LOGO_WARN", f"Archivo de logo no encontrado en: {logo_path}", status="WARNING")
+            return y_start
+
     try:
         from PIL import Image, ImageWin
-        img = Image.open(logo_path)
+        img = Image.open(target_path)
         if img.mode != "RGB":
             img = img.convert("RGB")
             
         w, h = img.size
-        max_logo_width = int(printable_width * 0.45)
+        page_width = full_width if full_width else printable_width
+        max_logo_width = int(page_width * 0.45)
         scale = max_logo_width / float(w)
         new_w = max_logo_width
         new_h = int(h * scale)
         
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        x_start = (printable_width - new_w) // 2
+        x_start = (page_width - new_w) // 2
         
         hdc_handle = hDC.GetSafeHdc()
         dib = ImageWin.Dib(img)
         dib.draw(hdc_handle, (x_start, y_start, x_start + new_w, y_start + new_h))
         return y_start + new_h + 15
     except Exception as e:
-        notify_step("LOGO_ERROR", f"Error renderizando el logotipo GDI: {e}", status="WARNING")
+        notify_step("LOGO_ERROR", f"Error renderizando el logotipo GDI ({target_path}): {e}", status="WARNING")
         return y_start
 
 def wrap_and_draw_text(hDC, text: str, margin_left: int, margin_right: int, printable_width: int, y: int, align: int = 0, line_spacing: int = 4) -> int:
@@ -618,12 +671,16 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
     notify_step("2_PROCESS_GDI", f"Parseando comandos ESC/POS para renderizado GDI en [{printer_name}]", status="INFO")
     parsed_lines = parse_escpos(data_bytes)
+    notify_step("PARSED_LINES_DEBUG", f"Total parsed_lines: {len(parsed_lines)}", extra_data={"texts": [l['text'] for l in parsed_lines if l['text']]})
     
     printer_key = "cuentas"
-    for k, v in PRINTER_MAP.items():
-        if v.upper() == printer_name.upper():
-            printer_key = k
-            break
+    if ticket_type and ticket_type.lower() in PRINTER_PAPER_SIZES:
+        printer_key = ticket_type.lower()
+    else:
+        for k, v in PRINTER_MAP.items():
+            if v.upper() == printer_name.upper():
+                printer_key = k
+                break
             
     paper_size = PRINTER_PAPER_SIZES.get(printer_key, "80mm")
     
@@ -635,13 +692,15 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     dpi_y = hDC.GetDeviceCaps(win32con.LOGPIXELSY) or 203
     
     dev_width = hDC.GetDeviceCaps(win32con.HORZRES) or hDC.GetDeviceCaps(win32con.PHYSICALWIDTH)
-    if dev_width and dev_width > 150:
-        width = dev_width
-    else:
-        width = 370 if paper_size == "58mm" else 540
-        
-    margin_left = 15 if paper_size == "58mm" else 25
-    margin_right = 15 if paper_size == "58mm" else 25
+    if paper_size == "58mm":
+        width = dev_width if (dev_width and 250 <= dev_width <= 420) else 370
+        margin_left = 10
+        margin_right = 10
+    else: # 80mm default
+        width = dev_width if (dev_width and dev_width >= 500) else 560
+        margin_left = 15
+        margin_right = 15
+
     printable_width = width - margin_left - margin_right
     job_name = f"COCINET-GDI-{paper_size}-{datetime.now().strftime('%H%M%S')}"
     
@@ -650,7 +709,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     hDC.StartPage()
     
     font_cache = {}
-    
+    pen_cache = {}
+    last_drawn_line_y = -999
+
     def get_font(name, pt_size, is_bold, is_italic=False, use_emoji_font=False):
         font_name_to_use = "Segoe UI Emoji" if (use_emoji_font or name == "Segoe UI Emoji") else name
         key = (font_name_to_use, pt_size, is_bold, is_italic)
@@ -667,10 +728,28 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         font_cache[key] = f
         return f
 
+    def get_pen(width=2, color=0):
+        key = (win32con.PS_SOLID, width, color)
+        if key in pen_cache:
+            return pen_cache[key]
+        p = win32ui.CreatePen(win32con.PS_SOLID, width, color)
+        pen_cache[key] = p
+        return p
+
+    def draw_solid_line(y_pos):
+        nonlocal last_drawn_line_y
+        if abs(y_pos - last_drawn_line_y) > 6:
+            hDC.SelectObject(get_pen(2, 0))
+            hDC.MoveTo(margin_left, y_pos)
+            hDC.LineTo(width - margin_right, y_pos)
+            last_drawn_line_y = y_pos
+            return y_pos + 8
+        return y_pos
+
     y = 20
     
-    if ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
-        y = draw_logo_on_dc(hDC, LOGO_PATH, width, y, dpi_y)
+    if ticket_type.lower() not in ["cocina", "barra"]:
+        y = draw_logo_on_dc(hDC, LOGO_PATH, printable_width, y, dpi_y, full_width=width)
     
     base_pt = FONT_SIZE_PT
     if paper_size == "58mm":
@@ -683,26 +762,61 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             expanded_lines.append(l)
             continue
             
-        item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
-        found_items = re.findall(item_split_pattern, txt, flags=re.IGNORECASE)
-        if len(found_items) > 1:
-            for item_str in found_items:
-                if item_str.strip():
-                    expanded_lines.append({**l, 'text': item_str.strip()})
-            continue
+        # Un-stick glued fiscal field headers (e.g. DDSDREGIMEN -> DDSD\nREGIMEN, CONFIANZALUGAR -> CONFIANZA\nLUGAR)
+        txt = re.sub(
+            r'([A-Z0-9])(RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|TEL|TELEFONO|TELÉFONO|METODO|MÉTODO|FORMA|PAGO)\b',
+            r'\1\n\2',
+            txt,
+            flags=re.IGNORECASE
+        )
 
-        keywords_pattern = r'(?=(?:RFC|SUC|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO)\s*:)'
-        found_parts = re.split(keywords_pattern, txt, flags=re.IGNORECASE)
-        if len(found_parts) > 1:
-            for p in found_parts:
-                if p.strip():
-                    expanded_lines.append({**l, 'text': p.strip()})
-        else:
-            expanded_lines.append(l)
-
-    header_drawn = False
-    in_table_phase = False
+        # Un-stick dashes/underscores/equals glued to text (e.g. "tacosroy100@gmail.com-----------------" -> "tacosroy100@gmail.com\n-----------------")
+        txt = re.sub(r'([^\-\_\=\s])([\-\_\=]{3,})', r'\1\n\2', txt)
+        txt = re.sub(r'([\-\_\=]{3,})([^\-\_\=\s])', r'\1\n\2', txt)
         
+        # Split text by newlines into clean individual lines
+        sub_lines = txt.split('\n')
+        for sl in sub_lines:
+            sl_clean = sl.strip()
+            if not sl_clean:
+                continue
+            item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
+            found_items = re.findall(item_split_pattern, sl_clean, flags=re.IGNORECASE)
+            if len(found_items) > 1:
+                for item_str in found_items:
+                    if item_str.strip():
+                        expanded_lines.append({**l, 'text': item_str.strip()})
+                continue
+
+            keywords_pattern = r'(?=(?:RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|METODO|MÉTODO|FORMA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO|TEL|TELÉFONO|TELEFONO)\s*:)'
+            found_parts = re.split(keywords_pattern, sl_clean, flags=re.IGNORECASE)
+            if len(found_parts) > 1:
+                combined_parts = []
+                curr_p = ""
+                for p in found_parts:
+                    p_str = p.strip()
+                    if not p_str:
+                        continue
+                    if curr_p and not re.search(r'[A-Za-z0-9]', curr_p):
+                        curr_p = f"{curr_p} {p_str}".strip()
+                    elif curr_p:
+                        combined_parts.append(curr_p)
+                        curr_p = p_str
+                    else:
+                        curr_p = p_str
+                if curr_p:
+                    combined_parts.append(curr_p)
+
+                for p in combined_parts:
+                    if p.strip():
+                        expanded_lines.append({**l, 'text': p.strip()})
+            else:
+                for sub_p in sl_clean.split('\n'):
+                    if sub_p.strip():
+                        expanded_lines.append({**l, 'text': sub_p.strip()})
+
+    pending_total_amount = None
+
     for line in expanded_lines:
         text = line['text'].strip()
         alignment = line['align']
@@ -710,12 +824,22 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         is_bold = line['bold']
         line_has_emoji = has_emoji(text)
         
-        if len(text) >= 10 and all(c in ('-', '=', '_', '*') for c in text):
-            pen = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x94a3b8)
-            hDC.SelectObject(pen)
-            hDC.MoveTo(margin_left, y + 5)
-            hDC.LineTo(width - margin_right, y + 5)
-            y += 14
+        # Omit payment line when payment is LUPAY
+        if "LUPAY" in text.upper():
+            continue
+
+        if len(text) >= 6 and all(c in ('-', '=', '_', '*', ' ', '─', '━') for c in text):
+            if pending_total_amount is not None:
+                try:
+                    letra_str = numero_a_letras(pending_total_amount)
+                    if letra_str:
+                        f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
+                        hDC.SelectObject(f_letra)
+                        y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
+                except Exception:
+                    pass
+                pending_total_amount = None
+            y = draw_solid_line(y + 4)
             continue
             
         if not text:
@@ -726,8 +850,6 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             continue
 
         clean_upper = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip().upper()
-        if clean_upper.startswith("TEL") or clean_upper.startswith("TELEFONO") or clean_upper.startswith("CEL") or clean_upper.startswith("CELULAR") or re.search(r'(?:TEL|TELEFONO|TELÉFONO|CEL|CELULAR)\s*:?\s*[0-9()-]{7,}', clean_upper):
-            continue
             
         if size_mode == 'big':
             pt = base_pt * 1.30
@@ -745,35 +867,58 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         HEADER_KEYS = [
             "MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", 
             "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", 
-            "METODO DE PAGO", "FORMA DE PAGO", "DIR", "TEL", "CELULAR", 
+            "METODO DE PAGO", "MÉTODO DE PAGO", "METODO", "MÉTODO", "FORMA DE PAGO", "FORMA", 
+            "DIR", "DIR FISCAL", "DIRECCION", "DIRECCIÓN", "TEL", "TELEFONO", "TELÉFONO", "CELULAR", 
             "CLIENTE", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", 
-            "SUC", "RFC", "DATOS DE ENVIO", "SON", "EFECTIVO", "TARJETA", 
+            "SUC", "SUCURSAL", "RFC", "DATOS DE ENVIO", "SON", "EFECTIVO", "TARJETA", 
             "TRANSFERENCIA", "DESTINO", "GRACIAS", "VISITA", "VUELVA", "OBS", 
-            "FACTURAR", "FACTURA", "REGIMEN", "LUGAR", "EXPEDICION"
+            "FACTURAR", "FACTURA", "REGIMEN", "RÉGIMEN", "REGIMEN FISCAL", "RÉGIMEN FISCAL",
+            "LUGAR", "LUGAR EXPEDICION", "LUGAR DE EXPEDICIÓN", "C.P.", "CP"
         ]
         
         first_word = re.sub(r'[^A-Z]', '', clean_upper.split(':')[0]) if ':' in clean_upper else (re.sub(r'[^A-Z]', '', clean_upper.split()[0]) if clean_upper else "")
         is_header_keyword = any(first_word == k or first_word.startswith(k) for k in HEADER_KEYS)
         
         has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
-        has_price = bool(re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', text))
+        has_price = bool(re.search(r'\$\s*[0-9]+(?:\.[0-9]{1,2})?\s*$', text)) or bool(re.search(r'\s+[0-9]+\.[0-9]{2}\s*$', text))
         
         is_item_line = bool(
             not is_header_keyword and
-            (has_qty or has_price) and
+            (has_qty or (has_price and not any(k in clean_upper for k in ["C.P.", "CP", "TEL", "RFC", "FOLIO", "MESA", "HORA", "FECHA", "REGIMEN", "RÉGIMEN", "PAGO", "CAMBIO", "SUBTOTAL", "TOTAL", "SUC"]))) and
             not any(c in ('-', '=', '_', '*') for c in text)
         )
 
-        if is_item_line and not header_drawn and ticket_type.lower() in ["cuentas", "cuenta", "precuenta"]:
+        if "DETALLE DEL PEDIDO" in clean_upper or "DETALLE DE PEDIDO" in clean_upper:
+            if ticket_type.lower() not in ["cocina", "barra"] and not header_drawn:
+                header_drawn = True
+                in_table_phase = True
+                y += 4
+                f_section = get_font(FONT_NAME, base_pt * 1.05, True, use_emoji_font=True)
+                hDC.SelectObject(f_section)
+                sec_title = "📝 DETALLE DEL PEDIDO 📝"
+                w_st, h_st = hDC.GetTextExtent(sec_title)
+                x_st = max(margin_left, (width - w_st) // 2)
+                hDC.TextOut(x_st, y, sec_title)
+                y += h_st + 6
+
+                y = draw_solid_line(y + 2)
+                
+                fh = get_font(FONT_NAME, base_pt * 0.88, True)
+                hDC.SelectObject(fh)
+                hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
+                w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
+                x_imp = width - margin_right - w_imp
+                hDC.TextOut(x_imp, y, "IMPORTE")
+                y += h_imp + 4
+                
+                y = draw_solid_line(y + 2)
+            continue
+
+        if is_item_line and not header_drawn and ticket_type.lower() not in ["cocina", "barra"]:
             header_drawn = True
             in_table_phase = True
             
-            y += 6
-            pen_tbl = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
-            hDC.SelectObject(pen_tbl)
-            hDC.MoveTo(margin_left, y + 2)
-            hDC.LineTo(width - margin_right, y + 2)
-            y += 8
+            y = draw_solid_line(y + 2)
             
             fh = get_font(FONT_NAME, base_pt * 0.88, True)
             hDC.SelectObject(fh)
@@ -783,9 +928,11 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.TextOut(x_imp, y, "IMPORTE")
             y += h_imp + 4
             
-            hDC.MoveTo(margin_left, y + 2)
-            hDC.LineTo(width - margin_right, y + 2)
-            y += 10
+            y = draw_solid_line(y + 2)
+
+        if not is_item_line and in_table_phase:
+            in_table_phase = False
+            y = draw_solid_line(y + 2)
 
         if is_item_line:
             desc = text.strip()
@@ -813,6 +960,9 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 pr_w, pr_h = hDC.GetTextExtent(imp_str)
                 x_right = max(margin_left + 120, width - margin_right - pr_w)
                 hDC.TextOut(x_right, y, imp_str)
+            else:
+                pr_w, pr_h = 0, int(pt * dpi_y / 72)
+                x_right = width - margin_right
                 
             desc_w = width - margin_left - margin_right - (pr_w + 15 if imp_str else 0)
             prefix = f"{qty_val}x " if qty_str else ""
@@ -838,83 +988,116 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             else:
                 formatted_dt = text
 
-            f_dt = get_font(FONT_NAME, pt * 1.05, True, use_emoji_font=True)
+            f_dt = get_font(FONT_NAME, pt * 0.92, True, use_emoji_font=True)
             hDC.SelectObject(f_dt)
             y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
             continue
         
-        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|FORMA DE PAGO|PAGO|CAMBIO|ATENDIDO POR|MESERO|MESA|FACTURAR|FACTURA)\s*:?\s*(.*)$', text, re.IGNORECASE)
-        has_total_keyword = bool(total_match or ("TOTAL" in text.upper() and "SUBTOTAL" not in text.upper()))
+        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|MÉTODO DE PAGO|FORMA DE PAGO|METODO|MÉTODO|PAGO|CAMBIO|FACTURAR|FACTURA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+        has_total_keyword = bool(total_match or "TOTAL" in text.upper() or "SUBTOTAL" in text.upper())
         
         if has_total_keyword:
-            if in_table_phase:
-                in_table_phase = False
-                pen_end = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x334155)
-                hDC.SelectObject(pen_end)
-                hDC.MoveTo(margin_left, y + 2)
-                hDC.LineTo(width - margin_right, y + 2)
-                y += 12
+            if "SUBTOTAL" in text.upper() or ("TOTAL" in text.upper() and not any(k in text.upper() for k in ["PAGADO", "CAMBIO", "PROPINA"])):
+                y = draw_solid_line(y + 2)
 
             if total_match:
                 match_keyword = total_match.group(1).upper()
-                if "PAGADO CON" in match_keyword or "PAGO CON" in match_keyword or "METODO" in match_keyword or "FORMA" in match_keyword:
-                    label = "💳 PAGO CON:"
+                val = total_match.group(2).strip()
+                if any(k in match_keyword for k in ["PAGADO CON", "PAGO CON"]):
+                    label = "💵 PAGADO CON:"
                 elif "PAGADO" in match_keyword:
-                    label = "PAGADO:"
-                elif "PAGO" in match_keyword:
-                    label = "💳 PAGO CON:"
+                    label = "💵 PAGADO CON:"
+                elif any(k in match_keyword for k in ["METODO", "MÉTODO", "FORMA", "PAGO"]):
+                    clean_val = (val or match_keyword).upper()
+                    if "DÉBITO" in clean_val or "DEBITO" in clean_val:
+                        label = "💳 TARJETA DÉBITO"
+                    elif "CRÉDITO" in clean_val or "CREDITO" in clean_val:
+                        label = "💳 TARJETA CRÉDITO"
+                    elif "EFECTIVO" in clean_val or "CASH" in clean_val:
+                        label = "💵 EFECTIVO"
+                    elif "TRANSFERENCIA" in clean_val or "TRANSFER" in clean_val:
+                        label = "💸 TRANSFERENCIA"
+                    elif "LUPAY" in clean_val:
+                        label = "📲 LUPAY"
+                    elif "TARJETA" in clean_val:
+                        label = "💳 TARJETA"
+                    elif clean_val and clean_val not in ["PAGO", "METODO", "MÉTODO"]:
+                        label = f"💳 {clean_val}"
+                    else:
+                        label = "💳 TARJETA"
+                    val = ""
+                elif "CAMBIO" in match_keyword:
+                    label = "🪙 CAMBIO:"
                 elif "FACTURAR" in match_keyword or "FACTURA" in match_keyword:
                     label = "🧾 REQUIERE FACTURA"
                     val = ""
                 else:
                     label = match_keyword + ":"
-                val = total_match.group(2).strip()
             else:
                 parts = text.split(":", 1)
                 label = parts[0].strip().upper() + ":"
                 val = parts[1].strip() if len(parts) > 1 else ""
 
-            is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳 PAGO") and not label.startswith("PAGO")
+            is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳") and not label.startswith("💵") and not label.startswith("🪙")
             
             lbl_pt = pt * 1.15 if is_total_label else pt
             if is_total_label:
-                lbl_str = "TOTAL A PAGAR:"
+                lbl_str = "TOTAL:"
+            elif label.startswith("💳") or label.startswith("💵") or label.startswith("💸") or label.startswith("📲"):
+                lbl_str = label
+                lbl_pt = pt * 1.25
             else:
                 lbl_str = label
-            fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold, use_emoji_font=has_emoji(lbl_str))
+            fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold or label.startswith("💳") or label.startswith("💵"), use_emoji_font=has_emoji(lbl_str))
             hDC.SelectObject(fl)
             
-            lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
-            x_lbl = margin_left
-            hDC.TextOut(x_lbl, y, lbl_str)
-            
-            val_pt = pt * 1.25 if is_total_label else pt
-            fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
-            hDC.SelectObject(fb)
-            val_width, val_height = hDC.GetTextExtent(val)
-            x_val = max(margin_left + lbl_w + 10, width - margin_right - val_width)
-            hDC.TextOut(x_val, y, val)
-            y += max(lbl_h, val_height) + 6
+            if val:
+                lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
+                x_lbl = margin_left
+                hDC.TextOut(x_lbl, y, lbl_str)
+                
+                val_pt = pt * 1.25 if is_total_label else pt
+                fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
+                hDC.SelectObject(fb)
+                val_width, val_height = hDC.GetTextExtent(val)
+                x_val = max(margin_left + lbl_w + 10, width - margin_right - val_width)
+                hDC.TextOut(x_val, y, val)
+                y += max(lbl_h, val_height) + 6
+            else:
+                y = wrap_and_draw_text(hDC, lbl_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=4)
             
             if is_total_label:
-                monto_match = re.search(r'([0-9.,]+)', val)
+                monto_match = re.search(r'([0-9.,]+)', val) or re.search(r'([0-9.,]+)', text)
                 if monto_match:
                     try:
                         monto_clean = float(monto_match.group(1).replace(',', ''))
-                        letra_str = numero_a_letras(monto_clean)
-                        if letra_str:
-                            f_letra = get_font(FONT_NAME, base_pt * 0.82, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
-                            hDC.SelectObject(f_letra)
-                            y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
-                            
-                            pen_tot = win32ui.CreatePen(win32con.PS_SOLID, 2, 0x475569)
-                            hDC.SelectObject(pen_tot)
-                            hDC.MoveTo(margin_left, y + 2)
-                            hDC.LineTo(width - margin_right, y + 2)
-                            y += 12
-                    except Exception as ex_l:
-                        notify_step("CONVERT_ERROR", f"Error convirtiendo total a letra: {ex_l}", status="WARNING")
+                        pending_total_amount = monto_clean
+                    except Exception:
+                        pass
+            elif pending_total_amount is not None:
+                try:
+                    letra_str = numero_a_letras(pending_total_amount)
+                    if letra_str:
+                        f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
+                        hDC.SelectObject(f_letra)
+                        y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
+                        y = draw_solid_line(y + 4)
+                except Exception as ex_l:
+                    notify_step("CONVERT_ERROR", f"Error convirtiendo total a letra: {ex_l}", status="WARNING")
+                pending_total_amount = None
             continue
+
+        if pending_total_amount is not None:
+            try:
+                letra_str = numero_a_letras(pending_total_amount)
+                if letra_str:
+                    f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
+                    hDC.SelectObject(f_letra)
+                    y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
+                    y = draw_solid_line(y + 4)
+            except Exception:
+                pass
+            pending_total_amount = None
 
         if text.startswith('*') or text.startswith('>'):
             f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
@@ -926,6 +1109,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
         hDC.SelectObject(f_line)
         y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
         
+    y += 90
     hDC.EndPage()
     hDC.EndDoc()
     hDC.DeleteDC()
@@ -976,21 +1160,7 @@ def download_sentinel_file(filename):
 def get_status():
     global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT
     config_printers = load_printer_config()
-    PRINTER_MAP = config_printers["PRINTER_MAP"]
-    PRINTER_PAPER_SIZES = config_printers["PRINTER_PAPER_SIZES"]
-    LOGO_PATH = config_printers["LOGO_PATH"]
-    FONT_NAME = config_printers["FONT_NAME"]
-    FONT_SIZE_PT = config_printers["FONT_SIZE_PT"]
-
-    installed = get_installed_printers()
-    mapped = {
-        key: {
-            "windows_name": win_name,
-            "paper_size": PRINTER_PAPER_SIZES.get(key, "80mm"),
-            "available": any(p.upper() == win_name.upper() for p in installed),
-        }
-        for key, win_name in PRINTER_MAP.items()
-    }
+    PRINTER_MAP = config_printers.get("PRINTER_MAP", {})
     return jsonify({
         "status": "online",
         "service": "COCINET Print Sentinel",
@@ -999,8 +1169,6 @@ def get_status():
         "print_mode": PRINT_MODE,
         "ws_clients": len(ws_clients),
         "config": config_printers,
-        "installed_printers": installed,
-        "mapped_printers": mapped,
     })
 
 @app.route("/printers", methods=["GET"])
@@ -1051,34 +1219,35 @@ def test_print():
         GS  = b"\x1d"
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-        test_bytes = (
-            ESC + b"@"
-            + ESC + b"a\x01"
-            + ESC + b"!\x18"
-            + "🌮 TACOS ROY AZUCENAS 🌮\n".encode("utf-8")
-            + ESC + b"!\x00"
-            + "=== TICKET PRO GDI VECTORIAL ===\n\n".encode("utf-8")
-            + ESC + b"a\x00"
-            + f"Impresora : {printer_name}\n".encode("utf-8")
-            + f"Sentinel  : v{VERSION} (Puerto {PORT})\n".encode("utf-8")
-            + f"Fecha     : {now}\n".encode("utf-8")
-            + "Atendio   : BLADIMIR (ADMIN) 👤\n".encode("utf-8")
-            + "----------------------------------------\n".encode("utf-8")
-            + "2 x 🌮 TACOS AL PASTOR      $100.00\n".encode("utf-8")
-            + "  * Con todo y salsa verde\n".encode("utf-8")
-            + "1 x 🍺 CERVEZA ARTESANAL    $80.00\n".encode("utf-8")
-            + "1 x 🍹 MARGARITA AZUL       $95.50\n".encode("utf-8")
-            + "----------------------------------------\n".encode("utf-8")
-            + "SUBTOTAL: $275.50\n".encode("utf-8")
-            + "PROPINA (10%): $27.55\n".encode("utf-8")
-            + "TOTAL: $303.05\n".encode("utf-8")
-            + "----------------------------------------\n".encode("utf-8")
-            + ESC + b"a\x01"
-            + "¡Gracias por su preferencia! ⭐\n".encode("utf-8")
-            + "Facturacion: www.cocinet.app 🌐\n".encode("utf-8")
-            + "\n\n\n"
-            + GS + b"V\x41\x03"
-        )
+        parts = [
+            ESC + b"@",
+            ESC + b"a\x01",
+            ESC + b"!\x18",
+            "🌮 TACOS ROY AZUCENAS 🌮\n".encode("utf-8"),
+            ESC + b"!\x00",
+            "=== TICKET PRO GDI VECTORIAL ===\n\n".encode("utf-8"),
+            ESC + b"a\x00",
+            f"Impresora : {printer_name}\n".encode("utf-8"),
+            f"Sentinel  : v{VERSION} (Puerto {PORT})\n".encode("utf-8"),
+            f"Fecha     : {now}\n".encode("utf-8"),
+            "Atendio   : BLADIMIR (ADMIN) 👤\n".encode("utf-8"),
+            "----------------------------------------\n".encode("utf-8"),
+            "2 x 🌮 TACOS AL PASTOR      $100.00\n".encode("utf-8"),
+            "  * Con todo y salsa verde\n".encode("utf-8"),
+            "1 x 🍺 CERVEZA ARTESANAL    $80.00\n".encode("utf-8"),
+            "1 x 🍹 MARGARITA AZUL       $95.50\n".encode("utf-8"),
+            "----------------------------------------\n".encode("utf-8"),
+            "SUBTOTAL: $275.50\n".encode("utf-8"),
+            "PROPINA (10%): $27.55\n".encode("utf-8"),
+            "TOTAL: $303.05\n".encode("utf-8"),
+            "----------------------------------------\n".encode("utf-8"),
+            ESC + b"a\x01",
+            "¡Gracias por su preferencia! ⭐\n".encode("utf-8"),
+            "Facturacion: www.cocinet.app 🌐\n".encode("utf-8"),
+            b"\n\n\n",
+            GS + b"V\x41\x03"
+        ]
+        test_bytes = b"".join(parts)
 
         print_data(printer_name, test_bytes, ticket_type=printer_key)
         notify_step("4_COMPLETE_TEST", f"🎉 Página de prueba emitida correctamente en [{printer_name}]", status="SUCCESS")
@@ -1118,63 +1287,26 @@ def diag_print():
         add_log(err_msg)
         return jsonify({"success": False, "logs": logs, "error": str(e)}), 500
 
-# ─── Deduplicación por Hash ───────────────────────────────────────
+# ─── Deduplicación por Hash en Memoria RAM ─────────────────────────
+_recent_ticket_hashes = {}
+
 def generar_hash(raw_bytes: bytes) -> str:
     return hashlib.md5(raw_bytes).hexdigest()
 
 def check_duplicate_and_register(raw_bytes: bytes, job_id: str = None) -> bool:
     ticket_hash = generar_hash(raw_bytes)
-    db_path = os.path.join(BASE_DIR, "restaurant.db")
+    now = time.time()
     
-    try:
-        conn = sqlite3.connect(db_path, timeout=30)
-        cursor = conn.cursor()
+    # Limpiar hashes de más de 8 segundos
+    expired = [h for h, t in list(_recent_ticket_hashes.items()) if now - t > 8]
+    for h in expired:
+        _recent_ticket_hashes.pop(h, None)
         
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS print_queue (
-                id TEXT PRIMARY KEY,
-                printer_key TEXT NOT NULL,
-                raw_data TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                hash TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                printed_at TIMESTAMP
-            )
-        """)
-        conn.commit()
+    if ticket_hash in _recent_ticket_hashes:
+        return True
         
-        cursor.execute("""
-            SELECT id FROM print_queue 
-            WHERE hash=? AND status='printed' AND printed_at > datetime('now', '-10 seconds')
-        """, (ticket_hash,))
-        
-        row = cursor.fetchone()
-        if row:
-            if job_id:
-                cursor.execute("""
-                    UPDATE print_queue 
-                    SET status='duplicate', updated_at=CURRENT_TIMESTAMP 
-                    WHERE id=?
-                """, (job_id,))
-                conn.commit()
-            conn.close()
-            return True
-            
-        if not job_id:
-            new_id = f"http-{int(time.time() * 1000)}-{ticket_hash[:8]}"
-            raw_data_encoded = urllib.parse.quote_from_bytes(raw_bytes)
-            cursor.execute("""
-                INSERT INTO print_queue (id, printer_key, raw_data, status, hash, printed_at)
-                VALUES (?, 'http_api', ?, 'printed', ?, CURRENT_TIMESTAMP)
-            """, (new_id, raw_data_encoded, ticket_hash))
-            conn.commit()
-            
-        conn.close()
-        return False
-    except Exception as e:
-        notify_step("DUP_CHECK_ERROR", f"Error en validación de deduplicación: {e}", status="WARNING")
-        return False
+    _recent_ticket_hashes[ticket_hash] = now
+    return False
 
 # ─── Polling DB ───────────────────────────────────────────────────
 def db_polling_loop():
