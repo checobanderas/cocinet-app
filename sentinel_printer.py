@@ -1450,8 +1450,24 @@ def run_console():
     except KeyboardInterrupt:
         print("\n  Servidor detenido por consola.")
 
+def purge_legacy_cocinet_services():
+    """Purga cualquier servicio legacy de Cocinet que no sea el oficial CocinetPrinterSentinel."""
+    try:
+        ps_cmd = 'powershell -Command "Get-Service *Cocinet* | Select-Object -ExpandProperty Name"'
+        res = subprocess.run(ps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=10)
+        found = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        for s in found:
+            if s and s != "CocinetPrinterSentinel":
+                subprocess.run(f'sc stop "{s}"', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(f'sc delete "{s}"', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(f'reg delete "HKLM\\SYSTEM\\CurrentControlSet\\Services\\{s}" /f', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         run_console()
     else:
+        if any(arg.lower() in ["install", "--install"] for arg in sys.argv):
+            purge_legacy_cocinet_services()
         win32serviceutil.HandleCommandLine(CocinetPrinterService)
