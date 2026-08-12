@@ -114,14 +114,33 @@ def run_command(args, step_name, ignore_error=False):
     except Exception:
         return ignore_error
 
+def purge_all_cocinet_services():
+    run_command("taskkill /F /IM pythonservice.exe", "Cierre pythonservice.exe", ignore_error=True)
+    run_command("taskkill /F /IM mmc.exe", "Cierre consola servicios mmc.exe", ignore_error=True)
+    time.sleep(1.0)
+    known = ["CocinetPrinterSentinel", "CocinetSentinel", "CocinetPrinterService", "CocinetPrintSentinel", "CocinetPrinter"]
+    try:
+        res = subprocess.run('powershell -Command "Get-Service *Cocinet* | Select-Object -ExpandProperty Name"', stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=10)
+        for s in res.stdout.splitlines():
+            s = s.strip()
+            if s and s not in known:
+                known.append(s)
+    except Exception:
+        pass
+    for s_name in known:
+        run_command(f'sc stop "{s_name}"', f"Detener {s_name}", ignore_error=True)
+        run_command(f'sc delete "{s_name}"', f"Eliminar {s_name}", ignore_error=True)
+        run_command(f'reg delete "HKLM\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\{s_name}" /f', f"Limpieza registro {s_name}", ignore_error=True)
+    run_command("taskkill /F /IM pythonservice.exe", "Limpieza final pythonservice", ignore_error=True)
+    time.sleep(2.0)
+
 def main():
     print_banner()
     if not is_admin():
         elevate_privileges()
         sys.exit(0)
 
-    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" stop', "Detener servicio", ignore_error=True)
-    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" remove', "Eliminar servicio", ignore_error=True)
+    purge_all_cocinet_services()
     run_command(f'"{sys.executable}" -m pip install --upgrade pywin32 Flask flask-cors pillow', "Instalar dependencias", ignore_error=True)
     run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" install', "Registrar Servicio")
     run_command(f'sc config {SERVICE_NAME} start= auto', "Modo automático", ignore_error=True)

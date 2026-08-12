@@ -9,21 +9,9 @@ if !errorlevel! neq 0 (
 )
 cd /d "%~dp0"
 echo =======================================================
-echo   DESINSTALANDO Y REINSTALANDO SERVICIO COCINET SENTINEL
+echo   PURGANDO SERVICIOS LEGACY Y REINSTALANDO SENTINEL
 echo =======================================================
-python sentinel_printer.py stop
-sc stop CocinetPrinterSentinel
-sc delete CocinetPrinterSentinel
-taskkill /F /IM pythonservice.exe
-timeout /t 2 /nobreak >nul
-
-echo.
-echo Instalando nuevo servicio desde: %cd%
-python sentinel_printer.py --startup auto install
-sc config CocinetPrinterSentinel start= auto
-python sentinel_printer.py start
-sc start CocinetPrinterSentinel
-echo.
+python "%~dp0instalador_sentinela.py"
 echo =======================================================
 echo   SERVICIO REINSTALADO Y REINICIADO CON ÉXITO
 echo =======================================================

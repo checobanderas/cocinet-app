@@ -289,6 +289,49 @@ def configure_printer_sizes(target_dir, env_mode="production"):
     except Exception as e:
         print(f"⚠️ [AVISO] No se pudo escribir el archivo de configuración ({e}).")
 
+def purge_all_cocinet_services():
+    """Busca, detiene y elimina TODOS los servicios de Windows anteriores o duplicados que contengan 'Cocinet' y libera handles bloqueados (servicios fantasma)."""
+    print("\n" + "="*80)
+    print("🧹 [PURGA TOTAL] Eliminando servicios duplicados y liberando bloqueos de 'Cocinet'...")
+    print("="*80)
+    
+    # 1. Cerrar procesos que bloquean el SCM (pythonservice.exe y mmc.exe / Consola de Servicios)
+    # Esto soluciona de raíz el error 'Servicio marcado para eliminación' (Servicio Fantasma)
+    run_command("taskkill /F /IM pythonservice.exe", "Cierre de procesos pythonservice.exe", ignore_error=True)
+    run_command("taskkill /F /IM mmc.exe", "Cierre de Consola de Servicios de Windows (mmc.exe)", ignore_error=True)
+    time.sleep(1.0)
+    
+    # 2. Descubrir TODOS los nombres de servicios en Windows que tengan 'Cocinet' en su nombre o DisplayName
+    known_services = [
+        "CocinetPrinterSentinel",
+        "CocinetSentinel",
+        "CocinetPrinterService",
+        "CocinetPrintSentinel",
+        "CocinetPrinter"
+    ]
+    
+    try:
+        ps_cmd = 'powershell -Command "Get-Service *Cocinet* | Select-Object -ExpandProperty Name"'
+        res = subprocess.run(ps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=10)
+        found = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        for s in found:
+            if s and s not in known_services:
+                known_services.append(s)
+    except Exception:
+        pass
+
+    # 3. Detener, eliminar y borrar clave de registro HKLM para cada servicio hallado
+    for s_name in known_services:
+        print(f"  🗑️ Limpiando servicio previo/fantasma: '{s_name}'...")
+        run_command(f'sc stop "{s_name}"', f"Detener {s_name}", ignore_error=True)
+        run_command(f'sc delete "{s_name}"', f"Eliminar {s_name}", ignore_error=True)
+        run_command(f'reg delete "HKLM\\SYSTEM\\CurrentControlSet\\Services\\{s_name}" /f', f"Purga de registro HKLM para {s_name}", ignore_error=True)
+
+    # 4. Asegurar que pythonservice.exe no haya quedado vivo
+    run_command("taskkill /F /IM pythonservice.exe", "Limpieza final de pythonservice.exe", ignore_error=True)
+    time.sleep(2.0)
+    print("✅ [PURGA OK] Registro de servicios purgado y liberado correctamente.\n")
+
 def main():
     parser = argparse.ArgumentParser(description="Instalador del Servicio Sentinela de Impresión")
     parser.add_argument("--env", choices=["production", "testing"], default="production", help="Ambiente de ejecucion")
@@ -321,19 +364,8 @@ def main():
     # Cambiar al directorio del script para evitar fallos de rutas relativas
     os.chdir(os.path.dirname(sentinel_path))
 
-    # 3. Detener y cerrar forzadamente cualquier servicio o proceso previo del Sentinela
-    print("🛑 [PROCESANDO] Deteniendo y liberando memoria del Sentinela previo...")
-    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" stop', "Detener servicio mediante script", ignore_error=True)
-    run_command(f'sc stop {SERVICE_NAME}', "Detener servicio mediante SCM de Windows", ignore_error=True)
-    run_command('taskkill /F /FI "SERVICES eq COCINETPrintSentinel"', "Cierre forzado por SCM", ignore_error=True)
-    run_command('taskkill /F /IM pythonservice.exe', "Cierre forzado de pythonservice.exe", ignore_error=True)
-    time.sleep(2.0)
-
-    # 4. Desinstalar servicio existente
-    print("🗑️ [PROCESANDO] Limpiando registro del servicio previo de Windows...")
-    run_command(f'"{sys.executable}" "{SENTINEL_SCRIPT}" remove', "Eliminar servicio mediante script", ignore_error=True)
-    run_command(f'sc delete {SERVICE_NAME}', "Eliminar servicio mediante SCM de Windows", ignore_error=True)
-    time.sleep(1.5)
+    # 3. Purga completa de servicios legacy y fantasma de Cocinet
+    purge_all_cocinet_services()
 
     # 5. Instalar/Actualizar Dependencias del Sistema
     print("📦 [PROCESANDO] Instalando y actualizando librerías de Python requeridas...")
