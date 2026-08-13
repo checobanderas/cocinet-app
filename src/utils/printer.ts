@@ -258,9 +258,8 @@ export async function createTransport(
   const settings = getTenantPrinterSettings(tId);
   const areaConfig = settings[area] || { mode: isWindows() ? "windows" : "rawbt", printerName: area, windowsPort: "3010" };
 
-  // En Windows, si WebBluetooth no está conectado y no es RawBT explícito, enviar al Sentinela local (puerto 3010)
-  if (isWindows() && areaConfig.mode !== "rawbt" && !WebBluetoothTransport.isConnected(area)) {
-    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
+  if (isWindows()) {
+    return new WindowsSpoolerTransport(area, "3010", areaConfig.printerName || area, tId);
   }
 
   if (areaConfig.mode === "disabled") {
