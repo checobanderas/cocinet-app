@@ -1,8 +1,8 @@
 {
     "PRINTER_MAP": {
         "cuentas": "CUENTAS",
-        "cocina": "d",
-        "barra": "d"
+        "cocina": "OneNote (Desktop)",
+        "barra": "OneNote (Desktop)"
     },
     "PRINTER_PAPER_SIZES": {
         "cuentas": "80mm",
@@ -11,7 +11,7 @@
     },
     "LOGO_PATH": "C:\\buzon\\logoroy.png",
     "FONT_NAME": "Arial",
-    "FONT_SIZE_PT": 11.0,
+    "FONT_SIZE_PT": 14.0,
     "ENVIRONMENT": "production",
     "DEBUG_VERBOSE": false,
     "DB_PATH": "restaurant.db",

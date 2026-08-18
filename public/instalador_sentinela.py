@@ -420,8 +420,9 @@ def main():
         input("\nPresiona Enter para salir...")
         sys.exit(1)
 
-    # Configurar el servicio para que se inicie de forma automática en Windows
+    # Configurar el servicio para que se inicie de forma automática en Windows y se reinicie automáticamente ante fallas
     run_command(f'sc config {SERVICE_NAME} start= auto', "Configurar servicio en modo automático", ignore_error=True)
+    run_command(f'sc failure {SERVICE_NAME} reset= 0 actions= restart/60000/restart/60000/restart/60000', "Configurar opciones de recuperación de servicio (Reinicio automático)", ignore_error=True)
 
     # 8. Iniciar el servicio de Windows
     print("⚡ [PROCESANDO] Inicializando el servicio en segundo plano de Windows...")

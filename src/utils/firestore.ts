@@ -1004,6 +1004,19 @@ export async function checkoutTableInFirebase(
     );
   }
 
+  // Enviar copia de seguridad silenciosa (Caja Negra) al Sentinela Local (puerto 3010)
+  try {
+    const payload = { ...closedAccount, tenantId: currentTenant };
+    const sentinelUrl = await import("./printer").then(m => m.getSentinelUrl(currentTenant));
+    fetch(`${sentinelUrl}/backup-sale`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).catch(e => console.warn("Sentinela local no disponible para respaldo:", e));
+  } catch (e) {
+    // Ignorar errores silenciosamente para no interrumpir el flujo normal
+  }
+
   await runWrite(batch.commit());
 }
 

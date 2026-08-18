@@ -971,7 +971,12 @@ export default function App() {
               localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
             }
 
-            setAppMode(loggedUser.role === "mesero" ? "floorplan" : "corte-tabla");
+            const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+            if (loggedUser.role === "admin" || loggedUser.id.endsWith("-sistemas")) {
+              setAppMode("corte-tabla");
+            } else {
+              setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+            }
             setLoginSubStep("tenant");
             
             // Set URL token flag
@@ -1173,7 +1178,12 @@ export default function App() {
             };
             setCurrentUser((prev) => {
               if (!prev || prev.id !== autoUser.id || prev.role !== autoUser.role) {
-                setAppMode(autoUser.role === "mesero" ? "floorplan" : "corte-tabla");
+                const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+                if (autoUser.role === "admin" || autoUser.id.endsWith("-sistemas")) {
+                  setAppMode("corte-tabla");
+                } else {
+                  setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+                }
                 return autoUser;
               }
               return prev;
@@ -2960,11 +2970,12 @@ export default function App() {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) {}
 
-      // Redirect based on role
-      if (matchedUser.role === "mesero") {
-        setAppMode("floorplan");
-      } else {
+      // Redirect based on role and screen orientation
+      const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+      if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
         setAppMode("corte-tabla");
+      } else {
+        setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
       }
     } else {
       const nextAttempts = pinAttempts + 1;
@@ -5266,7 +5277,12 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (e) {}
 
-        setAppMode("corte-tabla");
+        const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+        if (adminUser && (adminUser.role === "admin" || adminUser.id.endsWith("-sistemas"))) {
+          setAppMode("corte-tabla");
+        } else {
+          setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+        }
         triggerAppNotification(
           "🏢 Acceso Autorizado",
           `Conectado a la sucursal: ${company.name} ⭐ (Cargando datos en vivo)`,
@@ -8136,7 +8152,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   const [corteFilterUserId, setCorteFilterUserId] = useState<string>("ALL");
   const [corteTablaSessionSelected, setCorteTablaSessionSelected] =
     useState<CashierSession | null>(null);
-  const [corteViewMode, setCorteViewMode] = useState<"current" | "history">("history");
+  const [corteViewMode, setCorteViewMode] = useState<"current" | "history">("current");
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [newPinInput, setNewPinInput] = useState("");
   const [historySortOrder, setHistorySortOrder] = useState<"desc" | "asc">("desc");
@@ -9464,8 +9480,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     onBack?: () => void;
     showMenu?: boolean;
     actions?: React.ReactNode;
+    minimal?: boolean;
   }) => {
-    const { title, subtitle, showBack = false, onBack, showMenu = true, actions } = options;
+    const { title, subtitle, showBack = false, onBack, showMenu = true, actions, minimal = false } = options;
     const currentOpDay = getOperatingDay(new Date());
     const unreadCount = notificationsList.filter(
       (n) => !n.read && getOperatingDay(n.createdAt ? new Date(n.createdAt) : new Date()) === currentOpDay
@@ -9527,7 +9544,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
               {actions}
 
               {/* Notifications Button */}
-              {currentUser && (
+              {!minimal && currentUser && (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -9545,7 +9562,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
               )}
 
               {/* Branch indicator & Switcher button */}
-              {selectedTenant && (
+              {!minimal && selectedTenant && (
                 <div className="flex items-center gap-1.5">
                   <div className="hidden sm:flex items-center px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
                     <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
@@ -9568,7 +9585,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                 </div>
               )}
 
-              {currentUser && (
+              {!minimal && currentUser && (
                 <div className="hidden md:flex flex-col items-end text-right leading-none gap-0.5">
                   <span className="text-[11px] font-black text-slate-200">{currentUser.name}</span>
                   <span className="text-[8px] font-black uppercase text-amber-500 tracking-wider">
@@ -9578,7 +9595,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
               )}
 
               {/* Quick switch profile 👤🔄 */}
-              {currentUser && (
+              {!minimal && currentUser && (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -9596,7 +9613,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
               )}
 
               {/* Logout Button (Cerrar Sesión) */}
-              {currentUser && (
+              {!minimal && currentUser && (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -12455,7 +12472,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const generateOrder = async (goToCheckout: boolean = false) => {
-    if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+    if (cart.length === 0) { alert("El carrito está vacío"); return; }
+    if (!selectedTable) { alert("Mesa no seleccionada (selectedTable es nulo)"); return; }
+    if (isGeneratingOrder) { console.log("Ya se está generando la orden"); return; }
     setIsGeneratingOrder(true);
 
     // Si la mesa ya tiene un folio interno asignado en esta sesión, se reutiliza directamente sin pedirlo de nuevo
@@ -12542,7 +12561,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const executeGenerateOrder = async (folioInterno: string, goToCheckout: boolean = false) => {
-    if (cart.length === 0 || !selectedTable || isGeneratingOrder) return;
+    if (cart.length === 0) { alert("execute: El carrito está vacío"); return; }
+    if (!selectedTable) { alert("execute: Mesa no seleccionada"); return; }
+    if (isGeneratingOrder) { console.log("execute: Ya se está generando la orden"); return; }
     setIsGeneratingOrder(true);
     setMenuToastMessage("Procesando comanda...");
     setShowMenuToast(true);
@@ -16891,10 +16912,11 @@ Instrucciones:
 
     return (
       <IonPage>
-      {renderMaterialHeader({
+      {appMode !== "gestion_cuentas" && renderMaterialHeader({
         title: `Mesa ${selectedTable?.label || "S/N"}`,
         subtitle: `Tomando pedido: ${currentUser?.name || "Mesero"}`,
         showBack: true,
+        minimal: appMode === "gestion_cuentas",
         onBack: () => appMode === "gestion_cuentas" ? setSelectedTableGestion(null) : setAppMode("floorplan"),
         actions: isOnline ? (
           <motion.button
@@ -18644,10 +18666,11 @@ Instrucciones:
 
     return (
       <IonPage>
-        <IonHeader className="ion-no-border">
-          <IonToolbar
-            style={{ "--background": "rgb(40, 45, 52)", "--color": "white" }}
-          >
+        {appMode !== "gestion_cuentas" && (
+          <IonHeader className="ion-no-border">
+            <IonToolbar
+              style={{ "--background": "rgb(40, 45, 52)", "--color": "white" }}
+            >
             <IonButtons slot="start">
               <IonButton onClick={() => setAppMode("menu")}>
                 <IonIcon icon={arrowBackOutline} slot="icon-only" />
@@ -18694,6 +18717,7 @@ Instrucciones:
             </IonButtons>
           </IonToolbar>
         </IonHeader>
+        )}
         <IonContent style={{ "--background": "#f1f5f9" }}>
           {/* Standardized Comensal Selector */}
           <div
@@ -19256,7 +19280,7 @@ Instrucciones:
 
     return (
       <IonPage>
-      {renderMaterialHeader({
+      {appMode !== "gestion_cuentas" && renderMaterialHeader({
         title: `Mesa ${selectedTable?.label || "S/N"}`,
         subtitle: (() => {
           const activeWaiterNames = Array.from(
@@ -19271,6 +19295,7 @@ Instrucciones:
             : `Atendido por: ${currentUser?.name || "Sin registrar"}`;
         })(),
         showBack: true,
+        minimal: appMode === "gestion_cuentas",
         onBack: () => {
           if (appMode === "gestion_cuentas") {
             setSelectedTableGestion(null);
@@ -19860,7 +19885,7 @@ Instrucciones:
                   </IonButton>
                 </div>
                 
-                {currentUser?.role !== "mesero" && (
+                {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
                   <>
                     <IonButton
                       expand="block"
@@ -19961,7 +19986,7 @@ Instrucciones:
                 )}
               </div>
 
-              {currentUser?.role !== "mesero" && (
+              {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
                 <IonButton
                   expand="block"
                   color="success"
@@ -29364,7 +29389,7 @@ Instrucciones:
                   </div>
                 </div>
 
-                {currentUser?.role !== "mesero" && (
+                {currentUser?.role !== "mesero" && currentUser?.role !== "cajero" && (
                   <>
 
                     {/* REPORTES SECTION */}
@@ -31956,10 +31981,37 @@ Instrucciones:
     return (
       <IonPage>
         {renderMaterialHeader({
-          title: "Gestión de Cuentas (Windows)",
+          title: (() => {
+            if (!selectedTableGestion) return "Gestión de Cuentas (Windows)";
+            const z = (selectedTableGestion.zone || "").toLowerCase();
+            const l = (selectedTableGestion.label || "").toLowerCase();
+            let emoji = "🍽️";
+            if (z.includes("llevar") || l.includes("llevar")) emoji = "🛍️";
+            else if (z.includes("domicilio") || l.includes("domicilio") || z.includes("reparto") || l.includes("reparto")) emoji = "🏍️";
+            const prefix = emoji === "🍽️" ? "Mesa " : "";
+            return `Gestionando Cuenta ${emoji} (${prefix}${selectedTableGestion.label || "S/N"})`;
+          })(),
           subtitle: selectedTenant?.name || "Cocinet",
-          showBack: false,
-          showMenu: true
+          showBack: !!selectedTableGestion,
+          onBack: () => setSelectedTableGestion(null),
+          showMenu: !selectedTableGestion,
+          actions: (selectedTableGestion && isOnline) ? (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={startVoiceRecognition}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-black text-[10px] sm:text-xs transition-all cursor-pointer border-none shadow-md ${
+                isListening
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-amber-400 text-slate-900"
+              }`}
+              title={isListening ? "Detener..." : "Pedir por Voz"}
+            >
+              <span className="flex items-center gap-1 select-none">
+                {isListening ? "⏹️ Detener" : "🎙️ Voz"}
+              </span>
+            </motion.button>
+          ) : null
         })}
         <IonContent
           className="ion-padding"
@@ -32014,6 +32066,14 @@ Instrucciones:
                                 const hasActiveOrders = table.comandas.length > 0;
                                 const isSelected = selectedTableGestion?.id === table.id;
                                 
+                                const waiterNames = Array.from(
+                                  new Set(
+                                    table.comandas
+                                      .map((c: any) => c.createdBy?.name)
+                                      .filter(Boolean),
+                                  ),
+                                );
+
                                 return (
                                   <div
                                     key={`${table.id}-${table.status}-${table.comandas?.length || 0}`}
@@ -32034,6 +32094,7 @@ Instrucciones:
                                         fontSize: "1.5rem",
                                         fontWeight: "900",
                                         color: "white",
+                                        position: "relative",
                                         boxShadow: isSelected ? "0 0 0 4px #3b82f6, 0 14px 28px rgba(59, 130, 246, 0.4)" : (hasActiveOrders ? "0 14px 28px rgba(225, 29, 72, 0.4)" : "0 8px 16px rgba(0,0,0,0.15)"),
                                         cursor: "pointer",
                                         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -32048,10 +32109,86 @@ Instrucciones:
                                       }}
                                     >
                                       {table.label}
+                                      {hasActiveOrders && (
+                                        <div
+                                          style={{
+                                            position: "absolute",
+                                            top: "-8px",
+                                            right: "-8px",
+                                            background: "#1e293b",
+                                            color: "white",
+                                            borderRadius: "55%",
+                                            width: "28px",
+                                            height: "28px",
+                                            fontSize: "0.85rem",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            border: "3px solid white",
+                                            fontWeight: "900",
+                                            boxShadow: "0 4px 8px rgba(0,0,0,0.3)",
+                                          }}
+                                        >
+                                          {table.comandas.length}
+                                        </div>
+                                      )}
                                     </div>
-                                    <div style={{ marginTop: "8px", fontSize: "0.75rem", fontWeight: "bold", color: "#cbd5e1" }}>
-                                      {hasActiveOrders ? `Activa` : "Libre"}
-                                    </div>
+                                    
+                                    {hasActiveOrders || table.status === "occupied" ? (
+                                      <div
+                                        style={{
+                                          marginTop: "8px",
+                                          fontSize: "0.68rem",
+                                          fontWeight: "800",
+                                          color: "#1e293b",
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                          gap: "1px",
+                                          lineHeight: "1.2",
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        {waiterNames.length > 0 ? (
+                                          <>
+                                            <span
+                                              style={{
+                                                fontSize: "0.55rem",
+                                                color: "#64748b",
+                                                fontWeight: "normal",
+                                              }}
+                                            >
+                                              🤵{" "}
+                                              {waiterNames.length > 1
+                                                ? "Meseros:"
+                                                : "Mesero:"}
+                                            </span>
+                                            <span
+                                              style={{
+                                                color: "#e11d48",
+                                                maxWidth: "100%",
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                whiteSpace: "nowrap",
+                                                padding: "1px 6px",
+                                                background: "#ffe4e6",
+                                                borderRadius: "6px",
+                                                border: "1px solid #fecdd3",
+                                              }}
+                                              title={waiterNames.join(" & ")}
+                                            >
+                                              {waiterNames.join(" & ")}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span style={{ color: "#e11d48" }}>Activa</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div style={{ marginTop: "8px", fontSize: "0.75rem", fontWeight: "bold", color: "#cbd5e1" }}>
+                                        Libre
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -34860,21 +34997,26 @@ Instrucciones:
               >
                 <span>⚡ Turno Actual</span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCorteViewMode("history");
-                  setCorteTablaSessionSelected(null);
-                  setCorteFilterUserId("ALL");
-                }}
-                className={`flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-black transition border-none cursor-pointer ${
-                  corteViewMode === "history"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
-                    : "text-slate-300 hover:text-white hover:bg-slate-700/40 bg-transparent"
-                }`}
-              >
-                <span>🏛️ Historial</span>
-              </button>
+
+              
+              {currentUser?.role !== "cajero" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCorteViewMode("history");
+                    setCorteTablaSessionSelected(null);
+                    setCorteFilterUserId("ALL");
+                  }}
+                  className={`flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-black transition border-none cursor-pointer ${
+                    corteViewMode === "history"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700/40 bg-transparent"
+                  }`}
+                >
+                  <span>🏛️ Historial</span>
+                </button>
+              )}
+              
               <button
                 type="button"
                 onClick={() => {
@@ -36028,22 +36170,24 @@ Instrucciones:
                   <span className="hidden sm:inline">⚡ Turno Actual</span>
                   <span className="inline sm:hidden">⚡ Turno</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCorteViewMode("history");
-                    setCorteTablaSessionSelected(null);
-                    setCorteFilterUserId("ALL");
-                  }}
-                  className={`flex items-center gap-1 px-3 sm:px-4 py-2.5 rounded-full text-xs sm:text-sm font-black transition-all border-none cursor-pointer ${
-                    corteViewMode === "history"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                      : "text-slate-300 hover:text-white hover:bg-slate-700/40 bg-transparent"
-                  }`}
-                >
-                  <span className="hidden sm:inline">🕒 Historial</span>
-                  <span className="inline sm:hidden">🕒 Hist</span>
-                </button>
+                {currentUser?.role !== "cajero" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCorteViewMode("history");
+                      setCorteTablaSessionSelected(null);
+                      setCorteFilterUserId("ALL");
+                    }}
+                    className={`flex items-center gap-1 px-3 sm:px-4 py-2.5 rounded-full text-xs sm:text-sm font-black transition-all border-none cursor-pointer ${
+                      corteViewMode === "history"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                        : "text-slate-300 hover:text-white hover:bg-slate-700/40 bg-transparent"
+                    }`}
+                  >
+                    <span className="hidden sm:inline">🕒 Historial</span>
+                    <span className="inline sm:hidden">🕒 Hist</span>
+                  </button>
+                )}
               </div>
             </IonButtons>
           </IonToolbar>
@@ -37262,24 +37406,23 @@ Instrucciones:
                 <button
                   type="button"
                   onClick={() => {
+                    const tid = selectedTenant?.id;
+                    if (!tid) {
+                      triggerAppNotification("Error ❌", "No se ha seleccionado ningún inquilino.", "warning");
+                      return;
+                    }
+                    if (!window.confirm(`⚠️ ADVERTENCIA 1\n¿Estás seguro que deseas limpiar el corte actual y las mesas del inquilino: ${selectedTenant?.name}?`)) return;
+                    if (!window.confirm(`🚨 ADVERTENCIA 2\nEsta acción es irreversible y borrará las comandas activas de ${selectedTenant?.name}. ¿Confirmas la limpieza?`)) return;
+
                     setShowSystemsChoiceAlert(false);
                     setTimeout(async () => {
                       try {
-                        const tid = selectedTenant?.id;
-                        if (!tid) {
-                          triggerAppNotification("Error ❌", "No se ha seleccionado ningún inquilino.", "warning");
-                          return;
-                        }
                         triggerAppNotification("Sistemas ⚙️", "Limpiando corte de caja del inquilino...", "info");
                         await deleteCurrentCorteInFirebase(tid);
                         
                         localStorage.removeItem(`pos_tables_${tid}`);
-                        localStorage.removeItem("pos_tables");
-                        localStorage.removeItem("pos_history");
-                        localStorage.removeItem("pos_cashier_sessions");
-                        localStorage.removeItem("pos_cash_movements");
-                        localStorage.removeItem("pos_expenses");
-
+                        // Solo actualizamos el estado en memoria para que React sincronice con localStorage si es necesario,
+                        // o dejamos que el reload vuelva a cargar de Firebase.
                         setTables((prev: any[]) => prev.map((t: any) => t.tenantId === tid ? { ...t, status: "available", comandas: [], waiterId: null, activeAccount: null } : t));
                         setHistory((prev: any[]) => prev.filter((h: any) => h.tenantId !== tid));
                         setCashierSessions((prev: any[]) => prev.filter((s: any) => s.tenantId !== tid));
@@ -37343,15 +37486,13 @@ Instrucciones:
                   try {
                     const tid = selectedTenant?.id;
                     if (!tid) return;
+                    if (!window.confirm(`🚨 ADVERTENCIA FINAL\n¿Confirmas que deseas eliminar de forma PERMANENTE todo el historial del inquilino ${selectedTenant?.name}? No se podrá deshacer.`)) return;
+                    
                     triggerAppNotification("Sistemas ⚙️", "Eliminando todo el historial del inquilino...", "info");
                     await deleteAllTenantHistoryInFirebase(tid);
                     
                     localStorage.removeItem(`pos_tables_${tid}`);
-                    localStorage.removeItem("pos_tables");
-                    localStorage.removeItem("pos_history");
-                    localStorage.removeItem("pos_cashier_sessions");
-                    localStorage.removeItem("pos_cash_movements");
-                    localStorage.removeItem("pos_expenses");
+                    // Solo actualizamos la memoria local de React y filtramos por inquilino.
 
                     setTables((prev: any[]) => prev.map((t: any) => t.tenantId === tid ? { ...t, status: "available", comandas: [], waiterId: null, activeAccount: null } : t));
                     setHistory((prev: any[]) => prev.filter((h: any) => h.tenantId !== tid));

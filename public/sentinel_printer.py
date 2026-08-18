@@ -47,7 +47,7 @@ import hashlib
 import time
 import sqlite3
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import win32print
 import win32serviceutil
@@ -293,7 +293,8 @@ def load_printer_config():
         "MARGIN_LEFT_PX": 10,
         "MARGIN_RIGHT_PX": 25,
         "LINE_SPACING": 4,
-        "SHOW_DIVIDER": True
+        "SHOW_DIVIDER": True,
+        "BACKUP_FOLDER": "C:\\buzon\\respaldos"
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -323,6 +324,8 @@ def load_printer_config():
                     default_config["LINE_SPACING"] = int(data["LINE_SPACING"])
                 if "SHOW_DIVIDER" in data:
                     default_config["SHOW_DIVIDER"] = bool(data["SHOW_DIVIDER"])
+                if "BACKUP_FOLDER" in data:
+                    default_config["BACKUP_FOLDER"] = data["BACKUP_FOLDER"]
         except Exception as e:
             log.error(f"Error cargando config de impresoras: {e}")
     else:
@@ -339,6 +342,7 @@ PRINTER_PAPER_SIZES = config_printers["PRINTER_PAPER_SIZES"]
 LOGO_PATH = config_printers["LOGO_PATH"]
 FONT_NAME = config_printers["FONT_NAME"]
 FONT_SIZE_PT = config_printers["FONT_SIZE_PT"]
+BACKUP_FOLDER = config_printers.get("BACKUP_FOLDER", "C:\\buzon\\respaldos")
 
 def sanitize_text(text: str) -> str:
     """Remueve cualquier caracter de control binario residual de ESC/POS (como \x1b, \x1d, LE1, E1, etc.)."""
@@ -705,202 +709,222 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
     job_name = f"COCINET-GDI-{paper_size}-{datetime.now().strftime('%H%M%S')}"
     
     notify_step("3_PRINT_GDI_SPOOL", f"Iniciando documento vectorial GDI en [{printer_name}] ({paper_size})", status="INFO")
-    hDC.StartDoc(job_name)
-    hDC.StartPage()
-    
-    font_cache = {}
-    pen_cache = {}
-    last_drawn_line_y = -999
-
-    def get_font(name, pt_size, is_bold, is_italic=False, use_emoji_font=False):
-        font_name_to_use = "Segoe UI Emoji" if (use_emoji_font or name == "Segoe UI Emoji") else name
-        key = (font_name_to_use, pt_size, is_bold, is_italic)
-        if key in font_cache:
-            return font_cache[key]
-        height = int(pt_size * dpi_y / 72)
-        f = win32ui.CreateFont({
-            "name": font_name_to_use,
-            "height": height,
-            "weight": win32con.FW_BOLD if is_bold else win32con.FW_NORMAL,
-            "italic": is_italic,
-            "charset": win32con.DEFAULT_CHARSET
-        })
-        font_cache[key] = f
-        return f
-
-    def get_pen(width=2, color=0):
-        key = (win32con.PS_SOLID, width, color)
-        if key in pen_cache:
-            return pen_cache[key]
-        p = win32ui.CreatePen(win32con.PS_SOLID, width, color)
-        pen_cache[key] = p
-        return p
-
-    def draw_solid_line(y_pos):
-        nonlocal last_drawn_line_y
-        if abs(y_pos - last_drawn_line_y) > 6:
-            hDC.SelectObject(get_pen(2, 0))
-            hDC.MoveTo(margin_left, y_pos)
-            hDC.LineTo(width - margin_right, y_pos)
-            last_drawn_line_y = y_pos
-            return y_pos + 8
-        return y_pos
-
-    y = 20
-    
-    if ticket_type.lower() not in ["cocina", "barra"]:
-        y = draw_logo_on_dc(hDC, LOGO_PATH, printable_width, y, dpi_y, full_width=width)
-    
-    base_pt = FONT_SIZE_PT
-    if paper_size == "58mm":
-        base_pt = base_pt * 0.82
+    try:
+        hDC.StartDoc(job_name)
+        hDC.StartPage()
         
-    expanded_lines = []
-    for l in parsed_lines:
-        txt = l['text'].strip()
-        if not txt:
-            expanded_lines.append(l)
-            continue
+        font_cache = {}
+        pen_cache = {}
+        last_drawn_line_y = -999
+
+        def get_font(name, pt_size, is_bold, is_italic=False, use_emoji_font=False):
+            font_name_to_use = "Segoe UI Emoji" if (use_emoji_font or name == "Segoe UI Emoji") else name
+            key = (font_name_to_use, pt_size, is_bold, is_italic)
+            if key in font_cache:
+                return font_cache[key]
+            height = int(pt_size * dpi_y / 72)
+            f = win32ui.CreateFont({
+                "name": font_name_to_use,
+                "height": height,
+                "weight": win32con.FW_BOLD if is_bold else win32con.FW_NORMAL,
+                "italic": is_italic,
+                "charset": win32con.DEFAULT_CHARSET
+            })
+            font_cache[key] = f
+            return f
+
+        def get_pen(width=2, color=0):
+            key = (win32con.PS_SOLID, width, color)
+            if key in pen_cache:
+                return pen_cache[key]
+            p = win32ui.CreatePen(win32con.PS_SOLID, width, color)
+            pen_cache[key] = p
+            return p
+
+        def draw_solid_line(y_pos):
+            nonlocal last_drawn_line_y
+            if abs(y_pos - last_drawn_line_y) > 6:
+                hDC.SelectObject(get_pen(2, 0))
+                hDC.MoveTo(margin_left, y_pos)
+                hDC.LineTo(width - margin_right, y_pos)
+                last_drawn_line_y = y_pos
+                return y_pos + 8
+            return y_pos
+
+        y = 20
+        
+        if ticket_type.lower() not in ["cocina", "barra"]:
+            y = draw_logo_on_dc(hDC, LOGO_PATH, printable_width, y, dpi_y, full_width=width)
+        
+        base_pt = FONT_SIZE_PT
+        if paper_size == "58mm":
+            base_pt = base_pt * 0.82
             
-        # Un-stick glued fiscal field headers (e.g. DDSDREGIMEN -> DDSD\nREGIMEN, CONFIANZALUGAR -> CONFIANZA\nLUGAR)
-        txt = re.sub(
-            r'([A-Z0-9])(RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|TEL|TELEFONO|TELÉFONO|METODO|MÉTODO|FORMA|PAGO)\b',
-            r'\1\n\2',
-            txt,
-            flags=re.IGNORECASE
-        )
-
-        # Un-stick dashes/underscores/equals glued to text (e.g. "tacosroy100@gmail.com-----------------" -> "tacosroy100@gmail.com\n-----------------")
-        txt = re.sub(r'([^\-\_\=\s])([\-\_\=]{3,})', r'\1\n\2', txt)
-        txt = re.sub(r'([\-\_\=]{3,})([^\-\_\=\s])', r'\1\n\2', txt)
-        
-        # Split text by newlines into clean individual lines
-        sub_lines = txt.split('\n')
-        for sl in sub_lines:
-            sl_clean = sl.strip()
-            if not sl_clean:
+        expanded_lines = []
+        for l in parsed_lines:
+            txt = l['text'].strip()
+            if not txt:
+                expanded_lines.append(l)
                 continue
-            item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
-            found_items = re.findall(item_split_pattern, sl_clean, flags=re.IGNORECASE)
-            if len(found_items) > 1:
-                for item_str in found_items:
-                    if item_str.strip():
-                        expanded_lines.append({**l, 'text': item_str.strip()})
-                continue
+                
+            # Un-stick glued fiscal field headers
+            txt = re.sub(
+                r'([A-Z0-9])(RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|TEL|TELEFONO|TELÉFONO|METODO|MÉTODO|FORMA|PAGO)\b',
+                r'\1\n\2',
+                txt,
+                flags=re.IGNORECASE
+            )
 
-            keywords_pattern = r'(?=(?:RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|METODO|MÉTODO|FORMA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO|TEL|TELÉFONO|TELEFONO)\s*:)'
-            found_parts = re.split(keywords_pattern, sl_clean, flags=re.IGNORECASE)
-            if len(found_parts) > 1:
-                combined_parts = []
-                curr_p = ""
-                for p in found_parts:
-                    p_str = p.strip()
-                    if not p_str:
-                        continue
-                    if curr_p and not re.search(r'[A-Za-z0-9]', curr_p):
-                        curr_p = f"{curr_p} {p_str}".strip()
-                    elif curr_p:
+            # Un-stick dashes/underscores/equals glued to text
+            txt = re.sub(r'([^\-\_\=\s])([\-\_\=]{3,})', r'\1\n\2', txt)
+            txt = re.sub(r'([\-\_\=]{3,})([^\-\_\=\s])', r'\1\n\2', txt)
+            
+            # Split text by newlines into clean individual lines
+            sub_lines = txt.split('\n')
+            for sl in sub_lines:
+                sl_clean = sl.strip()
+                if not sl_clean:
+                    continue
+                item_split_pattern = r'(\d+\s*(?:x|X)\s+.*?(?:\$?[0-9]+(?:\.[0-9]{1,2})?)(?=\s*\d+\s*(?:x|X)\s+|$))'
+                found_items = re.findall(item_split_pattern, sl_clean, flags=re.IGNORECASE)
+                if len(found_items) > 1:
+                    for item_str in found_items:
+                        if item_str.strip():
+                            expanded_lines.append({**l, 'text': item_str.strip()})
+                    continue
+
+                keywords_pattern = r'(?=(?:RFC|REGIMEN|RÉGIMEN|LUGAR|DIR|SUC|SUCURSAL|FOLIO|REIMPRESION|PRECUENTA|MESA|FECHA|HORA|METODO|MÉTODO|FORMA|PAGO|SUBTOTAL|(?<!SUB)TOTAL|PROPINA|DESCUENTO|CAMBIO|TEL|TELÉFONO|TELEFONO)\s*:)'
+                found_parts = re.split(keywords_pattern, sl_clean, flags=re.IGNORECASE)
+                if len(found_parts) > 1:
+                    combined_parts = []
+                    curr_p = ""
+                    for p in found_parts:
+                        p_str = p.strip()
+                        if not p_str:
+                            continue
+                        if curr_p and not re.search(r'[A-Za-z0-9]', curr_p):
+                            curr_p = f"{curr_p} {p_str}".strip()
+                        elif curr_p:
+                            combined_parts.append(curr_p)
+                            curr_p = p_str
+                        else:
+                            curr_p = p_str
+                    if curr_p:
                         combined_parts.append(curr_p)
-                        curr_p = p_str
-                    else:
-                        curr_p = p_str
-                if curr_p:
-                    combined_parts.append(curr_p)
 
-                for p in combined_parts:
-                    if p.strip():
-                        expanded_lines.append({**l, 'text': p.strip()})
+                    for p in combined_parts:
+                        if p.strip():
+                            expanded_lines.append({**l, 'text': p.strip()})
+                else:
+                    for sub_p in sl_clean.split('\n'):
+                        if sub_p.strip():
+                            expanded_lines.append({**l, 'text': sub_p.strip()})
+
+        pending_total_amount = None
+        header_drawn = False
+        in_table_phase = False
+
+        for line in expanded_lines:
+            text = line['text'].strip()
+            alignment = line['align']
+            size_mode = line['size']
+            is_bold = line['bold']
+            line_has_emoji = has_emoji(text)
+            
+            # Omit payment line when payment is LUPAY
+            if "LUPAY" in text.upper():
+                continue
+
+            if len(text) >= 6 and all(c in ('-', '=', '_', '*', ' ', '─', '━') for c in text):
+                if pending_total_amount is not None:
+                    try:
+                        letra_str = numero_a_letras(pending_total_amount)
+                        if letra_str:
+                            f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
+                            hDC.SelectObject(f_letra)
+                            y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
+                    except Exception:
+                        pass
+                    pending_total_amount = None
+                y = draw_solid_line(y + 4)
+                continue
+                
+            if not text:
+                f = get_font(FONT_NAME, base_pt, False)
+                hDC.SelectObject(f)
+                _, text_height = hDC.GetTextExtent(" ")
+                y += text_height
+                continue
+
+            clean_upper = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip().upper()
+                
+            if size_mode == 'big':
+                pt = base_pt * 1.30
+                bold_to_use = True
+            elif size_mode == 'small':
+                pt = base_pt * 0.75
+                bold_to_use = is_bold
             else:
-                for sub_p in sl_clean.split('\n'):
-                    if sub_p.strip():
-                        expanded_lines.append({**l, 'text': sub_p.strip()})
-
-    pending_total_amount = None
-
-    for line in expanded_lines:
-        text = line['text'].strip()
-        alignment = line['align']
-        size_mode = line['size']
-        is_bold = line['bold']
-        line_has_emoji = has_emoji(text)
-        
-        # Omit payment line when payment is LUPAY
-        if "LUPAY" in text.upper():
-            continue
-
-        if len(text) >= 6 and all(c in ('-', '=', '_', '*', ' ', '─', '━') for c in text):
-            if pending_total_amount is not None:
-                try:
-                    letra_str = numero_a_letras(pending_total_amount)
-                    if letra_str:
-                        f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
-                        hDC.SelectObject(f_letra)
-                        y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
-                except Exception:
-                    pass
-                pending_total_amount = None
-            y = draw_solid_line(y + 4)
-            continue
-            
-        if not text:
-            f = get_font(FONT_NAME, base_pt, False)
+                pt = base_pt
+                bold_to_use = is_bold
+                
+            f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
             hDC.SelectObject(f)
-            _, text_height = hDC.GetTextExtent(" ")
-            y += text_height
-            continue
 
-        clean_upper = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27bf\u1f300-\u1f9ff]', '', text).strip().upper()
+            HEADER_KEYS = [
+                "MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", 
+                "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", 
+                "METODO DE PAGO", "MÉTODO DE PAGO", "METODO", "MÉTODO", "FORMA DE PAGO", "FORMA", 
+                "DIR", "DIR FISCAL", "DIRECCION", "DIRECCIÓN", "TEL", "TELEFONO", "TELÉFONO", "CELULAR", 
+                "CLIENTE", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", 
+                "SUC", "SUCURSAL", "RFC", "DATOS DE ENVIO", "SON", "EFECTIVO", "TARJETA", 
+                "TRANSFERENCIA", "DESTINO", "GRACIAS", "VISITA", "VUELVA", "OBS", 
+                "FACTURAR", "FACTURA", "REGIMEN", "RÉGIMEN", "REGIMEN FISCAL", "RÉGIMEN FISCAL",
+                "LUGAR", "LUGAR EXPEDICION", "LUGAR DE EXPEDICIÓN", "C.P.", "CP"
+            ]
             
-        if size_mode == 'big':
-            pt = base_pt * 1.30
-            bold_to_use = True
-        elif size_mode == 'small':
-            pt = base_pt * 0.75
-            bold_to_use = is_bold
-        else:
-            pt = base_pt
-            bold_to_use = is_bold
+            first_word = re.sub(r'[^A-Z]', '', clean_upper.split(':')[0]) if ':' in clean_upper else (re.sub(r'[^A-Z]', '', clean_upper.split()[0]) if clean_upper else "")
+            is_header_keyword = any(first_word == k or first_word.startswith(k) for k in HEADER_KEYS)
             
-        f = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
-        hDC.SelectObject(f)
+            has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
+            has_price = bool(re.search(r'\$\s*[0-9]+(?:\.[0-9]{1,2})?\s*$', text)) or bool(re.search(r'\s+[0-9]+\.[0-9]{2}\s*$', text))
+            
+            is_item_line = bool(
+                not is_header_keyword and
+                (has_qty or (has_price and not any(k in clean_upper for k in ["C.P.", "CP", "TEL", "RFC", "FOLIO", "MESA", "HORA", "FECHA", "REGIMEN", "RÉGIMEN", "PAGO", "CAMBIO", "SUBTOTAL", "TOTAL", "SUC"]))) and
+                not any(c in ('-', '=', '_', '*') for c in text)
+            )
 
-        HEADER_KEYS = [
-            "MESA", "HORA", "FOLIO", "FECHA", "COMANDA", "SUBTOTAL", "TOTAL", 
-            "PROPINA", "DESCUENTO", "PAGADO CON", "PAGADO", "PAGO CON", "PAGO", 
-            "METODO DE PAGO", "MÉTODO DE PAGO", "METODO", "MÉTODO", "FORMA DE PAGO", "FORMA", 
-            "DIR", "DIR FISCAL", "DIRECCION", "DIRECCIÓN", "TEL", "TELEFONO", "TELÉFONO", "CELULAR", 
-            "CLIENTE", "ATENDIO", "MESERO", "REIMPRESION", "CUENTA", "PRECUENTA", 
-            "SUC", "SUCURSAL", "RFC", "DATOS DE ENVIO", "SON", "EFECTIVO", "TARJETA", 
-            "TRANSFERENCIA", "DESTINO", "GRACIAS", "VISITA", "VUELVA", "OBS", 
-            "FACTURAR", "FACTURA", "REGIMEN", "RÉGIMEN", "REGIMEN FISCAL", "RÉGIMEN FISCAL",
-            "LUGAR", "LUGAR EXPEDICION", "LUGAR DE EXPEDICIÓN", "C.P.", "CP"
-        ]
-        
-        first_word = re.sub(r'[^A-Z]', '', clean_upper.split(':')[0]) if ':' in clean_upper else (re.sub(r'[^A-Z]', '', clean_upper.split()[0]) if clean_upper else "")
-        is_header_keyword = any(first_word == k or first_word.startswith(k) for k in HEADER_KEYS)
-        
-        has_qty = bool(re.match(r'^\s*\d+\s*(?:x|X)\s+', text, re.IGNORECASE))
-        has_price = bool(re.search(r'\$\s*[0-9]+(?:\.[0-9]{1,2})?\s*$', text)) or bool(re.search(r'\s+[0-9]+\.[0-9]{2}\s*$', text))
-        
-        is_item_line = bool(
-            not is_header_keyword and
-            (has_qty or (has_price and not any(k in clean_upper for k in ["C.P.", "CP", "TEL", "RFC", "FOLIO", "MESA", "HORA", "FECHA", "REGIMEN", "RÉGIMEN", "PAGO", "CAMBIO", "SUBTOTAL", "TOTAL", "SUC"]))) and
-            not any(c in ('-', '=', '_', '*') for c in text)
-        )
+            if "DETALLE DEL PEDIDO" in clean_upper or "DETALLE DE PEDIDO" in clean_upper:
+                if ticket_type.lower() not in ["cocina", "barra"] and not header_drawn:
+                    header_drawn = True
+                    in_table_phase = True
+                    y += 4
+                    f_section = get_font(FONT_NAME, base_pt * 1.05, True, use_emoji_font=True)
+                    hDC.SelectObject(f_section)
+                    sec_title = "📝 DETALLE DEL PEDIDO 📝"
+                    w_st, h_st = hDC.GetTextExtent(sec_title)
+                    x_st = max(margin_left, (width - w_st) // 2)
+                    hDC.TextOut(x_st, y, sec_title)
+                    y += h_st + 6
 
-        if "DETALLE DEL PEDIDO" in clean_upper or "DETALLE DE PEDIDO" in clean_upper:
-            if ticket_type.lower() not in ["cocina", "barra"] and not header_drawn:
+                    y = draw_solid_line(y + 2)
+                    
+                    fh = get_font(FONT_NAME, base_pt * 0.88, True)
+                    hDC.SelectObject(fh)
+                    hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
+                    w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
+                    x_imp = width - margin_right - w_imp
+                    hDC.TextOut(x_imp, y, "IMPORTE")
+                    y += h_imp + 4
+                    
+                    y = draw_solid_line(y + 2)
+                continue
+
+            if is_item_line and not header_drawn and ticket_type.lower() not in ["cocina", "barra"]:
                 header_drawn = True
                 in_table_phase = True
-                y += 4
-                f_section = get_font(FONT_NAME, base_pt * 1.05, True, use_emoji_font=True)
-                hDC.SelectObject(f_section)
-                sec_title = "📝 DETALLE DEL PEDIDO 📝"
-                w_st, h_st = hDC.GetTextExtent(sec_title)
-                x_st = max(margin_left, (width - w_st) // 2)
-                hDC.TextOut(x_st, y, sec_title)
-                y += h_st + 6
-
+                
                 y = draw_solid_line(y + 2)
                 
                 fh = get_font(FONT_NAME, base_pt * 0.88, True)
@@ -912,169 +936,165 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y += h_imp + 4
                 
                 y = draw_solid_line(y + 2)
-            continue
 
-        if is_item_line and not header_drawn and ticket_type.lower() not in ["cocina", "barra"]:
-            header_drawn = True
-            in_table_phase = True
-            
-            y = draw_solid_line(y + 2)
-            
-            fh = get_font(FONT_NAME, base_pt * 0.88, True)
-            hDC.SelectObject(fh)
-            hDC.TextOut(margin_left, y, "CANT / DESCRIPCIÓN")
-            w_imp, h_imp = hDC.GetTextExtent("IMPORTE")
-            x_imp = width - margin_right - w_imp
-            hDC.TextOut(x_imp, y, "IMPORTE")
-            y += h_imp + 4
-            
-            y = draw_solid_line(y + 2)
-
-        if not is_item_line and in_table_phase:
-            in_table_phase = False
-            y = draw_solid_line(y + 2)
-
-        if is_item_line:
-            desc = text.strip()
-            price_str = None
-            qty_str = None
-            
-            p_m = re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', desc)
-            if p_m:
-                price_str = p_m.group(1)
-                desc = desc[:p_m.start()].strip()
-                
-            q_m = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', desc, re.IGNORECASE)
-            if q_m:
-                qty_str = q_m.group(1)
-                desc = q_m.group(2).strip()
-                
-            qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
-            price_num = float(price_str.replace(',', '')) if price_str else 0.0
-            
-            imp_str = f"${price_num:.2f}" if price_num > 0 else ""
-            fp = get_font(FONT_NAME, pt * 0.95, True)
-            hDC.SelectObject(fp)
-            
-            if imp_str:
-                pr_w, pr_h = hDC.GetTextExtent(imp_str)
-                x_right = max(margin_left + 120, width - margin_right - pr_w)
-                hDC.TextOut(x_right, y, imp_str)
-            else:
-                pr_w, pr_h = 0, int(pt * dpi_y / 72)
-                x_right = width - margin_right
-                
-            desc_w = width - margin_left - margin_right - (pr_w + 15 if imp_str else 0)
-            prefix = f"{qty_val}x " if qty_str else ""
-            full_desc = prefix + desc
-            y = wrap_and_draw_text(hDC, full_desc, margin_left, margin_right, desc_w, y, align=0, line_spacing=2)
-            y += 2
-            continue
-        
-        if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
-            clean_date_text = text
-            if "FECHA:" in clean_date_text.upper():
-                date_val = re.sub(r'^FECHA:\s*', '', clean_date_text, flags=re.IGNORECASE).strip()
-                if ',' in date_val:
-                    parts = date_val.split(',', 1)
-                    f_part = parts[0].strip()
-                    h_part = parts[1].strip()
-                    formatted_dt = f"📅 {f_part}   ⏰ {h_part}"
-                else:
-                    formatted_dt = f"📅 {date_val}"
-            elif clean_date_text.upper().startswith("HORA:"):
-                hora_val = clean_date_text[5:].strip()
-                formatted_dt = f"⏰ {hora_val}"
-            else:
-                formatted_dt = text
-
-            f_dt = get_font(FONT_NAME, pt * 0.92, True, use_emoji_font=True)
-            hDC.SelectObject(f_dt)
-            y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
-            continue
-        
-        total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|MÉTODO DE PAGO|FORMA DE PAGO|METODO|MÉTODO|PAGO|CAMBIO|FACTURAR|FACTURA)\s*:?\s*(.*)$', text, re.IGNORECASE)
-        has_total_keyword = bool(total_match or "TOTAL" in text.upper() or "SUBTOTAL" in text.upper())
-        
-        if has_total_keyword:
-            if "SUBTOTAL" in text.upper() or ("TOTAL" in text.upper() and not any(k in text.upper() for k in ["PAGADO", "CAMBIO", "PROPINA"])):
+            if not is_item_line and in_table_phase:
+                in_table_phase = False
                 y = draw_solid_line(y + 2)
 
-            if total_match:
-                match_keyword = total_match.group(1).upper()
-                val = total_match.group(2).strip()
-                if any(k in match_keyword for k in ["PAGADO CON", "PAGO CON"]):
-                    label = "💵 PAGADO CON:"
-                elif "PAGADO" in match_keyword:
-                    label = "💵 PAGADO CON:"
-                elif any(k in match_keyword for k in ["METODO", "MÉTODO", "FORMA", "PAGO"]):
-                    clean_val = (val or match_keyword).upper()
-                    if "DÉBITO" in clean_val or "DEBITO" in clean_val:
-                        label = "💳 TARJETA DÉBITO"
-                    elif "CRÉDITO" in clean_val or "CREDITO" in clean_val:
-                        label = "💳 TARJETA CRÉDITO"
-                    elif "EFECTIVO" in clean_val or "CASH" in clean_val:
-                        label = "💵 EFECTIVO"
-                    elif "TRANSFERENCIA" in clean_val or "TRANSFER" in clean_val:
-                        label = "💸 TRANSFERENCIA"
-                    elif "LUPAY" in clean_val:
-                        label = "📲 LUPAY"
-                    elif "TARJETA" in clean_val:
-                        label = "💳 TARJETA"
-                    elif clean_val and clean_val not in ["PAGO", "METODO", "MÉTODO"]:
-                        label = f"💳 {clean_val}"
-                    else:
-                        label = "💳 TARJETA"
-                    val = ""
-                elif "CAMBIO" in match_keyword:
-                    label = "🪙 CAMBIO:"
-                elif "FACTURAR" in match_keyword or "FACTURA" in match_keyword:
-                    label = "🧾 REQUIERE FACTURA"
-                    val = ""
-                else:
-                    label = match_keyword + ":"
-            else:
-                parts = text.split(":", 1)
-                label = parts[0].strip().upper() + ":"
-                val = parts[1].strip() if len(parts) > 1 else ""
-
-            is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳") and not label.startswith("💵") and not label.startswith("🪙")
-            
-            lbl_pt = pt * 1.15 if is_total_label else pt
-            if is_total_label:
-                lbl_str = "TOTAL:"
-            elif label.startswith("💳") or label.startswith("💵") or label.startswith("💸") or label.startswith("📲"):
-                lbl_str = label
-                lbl_pt = pt * 1.25
-            else:
-                lbl_str = label
-            fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold or label.startswith("💳") or label.startswith("💵"), use_emoji_font=has_emoji(lbl_str))
-            hDC.SelectObject(fl)
-            
-            if val:
-                lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
-                x_lbl = margin_left
-                hDC.TextOut(x_lbl, y, lbl_str)
+            if is_item_line:
+                desc = text.strip()
+                price_str = None
+                qty_str = None
                 
-                val_pt = pt * 1.25 if is_total_label else pt
-                fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
-                hDC.SelectObject(fb)
-                val_width, val_height = hDC.GetTextExtent(val)
-                x_val = max(margin_left + lbl_w + 10, width - margin_right - val_width)
-                hDC.TextOut(x_val, y, val)
-                y += max(lbl_h, val_height) + 6
-            else:
-                y = wrap_and_draw_text(hDC, lbl_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=4)
+                p_m = re.search(r'\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$', desc)
+                if p_m:
+                    price_str = p_m.group(1)
+                    desc = desc[:p_m.start()].strip()
+                    
+                q_m = re.match(r'^\s*(\d+)\s*(?:x|X)?\s+(.*)$', desc, re.IGNORECASE)
+                if q_m:
+                    qty_str = q_m.group(1)
+                    desc = q_m.group(2).strip()
+                    
+                qty_val = int(qty_str) if (qty_str and qty_str.isdigit()) else 1
+                price_num = float(price_str.replace(',', '')) if price_str else 0.0
+                
+                imp_str = f"${price_num:.2f}" if price_num > 0 else ""
+                fp = get_font(FONT_NAME, pt * 0.95, True)
+                hDC.SelectObject(fp)
+                
+                if imp_str:
+                    pr_w, pr_h = hDC.GetTextExtent(imp_str)
+                    x_right = max(margin_left + 120, width - margin_right - pr_w)
+                    hDC.TextOut(x_right, y, imp_str)
+                else:
+                    pr_w, pr_h = 0, int(pt * dpi_y / 72)
+                    x_right = width - margin_right
+                    
+                desc_w = width - margin_left - margin_right - (pr_w + 15 if imp_str else 0)
+                prefix = f"{qty_val}x " if qty_str else ""
+                full_desc = prefix + desc
+                y = wrap_and_draw_text(hDC, full_desc, margin_left, margin_right, desc_w, y, align=0, line_spacing=2)
+                y += 2
+                continue
             
-            if is_total_label:
-                monto_match = re.search(r'([0-9.,]+)', val) or re.search(r'([0-9.,]+)', text)
-                if monto_match:
+            if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
+                clean_date_text = text
+                if "FECHA:" in clean_date_text.upper():
+                    date_val = re.sub(r'^FECHA:\s*', '', clean_date_text, flags=re.IGNORECASE).strip()
+                    if ',' in date_val:
+                        parts = date_val.split(',', 1)
+                        f_part = parts[0].strip()
+                        h_part = parts[1].strip()
+                        formatted_dt = f"📅 {f_part}   ⏰ {h_part}"
+                    else:
+                        formatted_dt = f"📅 {date_val}"
+                elif clean_date_text.upper().startswith("HORA:"):
+                    hora_val = clean_date_text[5:].strip()
+                    formatted_dt = f"⏰ {hora_val}"
+                else:
+                    formatted_dt = text
+
+                f_dt = get_font(FONT_NAME, pt * 0.92, True, use_emoji_font=True)
+                hDC.SelectObject(f_dt)
+                y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
+                continue
+            
+            total_match = re.search(r'^(?:[^\w\s]+\s*)?(TOTAL A PAGAR|TOTAL|SUBTOTAL|SUMA TOTAL|PROPINA|DESCUENTO|PAGADO CON|PAGADO|PAGO CON|METODO DE PAGO|MÉTODO DE PAGO|FORMA DE PAGO|METODO|MÉTODO|PAGO|CAMBIO|FACTURAR|FACTURA)\s*:?\s*(.*)$', text, re.IGNORECASE)
+            has_total_keyword = bool(total_match or "TOTAL" in text.upper() or "SUBTOTAL" in text.upper())
+            
+            if has_total_keyword:
+                if "SUBTOTAL" in text.upper() or ("TOTAL" in text.upper() and not any(k in text.upper() for k in ["PAGADO", "CAMBIO", "PROPINA"])):
+                    y = draw_solid_line(y + 2)
+
+                if total_match:
+                    match_keyword = total_match.group(1).upper()
+                    val = total_match.group(2).strip()
+                    if any(k in match_keyword for k in ["PAGADO CON", "PAGO CON"]):
+                        label = "💵 PAGADO CON:"
+                    elif "PAGADO" in match_keyword:
+                        label = "💵 PAGADO CON:"
+                    elif any(k in match_keyword for k in ["METODO", "MÉTODO", "FORMA", "PAGO"]):
+                        clean_val = (val or match_keyword).upper()
+                        if "DÉBITO" in clean_val or "DEBITO" in clean_val:
+                            label = "💳 TARJETA DÉBITO"
+                        elif "CRÉDITO" in clean_val or "CREDITO" in clean_val:
+                            label = "💳 TARJETA CRÉDITO"
+                        elif "EFECTIVO" in clean_val or "CASH" in clean_val:
+                            label = "💵 EFECTIVO"
+                        elif "TRANSFERENCIA" in clean_val or "TRANSFER" in clean_val:
+                            label = "💸 TRANSFERENCIA"
+                        elif "LUPAY" in clean_val:
+                            label = "📲 LUPAY"
+                        elif "TARJETA" in clean_val:
+                            label = "💳 TARJETA"
+                        elif clean_val and clean_val not in ["PAGO", "METODO", "MÉTODO"]:
+                            label = f"💳 {clean_val}"
+                        else:
+                            label = "💳 TARJETA"
+                        val = ""
+                    elif "CAMBIO" in match_keyword:
+                        label = "🪙 CAMBIO:"
+                    elif "FACTURAR" in match_keyword or "FACTURA" in match_keyword:
+                        label = "🧾 REQUIERE FACTURA"
+                        val = ""
+                    else:
+                        label = match_keyword + ":"
+                else:
+                    parts = text.split(":", 1)
+                    label = parts[0].strip().upper() + ":"
+                    val = parts[1].strip() if len(parts) > 1 else ""
+
+                is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳") and not label.startswith("💵") and not label.startswith("🪙")
+                
+                lbl_pt = pt * 1.15 if is_total_label else pt
+                if is_total_label:
+                    lbl_str = "TOTAL:"
+                elif label.startswith("💳") or label.startswith("💵") or label.startswith("💸") or label.startswith("📲"):
+                    lbl_str = label
+                    lbl_pt = pt * 1.25
+                else:
+                    lbl_str = label
+                fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold or label.startswith("💳") or label.startswith("💵"), use_emoji_font=has_emoji(lbl_str))
+                hDC.SelectObject(fl)
+                
+                if val:
+                    lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
+                    x_lbl = margin_left
+                    hDC.TextOut(x_lbl, y, lbl_str)
+                    
+                    val_pt = pt * 1.25 if is_total_label else pt
+                    fb = get_font(FONT_NAME, val_pt, True, use_emoji_font=has_emoji(val))
+                    hDC.SelectObject(fb)
+                    val_width, val_height = hDC.GetTextExtent(val)
+                    x_val = max(margin_left + lbl_w + 10, width - margin_right - val_width)
+                    hDC.TextOut(x_val, y, val)
+                    y += max(lbl_h, val_height) + 6
+                else:
+                    y = wrap_and_draw_text(hDC, lbl_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=4)
+                
+                if is_total_label:
+                    monto_match = re.search(r'([0-9.,]+)', val) or re.search(r'([0-9.,]+)', text)
+                    if monto_match:
+                        try:
+                            monto_clean = float(monto_match.group(1).replace(',', ''))
+                            pending_total_amount = monto_clean
+                        except Exception:
+                            pass
+                elif pending_total_amount is not None:
                     try:
-                        monto_clean = float(monto_match.group(1).replace(',', ''))
-                        pending_total_amount = monto_clean
-                    except Exception:
-                        pass
-            elif pending_total_amount is not None:
+                        letra_str = numero_a_letras(pending_total_amount)
+                        if letra_str:
+                            f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
+                            hDC.SelectObject(f_letra)
+                            y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
+                            y = draw_solid_line(y + 4)
+                    except Exception as ex_l:
+                        notify_step("CONVERT_ERROR", f"Error convirtiendo total a letra: {ex_l}", status="WARNING")
+                    pending_total_amount = None
+                continue
+
+            if pending_total_amount is not None:
                 try:
                     letra_str = numero_a_letras(pending_total_amount)
                     if letra_str:
@@ -1082,37 +1102,53 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                         hDC.SelectObject(f_letra)
                         y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
                         y = draw_solid_line(y + 4)
-                except Exception as ex_l:
-                    notify_step("CONVERT_ERROR", f"Error convirtiendo total a letra: {ex_l}", status="WARNING")
+                except Exception:
+                    pass
                 pending_total_amount = None
-            continue
 
-        if pending_total_amount is not None:
-            try:
-                letra_str = numero_a_letras(pending_total_amount)
-                if letra_str:
-                    f_letra = get_font(FONT_NAME, base_pt * 0.85, True, is_italic=True, use_emoji_font=has_emoji(letra_str))
-                    hDC.SelectObject(f_letra)
-                    y = wrap_and_draw_text(hDC, letra_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=3)
-                    y = draw_solid_line(y + 4)
-            except Exception:
-                pass
-            pending_total_amount = None
-
-        if text.startswith('*') or text.startswith('>'):
-            f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
-            hDC.SelectObject(f_italic)
-            y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
-            continue
+            if text.startswith('*') or text.startswith('>'):
+                f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
+                hDC.SelectObject(f_italic)
+                y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
+                continue
+                
+            f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
+            hDC.SelectObject(f_line)
+            y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
             
-        f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
-        hDC.SelectObject(f_line)
-        y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
-        
-    y += 90
-    hDC.EndPage()
-    hDC.EndDoc()
-    hDC.DeleteDC()
+        y += 90
+        hDC.EndPage()
+        hDC.EndDoc()
+    finally:
+        try:
+            hDC.DeleteDC()
+        except Exception:
+            pass
+            
+        try:
+            for f in font_cache.values():
+                try:
+                    f.DeleteObject()
+                except:
+                    pass
+            font_cache.clear()
+        except Exception:
+            pass
+            
+        try:
+            for p in pen_cache.values():
+                try:
+                    p.DeleteObject()
+                except:
+                    pass
+            pen_cache.clear()
+        except Exception:
+            pass
+            
+        try:
+            del hDC
+        except Exception:
+            pass
 
 def print_data(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
     """Bypass unificado para imprimir en RAW o renderizar vectorialmente en GDI."""
@@ -1204,6 +1240,42 @@ def print_ticket():
         return jsonify({"success": True, "printer_used": printer_name, "bytes_sent": len(raw_bytes)})
     except Exception as e:
         notify_step("4_ERROR", f"❌ Error durante proceso de impresión: {e}", status="ERROR")
+        return jsonify({"success": False, "error": str(e)}), 500
+@app.route("/backup-sale", methods=["POST"])
+def backup_sale():
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"success": False, "error": "No data received"}), 400
+            
+        tenant_id = data.get("tenantId", "unknown")
+        
+        # Lógica de Turno / Día de Operación (6:00 AM corte)
+        now = datetime.now()
+        if now.hour < 6:
+            op_date = now - timedelta(days=1)
+        else:
+            op_date = now
+            
+        op_day_str = op_date.strftime("%Y-%m-%d")
+        
+        # Guardar en BACKUP_FOLDER desde configuración
+        backup_dir = BACKUP_FOLDER
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        filename = f"respaldo_tikets_{tenant_id}_{op_day_str}.log"
+        filepath = os.path.join(backup_dir, filename)
+        
+        # Añadir timestamp de recepción local al registro
+        data["_localReceivedAt"] = now.isoformat()
+        
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+            
+        notify_step("BACKUP_SALE", f"Venta respaldada localmente para tenant {tenant_id} en {filename}", status="SUCCESS")
+        return jsonify({"success": True, "file": filename})
+    except Exception as e:
+        notify_step("BACKUP_ERROR", f"Error guardando respaldo de venta: {e}", status="ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/test-print", methods=["POST"])
@@ -1410,13 +1482,21 @@ class CocinetPrinterService(win32serviceutil.ServiceFramework):
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
 
 def run_flask():
-    db_thread = threading.Thread(target=db_polling_loop, daemon=True)
-    db_thread.start()
-    from werkzeug.serving import make_server
-    global _flask_server
-    _flask_server = make_server("0.0.0.0", PORT, app)
-    notify_step("SERVICE_ONLINE", f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT} (HTTP/WS)")
-    _flask_server.serve_forever()
+    try:
+        db_thread = threading.Thread(target=db_polling_loop, daemon=True)
+        db_thread.start()
+        from werkzeug.serving import make_server
+        global _flask_server
+        _flask_server = make_server("0.0.0.0", PORT, app)
+        notify_step("SERVICE_ONLINE", f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT} (HTTP/WS)")
+        _flask_server.serve_forever()
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        write_crash_log("FLASK_CRASH", str(e), error_details)
+        notify_step("SERVICE_CRASH", f"Servicio HTTP interrumpido: {e}", status="ERROR")
+        import os
+        os._exit(1) # Forza el cierre del proceso para que Windows active la Recuperación Automática
 
 def stop_flask():
     global _flask_server
