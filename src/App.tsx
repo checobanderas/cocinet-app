@@ -1151,6 +1151,7 @@ export default function App() {
   const [isMasterAdmin, setIsMasterAdmin] = useState(() => localStorage.getItem("pos_master_admin") === "true");
   const [allDeviceRequests, setAllDeviceRequests] = useState<DeviceRequest[]>([]);
   const [showDeviceRequestsModal, setShowDeviceRequestsModal] = useState(false);
+  const [showCuentasSummary, setShowCuentasSummary] = useState(false);
   const [devReqName, setDevReqName] = useState("");
   const [devReqRole, setDevReqRole] = useState("mesero");
 
@@ -4444,14 +4445,13 @@ export default function App() {
     const pendingPedidos = printerQueue.filter((p) => p.impreso === false || p.impreso === undefined);
 
     pendingPedidos.forEach((pedido) => {
-      const isAlreadyProcessed =
+      const isAlreadyProcessed = 
         processedPrintIdsRef.current.has(pedido.id) ||
-        (pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
+        (pedido.tipo === "cuenta" && pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
 
       if (isAlreadyProcessed) return;
 
       processedPrintIdsRef.current.add(pedido.id);
-      if (pedido.folio) processedPrintIdsRef.current.add(pedido.folio);
 
       console.log(`[WindowsAutoPrint] Auto-printing network ${pedido.tipo}:`, pedido.folio);
       
@@ -12762,11 +12762,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const freshTable = tables.find(t => t.id === selectedTableId);
       if (!freshTable || freshTable.status === "available" || !freshTable.comandas || freshTable.comandas.length === 0) {
         alert("⚠️ Esta mesa ya ha sido cancelada o liberada por un administrador. No se puede cobrar.");
-        setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
         setSelectedTableId(null);
         setCheckoutFallbackItems([]);
         setShowPaymentOptions(false);
@@ -12837,11 +12838,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       }
     }
 
-    setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
     setSelectedTableId(null);
     setPaymentTipValue(0);
     setPaymentDiscountValue(0);
@@ -12904,11 +12906,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       }
     }
 
-    setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
     setSelectedTableId(null);
     setPaymentTipValue(0);
     setPaymentDiscountValue(0);
@@ -12950,11 +12953,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       setShowTransferTableModal(false);
       setTransferTargetTableId("");
-      setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+      const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
       setSelectedTableId(targetTable.id); // set target table as active so they can see it!
     } catch(err) {
       console.error("Error transferring table", err);
@@ -13034,11 +13038,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
        setShowMoveItemsModal(false);
        setMoveItemsSelection({});
        setMoveTargetTableId("");
-       setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+       const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
        setSelectedTableId(null);
     } catch(err) {
        console.error("Error moving items", err);
@@ -18747,11 +18752,12 @@ Instrucciones:
                   setReviewComensal(1);
                   setGeneralNotes("");
                   setConfirmRestart(false);
-                  setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+                  const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
                 }
               }}
               style={{
@@ -19300,11 +19306,12 @@ Instrucciones:
           if (appMode === "gestion_cuentas") {
             setSelectedTableGestion(null);
           } else {
-            setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+            const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
           }
           setPrecuentaComensal(1);
           setPrecuentaTab("resumen");
@@ -21454,11 +21461,12 @@ Instrucciones:
         subtitle: `Administración de ${selectedTenant?.name || "Sucursal"}`,
         showBack: true,
         onBack: () => {
-          setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+          const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
           setAdminViewOnlyCorte(false);
         }
       })}
@@ -29352,11 +29360,12 @@ Instrucciones:
 
                     <button
                       onClick={() => {
-                        setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+                        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
                         setShowSidebar(false);
                       }}
                       className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
@@ -39577,11 +39586,12 @@ Instrucciones:
             subtitle: `Sucursal ${selectedTenant?.name || "Pino Suárez"}`,
             showBack: true,
             onBack: () => {
-              setAppMode(checkoutReturnMode || "floorplan");
-        if (checkoutReturnMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        }
-        setCheckoutReturnMode(null);
+              const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
+setAppMode(nextMode);
+if (checkoutReturnMode === "gestion_cuentas") {
+  setSelectedTableGestion(null);
+}
+setCheckoutReturnMode(null);
               setIsMovimientosConsulted(false);
             },
           })}

@@ -1,0 +1,797 @@
+[
+  {
+    "name": "JULIO16",
+    "reportName": "",
+    "sortOrder": 0
+  },
+  {
+    "name": "MBRAVO - 21/07/2026 00:27 - ORDENARPORGRUPOS",
+    "reportName": "",
+    "sortOrder": 0
+  },
+  {
+    "name": "BUCHE (MAÍZ)",
+    "reportName": "TACO DE BUCHE DE MAÍZ",
+    "sortOrder": 1
+  },
+  {
+    "name": "CACHETE (MAÍZ)",
+    "reportName": "TACO DE CACHETE DE MAÍZ",
+    "sortOrder": 2
+  },
+  {
+    "name": "CARNITAS (MAÍZ)",
+    "reportName": "TACO DE CARNITAS DE MAÍZ",
+    "sortOrder": 3
+  },
+  {
+    "name": "CHAMORRO (MAÍZ)",
+    "reportName": "TACO DE CHAMORRO DE MAÍZ",
+    "sortOrder": 4
+  },
+  {
+    "name": "CORAZÓN (MAÍZ)",
+    "reportName": "TACO DE CORAZÓN DE MAÍZ",
+    "sortOrder": 5
+  },
+  {
+    "name": "CUERITO (MAÍZ)",
+    "reportName": "TACO DE CUERITO DE MAÍZ",
+    "sortOrder": 6
+  },
+  {
+    "name": "HÍGADO (MAÍZ)",
+    "reportName": "TACO DE HÍGADO DE MAÍZ",
+    "sortOrder": 7
+  },
+  {
+    "name": "NANA (MAÍZ)",
+    "reportName": "TACO DE NANA DE MAÍZ",
+    "sortOrder": 8
+  },
+  {
+    "name": "OREJA (MAÍZ)",
+    "reportName": "TACO DE OREJA DE MAÍZ",
+    "sortOrder": 9
+  },
+  {
+    "name": "TACOS DE SESOS (MAÍZ)",
+    "reportName": "TACO DE SESOS DE MAÍZ",
+    "sortOrder": 10
+  },
+  {
+    "name": "TROMPA (MAÍZ)",
+    "reportName": "TACO DE TROMPA DE MAÍZ",
+    "sortOrder": 11
+  },
+  {
+    "name": "BUCHE (HARINA)",
+    "reportName": "TACO DE BUCHE DE HARINA",
+    "sortOrder": 12
+  },
+  {
+    "name": "CACHETE (HARINA)",
+    "reportName": "TACO DE CACHETE DE HARINA",
+    "sortOrder": 13
+  },
+  {
+    "name": "CARNITAS (HARINA)",
+    "reportName": "TACO DE CARNITAS DE HARINA",
+    "sortOrder": 14
+  },
+  {
+    "name": "CHAMORRO (HARINA)",
+    "reportName": "TACO DE CHAMORRO DE HARINA",
+    "sortOrder": 15
+  },
+  {
+    "name": "CORAZÓN (HARINA)",
+    "reportName": "TACO DE CORAZÓN DE HARINA",
+    "sortOrder": 16
+  },
+  {
+    "name": "CUERITO (HARINA)",
+    "reportName": "TACO DE CUERITO DE HARINA",
+    "sortOrder": 17
+  },
+  {
+    "name": "HÍGADO (HARINA)",
+    "reportName": "TACO DE HÍGADO DE HARINA",
+    "sortOrder": 18
+  },
+  {
+    "name": "NANA (HARINA)",
+    "reportName": "TACO DE NANA DE HARINA",
+    "sortOrder": 19
+  },
+  {
+    "name": "OREJA (HARINA)",
+    "reportName": "TACO DE OREJA DE HARINA",
+    "sortOrder": 20
+  },
+  {
+    "name": "TACOS DE SESOS (HARINA)",
+    "reportName": "TACO DE SESOS DE HARINA",
+    "sortOrder": 21
+  },
+  {
+    "name": "TROMPA (HARINA)",
+    "reportName": "TACO DE TROMPA DE HARINA",
+    "sortOrder": 22
+  },
+  {
+    "name": "MULA TERCA",
+    "reportName": "MULA TERCA",
+    "sortOrder": 23
+  },
+  {
+    "name": "PASTOR (HARINA)",
+    "reportName": "TACO DE PASTOR DE HARINA",
+    "sortOrder": 24
+  },
+  {
+    "name": "PASTOR (MAÍZ)",
+    "reportName": "TACO DE PASTOR DE MAÍZ",
+    "sortOrder": 25
+  },
+  {
+    "name": "SURTIDA (HARINA)",
+    "reportName": "TACO DE SURTIDA DE HARINA",
+    "sortOrder": 26
+  },
+  {
+    "name": "SURTIDA (MAÍZ)",
+    "reportName": "TACO DE SURTIDA DE MAÍZ",
+    "sortOrder": 27
+  },
+  {
+    "name": "COSTILLA (HARINA)",
+    "reportName": "TACO DE COSTILLA DE HARINA",
+    "sortOrder": 28
+  },
+  {
+    "name": "COSTILLA (MAÍZ)",
+    "reportName": "TACO DE COSTILLA DE MAÍZ",
+    "sortOrder": 29
+  },
+  {
+    "name": "ARRACHERA (HARINA)",
+    "reportName": "TACO DE ARRACHERA DE HARINA",
+    "sortOrder": 30
+  },
+  {
+    "name": "ARRACHERA (MAÍZ)",
+    "reportName": "TACO DE ARRACHERA DE MAÍZ",
+    "sortOrder": 31
+  },
+  {
+    "name": "CABEZA DE PUERCO (HARINA)",
+    "reportName": "TACO DE CABEZA DE PUERCO DE HARINA",
+    "sortOrder": 32
+  },
+  {
+    "name": "CABEZA DE PUERCO (MAÍZ)",
+    "reportName": "TACO DE CABEZA DE PUERCO DE MAÍZ",
+    "sortOrder": 33
+  },
+  {
+    "name": "MACIZA DE PUERCO (HARINA)",
+    "reportName": "TACO DE MACIZA DE PUERCO DE HARINA",
+    "sortOrder": 34
+  },
+  {
+    "name": "MACIZA DE PUERCO (MAÍZ)",
+    "reportName": "TACO DE MACIZA DE PUERCO DE MAÍZ",
+    "sortOrder": 35
+  },
+  {
+    "name": "MACIZA DE RES (HARINA)",
+    "reportName": "TACO DE MACIZA DE RES DE HARINA",
+    "sortOrder": 36
+  },
+  {
+    "name": "MACIZA DE RES (MAÍZ)",
+    "reportName": "TACO DE MACIZA DE RES DE MAÍZ",
+    "sortOrder": 37
+  },
+  {
+    "name": "TACOS DE POLLO (HARINA)",
+    "reportName": "TACO DE POLLO DE HARINA",
+    "sortOrder": 38
+  },
+  {
+    "name": "TACOS DE POLLO (MAÍZ)",
+    "reportName": "TACO DE POLLO DE MAÍZ",
+    "sortOrder": 39
+  },
+  {
+    "name": "LENGUA (HARINA)",
+    "reportName": "TACO DE LENGUA DE HARINA",
+    "sortOrder": 40
+  },
+  {
+    "name": "LENGUA (MAÍZ)",
+    "reportName": "TACO DE LENGUA DE MAÍZ",
+    "sortOrder": 41
+  },
+  {
+    "name": "PASTOR CON QUESO (MAÍZ)",
+    "reportName": "TACO DE PASTOR CON QUESO DE MAÍZ",
+    "sortOrder": 42
+  },
+  {
+    "name": "BISTEC CON QUESO (MAÍZ)",
+    "reportName": "TACO DE BISTEC CON QUESO DE MAÍZ",
+    "sortOrder": 43
+  },
+  {
+    "name": "COSTILLA CON QUESO (MAÍZ)",
+    "reportName": "TACO DE COSTILLA CON QUESO DE MAÍZ",
+    "sortOrder": 44
+  },
+  {
+    "name": "ARRACHERA CON QUESO (MAÍZ)",
+    "reportName": "TACO DE ARRACHERA CON QUESO DE MAÍZ",
+    "sortOrder": 45
+  },
+  {
+    "name": "TACOS AHOGADOS PASTOR",
+    "reportName": "TACO DE S PASTOR AHOGADO",
+    "sortOrder": 46
+  },
+  {
+    "name": "TACOS AHOGADOS BISTEC",
+    "reportName": "TACO DE S BISTEC AHOGADO",
+    "sortOrder": 47
+  },
+  {
+    "name": "TACOS AHOGADOS COSTILLA",
+    "reportName": "TACO DE S COSTILLA AHOGADO",
+    "sortOrder": 48
+  },
+  {
+    "name": "TACOS AHOGADOS ARRACHERA",
+    "reportName": "TACO DE S ARRACHERA AHOGADO",
+    "sortOrder": 49
+  },
+  {
+    "name": "TACOS AHOGADOS PUERCO",
+    "reportName": "TACO DE S PUERCO AHOGADO",
+    "sortOrder": 50
+  },
+  {
+    "name": "TACOS AHOGADOS RES",
+    "reportName": "TACO DE S RES AHOGADO",
+    "sortOrder": 51
+  },
+  {
+    "name": "MATAHAMBRE",
+    "reportName": "MATAHAMBRE",
+    "sortOrder": 52
+  },
+  {
+    "name": "PLATO MIXTO",
+    "reportName": "PLATO MIXTO",
+    "sortOrder": 53
+  },
+  {
+    "name": "PLATO SUIZO",
+    "reportName": "PLATO SUIZO",
+    "sortOrder": 54
+  },
+  {
+    "name": "GRINGA PASTOR (HARINA)",
+    "reportName": "GRINGA DE PASTOR DE HARINA",
+    "sortOrder": 55
+  },
+  {
+    "name": "GRINGA PASTOR (MAÍZ)",
+    "reportName": "GRINGA DE PASTOR DE MAÍZ",
+    "sortOrder": 56
+  },
+  {
+    "name": "GRINGA (BISTEC)",
+    "reportName": "GRINGA DE BISTEC",
+    "sortOrder": 57
+  },
+  {
+    "name": "GRINGA (BISTEC)",
+    "reportName": "GRINGA DE BISTEC",
+    "sortOrder": 58
+  },
+  {
+    "name": "GRINGA BISTEC (HARINA)",
+    "reportName": "GRINGA DE BISTEC DE HARINA",
+    "sortOrder": 59
+  },
+  {
+    "name": "GRINGA BISTEC (MAÍZ)",
+    "reportName": "GRINGA DE BISTEC DE MAÍZ",
+    "sortOrder": 60
+  },
+  {
+    "name": "GRINGA (COSTILLA)",
+    "reportName": "GRINGA DE COSTILLA",
+    "sortOrder": 61
+  },
+  {
+    "name": "GRINGA COSTILLA (HARINA)",
+    "reportName": "GRINGA DE COSTILLA DE HARINA",
+    "sortOrder": 62
+  },
+  {
+    "name": "GRINGA COSTILLA (MAÍZ)",
+    "reportName": "GRINGA DE COSTILLA DE MAÍZ",
+    "sortOrder": 63
+  },
+  {
+    "name": "GRINGA (ARRACHERA)",
+    "reportName": "GRINGA DE ARRACHERA",
+    "sortOrder": 64
+  },
+  {
+    "name": "GRINGA ARRACHERA (HARINA)",
+    "reportName": "GRINGA DE ARRACHERA DE HARINA",
+    "sortOrder": 65
+  },
+  {
+    "name": "GRINGA ARRACHERA (MAÍZ)",
+    "reportName": "GRINGA DE ARRACHERA DE MAÍZ",
+    "sortOrder": 66
+  },
+  {
+    "name": "ORDEN DE GUACAMOLE",
+    "reportName": "ORDEN DE GUACAMOLE",
+    "sortOrder": 67
+  },
+  {
+    "name": "TORTILLA DE MAÍZ",
+    "reportName": "TORTILLA DE MAÍZ",
+    "sortOrder": 68
+  },
+  {
+    "name": "TORTILLA EXTRA HARINA",
+    "reportName": "TORTILLA EXTRA HARINA",
+    "sortOrder": 69
+  },
+  {
+    "name": "TOSTADA EXTRA",
+    "reportName": "TOSTADA DE EXTRA",
+    "sortOrder": 70
+  },
+  {
+    "name": "ZANAHORIA",
+    "reportName": "ZANAHORIA",
+    "sortOrder": 71
+  },
+  {
+    "name": "TOSTADA DE BISTEC",
+    "reportName": "TOSTADA DE BISTEC",
+    "sortOrder": 72
+  },
+  {
+    "name": "TOSTADA DE COSTILLA",
+    "reportName": "TOSTADA DE COSTILLA",
+    "sortOrder": 73
+  },
+  {
+    "name": "TOSTADA DE ARRACHERA",
+    "reportName": "TOSTADA DE ARRACHERA",
+    "sortOrder": 74
+  },
+  {
+    "name": "TOSTADAS DE PUERCO",
+    "reportName": "TOSTADA DE PUERCO",
+    "sortOrder": 75
+  },
+  {
+    "name": "TOSTADA DE MACIZA DE RES",
+    "reportName": "TOSTADA DE MACIZA DE RES",
+    "sortOrder": 176
+  },
+  {
+    "name": "QUESO FUNDIDO",
+    "reportName": "QUESO FUNDIDO CON QUESO FUNDIDO",
+    "sortOrder": 177
+  },
+  {
+    "name": "QUESO FUNDIDO COMBINADO",
+    "reportName": "QUESO FUNDIDO CON COMBINADO",
+    "sortOrder": 178
+  },
+  {
+    "name": "QUESO FUNDIDO ESPECIAL",
+    "reportName": "QUESO FUNDIDO CON ESPECIAL",
+    "sortOrder": 179
+  },
+  {
+    "name": "ALAMBRE",
+    "reportName": "ALAMBRE",
+    "sortOrder": 180
+  },
+  {
+    "name": "ALAMBRE ESPECIAL",
+    "reportName": "ALAMBRE ESPECIAL",
+    "sortOrder": 181
+  },
+  {
+    "name": "POZOLE COMBINADO",
+    "reportName": "POZOLE DE COMBINADO",
+    "sortOrder": 182
+  },
+  {
+    "name": "POZOLE ROJO GRANDE",
+    "reportName": "POZOLE DE ROJO GRANDE",
+    "sortOrder": 183
+  },
+  {
+    "name": "QUESADILLA MAIZ",
+    "reportName": "QUESADILLA MAIZ",
+    "sortOrder": 184
+  },
+  {
+    "name": "QUESADILLA ESPECIAL (PASTOR)",
+    "reportName": "QUESADILLA DE ESPECIAL PASTOR",
+    "sortOrder": 185
+  },
+  {
+    "name": "QUESADILLA ESPECIAL PASTOR",
+    "reportName": "QUESADILLA DE ESPECIAL PASTOR",
+    "sortOrder": 186
+  },
+  {
+    "name": "VOLCÁN PASTOR",
+    "reportName": "VOLCÁN PASTOR",
+    "sortOrder": 187
+  },
+  {
+    "name": "BISTEC (HARINA)",
+    "reportName": "TACO DE BISTEC DE HARINA",
+    "sortOrder": 188
+  },
+  {
+    "name": "BISTEC (MAÍZ)",
+    "reportName": "TACO DE BISTEC DE MAÍZ",
+    "sortOrder": 189
+  },
+  {
+    "name": "QUESADILLA ESPECIAL (BISTEC)",
+    "reportName": "QUESADILLA DE ESPECIAL BISTEC",
+    "sortOrder": 190
+  },
+  {
+    "name": "QUESADILLA ESPECIAL BISTEC",
+    "reportName": "QUESADILLA DE ESPECIAL BISTEC",
+    "sortOrder": 191
+  },
+  {
+    "name": "VOLCÁN (BISTEC)",
+    "reportName": "VOLCÁN DE VOLCÁN BISTEC",
+    "sortOrder": 192
+  },
+  {
+    "name": "VOLCÁN (BISTEC)",
+    "reportName": "VOLCÁN DE VOLCÁN BISTEC",
+    "sortOrder": 193
+  },
+  {
+    "name": "VOLCÁN BISTEC",
+    "reportName": "VOLCÁN DE VOLCÁN BISTEC",
+    "sortOrder": 194
+  },
+  {
+    "name": "QUESADILLA ESPECIAL (COSTILLA)",
+    "reportName": "QUESADILLA DE ESPECIAL COSTILLA",
+    "sortOrder": 195
+  },
+  {
+    "name": "QUESADILLA ESPECIAL COSTILLA",
+    "reportName": "QUESADILLA DE ESPECIAL COSTILLA",
+    "sortOrder": 196
+  },
+  {
+    "name": "VOLCÁN (COSTILLA)",
+    "reportName": "VOLCÁN DE VOLCÁN COSTILLA",
+    "sortOrder": 197
+  },
+  {
+    "name": "VOLCÁN COSTILLA",
+    "reportName": "VOLCÁN DE VOLCÁN COSTILLA",
+    "sortOrder": 198
+  },
+  {
+    "name": "QUESADILLA ESPECIAL (ARRACHERA)",
+    "reportName": "QUESADILLA DE ESPECIAL ARRACHERA",
+    "sortOrder": 199
+  },
+  {
+    "name": "QUESADILLA ESPECIAL ARRACHERA",
+    "reportName": "QUESADILLA DE ESPECIAL ARRACHERA",
+    "sortOrder": 200
+  },
+  {
+    "name": "VOLCÁN (ARRACHERA)",
+    "reportName": "VOLCÁN DE VOLCÁN ARRACHERA",
+    "sortOrder": 201
+  },
+  {
+    "name": "VOLCÁN ARRACHERA",
+    "reportName": "VOLCÁN DE VOLCÁN ARRACHERA",
+    "sortOrder": 202
+  },
+  {
+    "name": "POZOLE RES",
+    "reportName": "POZOLE DE RES",
+    "sortOrder": 203
+  },
+  {
+    "name": "VEGETARIANO",
+    "reportName": "VEGETARIANO",
+    "sortOrder": 204
+  },
+  {
+    "name": "SINCRONIZADAS",
+    "reportName": "SINCRONIZADA DE SINCRONIZADAS",
+    "sortOrder": 205
+  },
+  {
+    "name": "BURRITA PASTOR (HARINA)",
+    "reportName": "BURRITA PASTOR (HARINA)",
+    "sortOrder": 206
+  },
+  {
+    "name": "BURRITA PASTOR (MAÍZ)",
+    "reportName": "BURRITA PASTOR (MAÍZ)",
+    "sortOrder": 207
+  },
+  {
+    "name": "BURRITA (BISTEC)",
+    "reportName": "BURRITA (BISTEC)",
+    "sortOrder": 208
+  },
+  {
+    "name": "BURRITA (BISTEC)",
+    "reportName": "BURRITA (BISTEC)",
+    "sortOrder": 209
+  },
+  {
+    "name": "BURRITA BISTEC (HARINA)",
+    "reportName": "BURRITA BISTEC (HARINA)",
+    "sortOrder": 210
+  },
+  {
+    "name": "BURRITA BISTEC (MAÍZ)",
+    "reportName": "BURRITA BISTEC (MAÍZ)",
+    "sortOrder": 211
+  },
+  {
+    "name": "BURRITA (COSTILLA)",
+    "reportName": "BURRITA (COSTILLA)",
+    "sortOrder": 212
+  },
+  {
+    "name": "BURRITA COSTILLA (HARINA)",
+    "reportName": "BURRITA COSTILLA (HARINA)",
+    "sortOrder": 213
+  },
+  {
+    "name": "BURRITA COSTILLA (MAÍZ)",
+    "reportName": "BURRITA COSTILLA (MAÍZ)",
+    "sortOrder": 214
+  },
+  {
+    "name": "BURRITA (ARRACHERA)",
+    "reportName": "BURRITA (ARRACHERA)",
+    "sortOrder": 215
+  },
+  {
+    "name": "BURRITA ARRACHERA (HARINA)",
+    "reportName": "BURRITA ARRACHERA (HARINA)",
+    "sortOrder": 216
+  },
+  {
+    "name": "BURRITA ARRACHERA (MAÍZ)",
+    "reportName": "BURRITA ARRACHERA (MAÍZ)",
+    "sortOrder": 217
+  },
+  {
+    "name": "AGUA DE SABOR (JARRA)",
+    "reportName": "AGUA DE SABOR (JARRA)",
+    "sortOrder": 218
+  },
+  {
+    "name": "AGUA DE SABOR (VASO)",
+    "reportName": "AGUA DE SABOR (VASO)",
+    "sortOrder": 219
+  },
+  {
+    "name": "AGUA MINERAL",
+    "reportName": "AGUA MINERAL",
+    "sortOrder": 220
+  },
+  {
+    "name": "AGUA NATURAL",
+    "reportName": "AGUA NATURAL",
+    "sortOrder": 221
+  },
+  {
+    "name": "ATOLE",
+    "reportName": "ATOLE",
+    "sortOrder": 222
+  },
+  {
+    "name": "BARRILITO",
+    "reportName": "BARRILITO",
+    "sortOrder": 223
+  },
+  {
+    "name": "BASE MICHELADA",
+    "reportName": "BASE MICHELADA",
+    "sortOrder": 224
+  },
+  {
+    "name": "CAFÉ DE OLLA",
+    "reportName": "CAFÉ DE OLLA",
+    "sortOrder": 225
+  },
+  {
+    "name": "CERVEZA ESPECIAL",
+    "reportName": "CERVEZA ESPECIAL",
+    "sortOrder": 226
+  },
+  {
+    "name": "CORONA",
+    "reportName": "CORONA",
+    "sortOrder": 227
+  },
+  {
+    "name": "LIMONADA (JARRA)",
+    "reportName": "LIMONADA (JARRA)",
+    "sortOrder": 228
+  },
+  {
+    "name": "LIMONADA (VASO)",
+    "reportName": "LIMONADA (VASO)",
+    "sortOrder": 229
+  },
+  {
+    "name": "NARANJADA",
+    "reportName": "NARANJADA",
+    "sortOrder": 230
+  },
+  {
+    "name": "NARANJADA JARRA",
+    "reportName": "NARANJADA JARRA",
+    "sortOrder": 231
+  },
+  {
+    "name": "PONCHE (TEMPORADA)",
+    "reportName": "PONCHE (TEMPORADA)",
+    "sortOrder": 232
+  },
+  {
+    "name": "SUERO",
+    "reportName": "SUERO",
+    "sortOrder": 233
+  },
+  {
+    "name": "TIZANA",
+    "reportName": "TIZANA",
+    "sortOrder": 234
+  },
+  {
+    "name": "TIZANA FRÍA",
+    "reportName": "TIZANA FRÍA",
+    "sortOrder": 235
+  },
+  {
+    "name": "TOPO CHICO",
+    "reportName": "TOPO CHICO",
+    "sortOrder": 236
+  },
+  {
+    "name": "VICTORIA",
+    "reportName": "VICTORIA",
+    "sortOrder": 237
+  },
+  {
+    "name": "BISTEC (1 KG.)",
+    "reportName": "BISTEC (1 KG.)",
+    "sortOrder": 238
+  },
+  {
+    "name": "BISTEC (1/2 KG.)",
+    "reportName": "BISTEC (1/2 KG.)",
+    "sortOrder": 239
+  },
+  {
+    "name": "BISTEC (300 GR.)",
+    "reportName": "BISTEC (300 GR.)",
+    "sortOrder": 240
+  },
+  {
+    "name": "ARRACHERA (1 KG.)",
+    "reportName": "ARRACHERA (1 KG.)",
+    "sortOrder": 241
+  },
+  {
+    "name": "ARRACHERA (1/2 KG.)",
+    "reportName": "ARRACHERA (1/2 KG.)",
+    "sortOrder": 242
+  },
+  {
+    "name": "ARRACHERA (300 GR.)",
+    "reportName": "ARRACHERA (300 GR.)",
+    "sortOrder": 243
+  },
+  {
+    "name": "PUERCO (1 KG.)",
+    "reportName": "PUERCO (1 KG.)",
+    "sortOrder": 244
+  },
+  {
+    "name": "PUERCO (1/2 KG.)",
+    "reportName": "PUERCO (1/2 KG.)",
+    "sortOrder": 245
+  },
+  {
+    "name": "PUERCO (300 GR.)",
+    "reportName": "PUERCO (300 GR.)",
+    "sortOrder": 246
+  },
+  {
+    "name": "REFRESCO DE LATA",
+    "reportName": "REFRESCO DE LATA",
+    "sortOrder": 247
+  },
+  {
+    "name": "REFRESCOS",
+    "reportName": "REFRESCOS",
+    "sortOrder": 248
+  },
+  {
+    "name": "RES (1 KG.)",
+    "reportName": "RES (1 KG.)",
+    "sortOrder": 249
+  },
+  {
+    "name": "RES (1/2 KG.)",
+    "reportName": "RES (1/2 KG.)",
+    "sortOrder": 250
+  },
+  {
+    "name": "RES (300 GR.)",
+    "reportName": "RES (300 GR.)",
+    "sortOrder": 251
+  },
+  {
+    "name": "FLAN NAPOLITANO",
+    "reportName": "FLAN NAPOLITANO",
+    "sortOrder": 252
+  },
+  {
+    "name": "PANQUE DE ELOTE",
+    "reportName": "PANQUE DE ELOTE",
+    "sortOrder": 253
+  },
+  {
+    "name": "PAY DE QUESO",
+    "reportName": "PAY DE QUESO",
+    "sortOrder": 254
+  },
+  {
+    "name": "CONTENEDOR POZOLE",
+    "reportName": "CONTENEDOR POZOLE",
+    "sortOrder": 255
+  },
+  {
+    "name": "CHAROLA DESECHABLE",
+    "reportName": "CHAROLA DESECHABLE",
+    "sortOrder": 256
+  },
+  {
+    "name": "QUESADILLA HARINA",
+    "reportName": "QUESADILLA HARINA",
+    "sortOrder": 257
+  }
+]

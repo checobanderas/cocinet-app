@@ -1,0 +1,392 @@
+[
+  {
+    "name": "Roxana 💵",
+    "role": "cajero",
+    "tenant": "377e04fd-fb7a-4d0b-8cae-5c75de2f77c6"
+  },
+  {
+    "name": "Cesar 💳",
+    "role": "cajero",
+    "tenant": "377e04fd-fb7a-4d0b-8cae-5c75de2f77c6"
+  },
+  {
+    "name": "Gerente Azucenas👔",
+    "role": "admin",
+    "tenant": "377e04fd-fb7a-4d0b-8cae-5c75de2f77c6"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "377e04fd-fb7a-4d0b-8cae-5c75de2f77c6"
+  },
+  {
+    "name": "Nuevo Empleado",
+    "role": "admin",
+    "tenant": "377e04fd-fb7a-4d0b-8cae-5c75de2f77c6"
+  },
+  {
+    "name": "Luis Linares 👔",
+    "role": "admin",
+    "tenant": "3952c462-ef24-4ef6-95ad-c5475ddebc1a"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "3bd984c4-727c-48ca-8c83-fd61fe91e0df"
+  },
+  {
+    "name": "ROXANA",
+    "role": "cajero",
+    "tenant": "3bd984c4-727c-48ca-8c83-fd61fe91e0df"
+  },
+  {
+    "name": "Micaela 💵",
+    "role": "cajero",
+    "tenant": "4884d1f2-a89e-468c-acc5-3660089049e6"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "4884d1f2-a89e-468c-acc5-3660089049e6"
+  },
+  {
+    "name": "Micaela  💵",
+    "role": "cajero",
+    "tenant": "6ebd9c76-57db-4ee8-a481-cf017f3c0d48"
+  },
+  {
+    "name": "Roxana 👔",
+    "role": "admin",
+    "tenant": "6ebd9c76-57db-4ee8-a481-cf017f3c0d48"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "6ebd9c76-57db-4ee8-a481-cf017f3c0d48"
+  },
+  {
+    "name": "Gerente 👔",
+    "role": "admin",
+    "tenant": "831bf3f0-0ec5-41f5-84fc-17cf5f847abd"
+  },
+  {
+    "name": "Admin 1",
+    "role": "admin",
+    "tenant": ""
+  },
+  {
+    "name": "Admin 2",
+    "role": "admin",
+    "tenant": ""
+  },
+  {
+    "name": "Admin 3",
+    "role": "admin",
+    "tenant": ""
+  },
+  {
+    "name": "Micaela 💵",
+    "role": "cajero",
+    "tenant": "b9cddf7f-112c-4519-a4ef-384ad22f1e76"
+  },
+  {
+    "name": "Brenda 👔",
+    "role": "admin",
+    "tenant": "b9cddf7f-112c-4519-a4ef-384ad22f1e76"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "b9cddf7f-112c-4519-a4ef-384ad22f1e76"
+  },
+  {
+    "name": "Cajero 1",
+    "role": "cajero",
+    "tenant": ""
+  },
+  {
+    "name": "Cajero 2",
+    "role": "cajero",
+    "tenant": ""
+  },
+  {
+    "name": "Mesero 1",
+    "role": "mesero",
+    "tenant": ""
+  },
+  {
+    "name": "Mesero 2",
+    "role": "mesero",
+    "tenant": ""
+  },
+  {
+    "name": "Mesero 3",
+    "role": "mesero",
+    "tenant": ""
+  },
+  {
+    "name": "Soraya🤠",
+    "role": "admin",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Brenda1 💵",
+    "role": "cajero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Micaela 💳",
+    "role": "cajero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Admin👔",
+    "role": "admin",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Kevin 🚴",
+    "role": "mesero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Jasmin 3 🚀",
+    "role": "mesero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "heydy 1🏃",
+    "role": "mesero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Alexis",
+    "role": "mesero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Nuevo Empleado",
+    "role": "mesero",
+    "tenant": "tenant-1"
+  },
+  {
+    "name": "Gerente (Viguera) 👔",
+    "role": "admin",
+    "tenant": "tenant-12"
+  },
+  {
+    "name": "Propietario: HUAYAPAM 👑",
+    "role": "admin",
+    "tenant": "tenant-14"
+  },
+  {
+    "name": "Propietario: BLADIMIR 👑",
+    "role": "admin",
+    "tenant": "tenant-15"
+  },
+  {
+    "name": "Migue 👔",
+    "role": "admin",
+    "tenant": "tenant-15"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-15"
+  },
+  {
+    "name": "Propietario: VLADIMIR 👑",
+    "role": "admin",
+    "tenant": "tenant-16"
+  },
+  {
+    "name": "Estrella Ortiz💵",
+    "role": "cajero",
+    "tenant": "tenant-16"
+  },
+  {
+    "name": "Fernanda Plata 💳",
+    "role": "cajero",
+    "tenant": "tenant-16"
+  },
+  {
+    "name": "Yahir Garcia 👔",
+    "role": "admin",
+    "tenant": "tenant-16"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-16"
+  },
+  {
+    "name": "Caja 💵",
+    "role": "cajero",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Luis Linares2 👔",
+    "role": "admin",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Administrador",
+    "role": "admin",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Nuevo Empleado",
+    "role": "mesero",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Nuevo Empleado",
+    "role": "mesero",
+    "tenant": "tenant-17"
+  },
+  {
+    "name": "Cajero 1 💵",
+    "role": "cajero",
+    "tenant": "tenant-2"
+  },
+  {
+    "name": "Patrón (Plaxa Tecno) 🤠",
+    "role": "admin",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Cajero 1 💵",
+    "role": "cajero",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Cajero 2 💳",
+    "role": "cajero",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Manager (Plaxa Tecno) 👔",
+    "role": "admin",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Usher 2 (Garrotero) 🚴",
+    "role": "mesero",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Usher 3 (Garrotero) 🚀",
+    "role": "mesero",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Usher 1 (Garrotero) 🏃",
+    "role": "mesero",
+    "tenant": "tenant-3"
+  },
+  {
+    "name": "Evelin 🤠",
+    "role": "admin",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Cajero 1 💵",
+    "role": "cajero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Cajero 2 💳",
+    "role": "cajero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Manager (Macro Plaza) 👔",
+    "role": "admin",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Gladys  🚴",
+    "role": "mesero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Vanesa  🚀",
+    "role": "mesero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Memo  🏃",
+    "role": "mesero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Vanesa 🚀",
+    "role": "mesero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Carlos 🚀",
+    "role": "mesero",
+    "tenant": "tenant-5"
+  },
+  {
+    "name": "Nancy 💵",
+    "role": "cajero",
+    "tenant": "tenant-7"
+  },
+  {
+    "name": "Jenni 💳",
+    "role": "cajero",
+    "tenant": "tenant-7"
+  },
+  {
+    "name": "Nancy 1 🏃",
+    "role": "mesero",
+    "tenant": "tenant-7"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-7"
+  },
+  {
+    "name": "Propietario: BLADIMIR 👑",
+    "role": "admin",
+    "tenant": "tenant-9"
+  },
+  {
+    "name": "Jesus 💵",
+    "role": "cajero",
+    "tenant": "tenant-9"
+  },
+  {
+    "name": "Brayam 💳",
+    "role": "cajero",
+    "tenant": "tenant-9"
+  },
+  {
+    "name": "Supervisor 👔",
+    "role": "admin",
+    "tenant": "tenant-9"
+  },
+  {
+    "name": "Sistemas ⚙️",
+    "role": "admin",
+    "tenant": "tenant-9"
+  }
+]

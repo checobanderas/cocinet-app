@@ -41,6 +41,7 @@ if not running_as_service_cmd or sys.argv[1].lower() == "debug":
 # ─── Importaciones Seguras ─────────────────────────────────────────
 import urllib.parse
 import threading
+import queue
 import logging
 from logging.handlers import RotatingFileHandler
 import hashlib
@@ -1217,10 +1218,70 @@ def list_printers():
     default = win32print.GetDefaultPrinter()
     return jsonify({"printers": installed, "default": default, "mapped": PRINTER_MAP})
 
+print_lock = threading.Lock()
+internal_print_queue = queue.Queue()
+
+def purge_stuck_windows_jobs(printer_name: str):
+    """Cancela trabajos atascados o con error en el Spooler de Windows."""
+    try:
+        hPrinter = win32print.OpenPrinter(printer_name)
+        try:
+            jobs = win32print.EnumJobs(hPrinter, 0, -1, 1)
+            for job in jobs:
+                job_id = job['JobId']
+                status = job['Status']
+                # Si el trabajo tiene error, o se quedó atascado por falta de papel o offline
+                if status & (win32print.JOB_STATUS_ERROR | win32print.JOB_STATUS_OFFLINE | win32print.JOB_STATUS_PAPEROUT):
+                    win32print.SetJob(hPrinter, job_id, 0, None, win32print.JOB_CONTROL_CANCEL)
+                    notify_step("SPOOLER_CLEANUP", f"Trabajo atascado/error (ID {job_id}) eliminado del Spooler en {printer_name}.", status="WARNING")
+        finally:
+            win32print.ClosePrinter(hPrinter)
+    except Exception as e:
+        notify_step("SPOOLER_CLEANUP_ERR", f"No se pudo limpiar el spooler de {printer_name}: {e}", status="WARNING")
+
+def internal_print_worker():
+    notify_step("WORKER_START", "Hilo de cola de impresión interna iniciado.", status="INFO")
+    while True:
+        try:
+            job = internal_print_queue.get()
+            if job is None:
+                break
+                
+            printer_key = job.get("printer_key")
+            raw_bytes = job.get("raw_bytes")
+            
+            notify_step("WORKER_PROCESS", f"Procesando ticket para '{printer_key}' desde la cola interna.")
+            
+            try:
+                printer_name = resolve_printer_name(printer_key)
+                
+                # Vaciar bufer de trabajos atascados inmediatamente antes de imprimir
+                purge_stuck_windows_jobs(printer_name)
+                
+                # Bloqueo para que solo 1 ticket a la vez vaya al spooler y no lo sature
+                with print_lock:
+                    print_data(printer_name, raw_bytes, ticket_type=printer_key)
+                    
+                notify_step("WORKER_COMPLETE", f"🎉 Ticket impreso exitosamente en [{printer_name}]", status="SUCCESS")
+            except Exception as print_ex:
+                notify_step("WORKER_ERROR", f"❌ El trabajo para '{printer_key}' NO se imprimió. Razón: {print_ex}", status="ERROR")
+            finally:
+                internal_print_queue.task_done()
+        except Exception as e:
+            notify_step("WORKER_CRITICAL", f"Error crítico en el hilo de impresión: {e}", status="ERROR")
+            time.sleep(2)
+
 @app.route("/print", methods=["POST"])
 def print_ticket():
+    try:
+        raw_payload = request.get_data(as_text=True)
+        notify_step("0_INCOMING", f"POST /print recibido. Tamaño payload: {len(raw_payload)}")
+    except Exception:
+        pass
+
     data = request.get_json(silent=True)
     if not data:
+        notify_step("0_ERROR", "POST /print recibido pero no tiene JSON valido", status="ERROR")
         return jsonify({"success": False, "error": "No data received"}), 400
         
     printer_key  = data.get("printer", "cuentas")
@@ -1233,14 +1294,18 @@ def print_ticket():
         notify_step("2_PROCESS_DUP", "Ticket duplicado detectado por Hash, omitiendo impresión", status="WARNING")
         return jsonify({"success": True, "ignored": True, "reason": "duplicate", "bytes_sent": 0})
         
-    try:
-        printer_name = resolve_printer_name(printer_key)
-        print_data(printer_name, raw_bytes, ticket_type=printer_key)
-        notify_step("4_COMPLETE", f"🎉 Impresión completada exitosamente en [{printer_name}]", status="SUCCESS")
-        return jsonify({"success": True, "printer_used": printer_name, "bytes_sent": len(raw_bytes)})
-    except Exception as e:
-        notify_step("4_ERROR", f"❌ Error durante proceso de impresión: {e}", status="ERROR")
-        return jsonify({"success": False, "error": str(e)}), 500
+    # Encolar para impresión asíncrona
+    internal_print_queue.put({
+        "printer_key": printer_key,
+        "raw_bytes": raw_bytes
+    })
+    notify_step("2_ENQUEUED", f"Ticket para '{printer_key}' añadido a la cola de impresión interna.")
+    
+    # Resolver nombre de impresora sincrónicamente solo para retrocompatibilidad de API
+    printer_name = resolve_printer_name(printer_key)
+    
+    # Responder inmediatamente para evitar bloqueos
+    return jsonify({"success": True, "queued": True, "printer_key": printer_key, "printer_used": printer_name, "bytes_sent": len(raw_bytes)})
 @app.route("/backup-sale", methods=["POST"])
 def backup_sale():
     try:
@@ -1321,7 +1386,8 @@ def test_print():
         ]
         test_bytes = b"".join(parts)
 
-        print_data(printer_name, test_bytes, ticket_type=printer_key)
+        with print_lock:
+            print_data(printer_name, test_bytes, ticket_type=printer_key)
         notify_step("4_COMPLETE_TEST", f"🎉 Página de prueba emitida correctamente en [{printer_name}]", status="SUCCESS")
         return jsonify({"success": True, "printer_used": printer_name})
     except Exception as e:
@@ -1350,7 +1416,8 @@ def diag_print():
         test_bytes = ESC + b"@" + b"Diagnostico OK\n" + GS + b"V\x41\x03"
 
         add_log("Intentando imprimir página de prueba de diagnóstico...")
-        print_data(printer_name, test_bytes, ticket_type=printer_key)
+        with print_lock:
+            print_data(printer_name, test_bytes, ticket_type=printer_key)
         add_log("Impresión de diagnóstico completada.")
 
         return jsonify({"success": True, "logs": logs})
@@ -1428,7 +1495,9 @@ def db_polling_loop():
                         continue
                     
                     printer_name = resolve_printer_name(printer_key)
-                    print_data(printer_name, raw_bytes, ticket_type=printer_key)
+                    purge_stuck_windows_jobs(printer_name)
+                    with print_lock:
+                        print_data(printer_name, raw_bytes, ticket_type=printer_key)
                     
                     conn2 = sqlite3.connect(db_path, timeout=30)
                     cursor2 = conn2.cursor()
@@ -1485,6 +1554,10 @@ def run_flask():
     try:
         db_thread = threading.Thread(target=db_polling_loop, daemon=True)
         db_thread.start()
+        
+        worker_thread = threading.Thread(target=internal_print_worker, daemon=True)
+        worker_thread.start()
+        
         from werkzeug.serving import make_server
         global _flask_server
         _flask_server = make_server("0.0.0.0", PORT, app)

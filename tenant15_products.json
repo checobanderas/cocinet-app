@@ -1,0 +1,697 @@
+[
+  {
+    "name": "CHK-18JUL",
+    "reportName": "",
+    "sortOrder": 0
+  },
+  {
+    "name": "CHK20JILIO26",
+    "reportName": "",
+    "sortOrder": 0
+  },
+  {
+    "name": "TACO ASADA (MAÍZ)",
+    "reportName": "TACO DE ASADA DE MAÍZ",
+    "sortOrder": 1
+  },
+  {
+    "name": "TACO ARRACHERA (MAÍZ)",
+    "reportName": "TACO DE ARRACHERA DE MAÍZ",
+    "sortOrder": 2
+  },
+  {
+    "name": "TACO CHISTORRA (MAÍZ)",
+    "reportName": "TACO DE CHISTORRA DE MAÍZ",
+    "sortOrder": 3
+  },
+  {
+    "name": "TACO LONGANIZA (MAÍZ)",
+    "reportName": "TACO DE LONGANIZA DE MAÍZ",
+    "sortOrder": 4
+  },
+  {
+    "name": "TACO MIXTO (MAÍZ)",
+    "reportName": "TACO DE MIXTO DE MAÍZ",
+    "sortOrder": 5
+  },
+  {
+    "name": "TACO ASADA (HARINA)",
+    "reportName": "TACO DE ASADA DE HARINA",
+    "sortOrder": 6
+  },
+  {
+    "name": "TACO CHISTORRA (HARINA)",
+    "reportName": "TACO DE CHISTORRA DE HARINA",
+    "sortOrder": 7
+  },
+  {
+    "name": "TACO LONGANIZA (HARINA)",
+    "reportName": "TACO DE LONGANIZA DE HARINA",
+    "sortOrder": 8
+  },
+  {
+    "name": "TACO MIXTO (HARINA)",
+    "reportName": "TACO DE MIXTO DE HARINA",
+    "sortOrder": 9
+  },
+  {
+    "name": "TACO ARRACHERA (HARINA)",
+    "reportName": "TACO ARRACHERA (HARINA)",
+    "sortOrder": 10
+  },
+  {
+    "name": "TACO ASADA C/QUESO",
+    "reportName": "TACO ASADA C/QUESO",
+    "sortOrder": 11
+  },
+  {
+    "name": "TACO ARRACHERA C/QUESO",
+    "reportName": "TACO ARRACHERA C/QUESO",
+    "sortOrder": 12
+  },
+  {
+    "name": "TACO CHISTORRA C/QUESO",
+    "reportName": "TACO CHISTORRA C/QUESO",
+    "sortOrder": 13
+  },
+  {
+    "name": "TACO LONGANIZA C/QUESO",
+    "reportName": "TACO LONGANIZA C/QUESO",
+    "sortOrder": 14
+  },
+  {
+    "name": "TACO MIXTO C/QUESO",
+    "reportName": "TACO MIXTO C/QUESO",
+    "sortOrder": 15
+  },
+  {
+    "name": "TACO ASADA C/QUESO (HARINA)",
+    "reportName": "TACO ASADA C/QUESO (HARINA)",
+    "sortOrder": 16
+  },
+  {
+    "name": "TACO ARRACHERA C/QUESO (HARINA)",
+    "reportName": "TACO ARRACHERA C/QUESO (HARINA)",
+    "sortOrder": 17
+  },
+  {
+    "name": "TACO CHISTORRA C/QUESO (HARINA)",
+    "reportName": "TACO CHISTORRA C/QUESO (HARINA)",
+    "sortOrder": 18
+  },
+  {
+    "name": "TACO LONGANIZA C/QUESO (HARINA)",
+    "reportName": "TACO LONGANIZA C/QUESO (HARINA)",
+    "sortOrder": 19
+  },
+  {
+    "name": "TACO MIXTO C/QUESO (HARINA)",
+    "reportName": "TACO MIXTO C/QUESO (HARINA)",
+    "sortOrder": 20
+  },
+  {
+    "name": "TORTILLA MAÍZ",
+    "reportName": "TORTILLA MAÍZ",
+    "sortOrder": 21
+  },
+  {
+    "name": "TORTILLA HARINA",
+    "reportName": "TORTILLA HARINA",
+    "sortOrder": 22
+  },
+  {
+    "name": "TOSTADA",
+    "reportName": "TOSTADA",
+    "sortOrder": 23
+  },
+  {
+    "name": "VAMPIROS ASADA",
+    "reportName": "VAMPIROS ASADA",
+    "sortOrder": 24
+  },
+  {
+    "name": "VAMPIROS ARRACHERA",
+    "reportName": "VAMPIROS ARRACHERA",
+    "sortOrder": 25
+  },
+  {
+    "name": "VAMPIROS CHISTORRA",
+    "reportName": "VAMPIROS CHISTORRA",
+    "sortOrder": 26
+  },
+  {
+    "name": "VAMPIROS LONGANIZA",
+    "reportName": "VAMPIROS LONGANIZA",
+    "sortOrder": 27
+  },
+  {
+    "name": "VAMPIROS MIXTO",
+    "reportName": "VAMPIROS MIXTO",
+    "sortOrder": 28
+  },
+  {
+    "name": "VAMPIROS ASADA C/QUESO",
+    "reportName": "VAMPIROS ASADA C/QUESO",
+    "sortOrder": 29
+  },
+  {
+    "name": "VAMPIROS ARRACHERA C/QUESO",
+    "reportName": "VAMPIROS ARRACHERA C/QUESO",
+    "sortOrder": 30
+  },
+  {
+    "name": "VAMPIROS CHISTORRA C/QUESO",
+    "reportName": "VAMPIROS CHISTORRA C/QUESO",
+    "sortOrder": 31
+  },
+  {
+    "name": "VAMPIROS LONGANIZA  C/QUESO",
+    "reportName": "VAMPIROS LONGANIZA C/QUESO",
+    "sortOrder": 32
+  },
+  {
+    "name": "VAMPIROS MIXTO C/QUESO",
+    "reportName": "VAMPIROS MIXTO C/QUESO",
+    "sortOrder": 33
+  },
+  {
+    "name": "ALAMBRE ASADA (MAIZ)",
+    "reportName": "ALAMBRE DE ASADA DE MAIZ",
+    "sortOrder": 34
+  },
+  {
+    "name": "ALAMBRE ARRACHERA (MAIZ)",
+    "reportName": "ALAMBRE ARRACHERA (MAIZ)",
+    "sortOrder": 35
+  },
+  {
+    "name": "ALAMBRE CHISTORRA (MAIZ)",
+    "reportName": "ALAMBRE CHISTORRA (MAIZ)",
+    "sortOrder": 36
+  },
+  {
+    "name": "ALAMBRE CHISTORRA (HARINA)",
+    "reportName": "ALAMBRE CHISTORRA (HARINA)",
+    "sortOrder": 37
+  },
+  {
+    "name": "ALAMBRE LONGANIZA (MAIZ)",
+    "reportName": "ALAMBRE LONGANIZA",
+    "sortOrder": 38
+  },
+  {
+    "name": "ALAMBRE LONGANIZA (HARINA)",
+    "reportName": "ALAMBRE LONGANIZA (HARINA)",
+    "sortOrder": 39
+  },
+  {
+    "name": "ALAMBRE MIXTO (MAIZ)",
+    "reportName": "ALAMBRE MIXTO",
+    "sortOrder": 40
+  },
+  {
+    "name": "ALAMBRE MIXTO (HARINA)",
+    "reportName": "ALAMBRE MIXTO (HARINA)",
+    "sortOrder": 41
+  },
+  {
+    "name": "ALAMBRE ASADA (HARINA)",
+    "reportName": "ALAMBRE ASADA (HARINA)",
+    "sortOrder": 42
+  },
+  {
+    "name": "ALAMBRE ARRACHERA (HARINA)",
+    "reportName": "ALAMBRE ARRACHERA (HARINA)",
+    "sortOrder": 43
+  },
+  {
+    "name": "TLAYUDAS ASADA",
+    "reportName": "TLAYUDAS ASADA",
+    "sortOrder": 44
+  },
+  {
+    "name": "TLAYUDAS CHISTORRA",
+    "reportName": "TLAYUDAS CHISTORRA",
+    "sortOrder": 45
+  },
+  {
+    "name": "TLAYUDAS LONGANIZA",
+    "reportName": "TLAYUDAS LONGANIZA",
+    "sortOrder": 46
+  },
+  {
+    "name": "TLAYUDAS MIXTO",
+    "reportName": "TLAYUDAS MIXTO",
+    "sortOrder": 47
+  },
+  {
+    "name": "CARNE 250GR ASADA",
+    "reportName": "CARNE 250GR ASADA",
+    "sortOrder": 48
+  },
+  {
+    "name": "CARNE 250GR CHISTORRA",
+    "reportName": "CARNE 250GR CHISTORRA",
+    "sortOrder": 49
+  },
+  {
+    "name": "CARNE 250GR LONGANIZA",
+    "reportName": "CARNE 250GR LONGANIZA",
+    "sortOrder": 50
+  },
+  {
+    "name": "CARNE 250GR MIXTA",
+    "reportName": "CARNE 250GR MIXTA",
+    "sortOrder": 51
+  },
+  {
+    "name": "CARNE 250GR ARRACHERA",
+    "reportName": "CARNE 250GR ARRACHERA",
+    "sortOrder": 52
+  },
+  {
+    "name": "CARNE 500GR ASADA",
+    "reportName": "CARNE 500GR ASADA",
+    "sortOrder": 53
+  },
+  {
+    "name": "CARNE 500GR CHISTORRA",
+    "reportName": "CARNE 500GR CHISTORRA",
+    "sortOrder": 54
+  },
+  {
+    "name": "CARNE 500GR LONGANIZA",
+    "reportName": "CARNE 500GR LONGANIZA",
+    "sortOrder": 55
+  },
+  {
+    "name": "CARNE 500GR MIXTA",
+    "reportName": "CARNE 500GR MIXTA",
+    "sortOrder": 56
+  },
+  {
+    "name": "CARNE 500GR ARRACHERA",
+    "reportName": "CARNE 500GR ARRACHERA",
+    "sortOrder": 57
+  },
+  {
+    "name": "CARNE 1KG ASADA",
+    "reportName": "CARNE 1KG ASADA",
+    "sortOrder": 58
+  },
+  {
+    "name": "CARNE 1KG CHISTORRA",
+    "reportName": "CARNE 1KG CHISTORRA",
+    "sortOrder": 59
+  },
+  {
+    "name": "CARNE 1KG LONGANIZA",
+    "reportName": "CARNE 1KG LONGANIZA",
+    "sortOrder": 60
+  },
+  {
+    "name": "CARNE 1KG MIXTA",
+    "reportName": "CARNE 1KG MIXTA",
+    "sortOrder": 61
+  },
+  {
+    "name": "CARNE 1KG ARRACHERA",
+    "reportName": "CARNE 1KG ARRACHERA",
+    "sortOrder": 62
+  },
+  {
+    "name": "QUESO FUNDIDO ARRACHERA (HARINA)",
+    "reportName": "QUESO FUNDIDO ARRACHERA (HARINA)",
+    "sortOrder": 63
+  },
+  {
+    "name": "QUESO FUNDIDO ASADA",
+    "reportName": "QUESO FUNDIDO CON ASADA",
+    "sortOrder": 64
+  },
+  {
+    "name": "QUESO FUNDIDO CHISTORRA",
+    "reportName": "QUESO FUNDIDO CON CHISTORRA",
+    "sortOrder": 65
+  },
+  {
+    "name": "QUESO FUNDIDO LONGANIZA",
+    "reportName": "QUESO FUNDIDO CON LONGANIZA",
+    "sortOrder": 66
+  },
+  {
+    "name": "QUESO FUNDIDO ARRACHERA",
+    "reportName": "QUESO FUNDIDO CON ARRACHERA",
+    "sortOrder": 67
+  },
+  {
+    "name": "QUESO FUNDIDO MIXTO",
+    "reportName": "QUESO FUNDIDO MIXTO",
+    "sortOrder": 68
+  },
+  {
+    "name": "GRINGAS ARRACHERA",
+    "reportName": "GRINGA DE ARRACHERA",
+    "sortOrder": 69
+  },
+  {
+    "name": "GRINGAS ASADA (MAIZ)",
+    "reportName": "GRINGAS ASADA (MAIZ)",
+    "sortOrder": 70
+  },
+  {
+    "name": "GRINGAS CHISTORRA (MAIZ)",
+    "reportName": "GRINGAS CHISTORRA (MAIZ)",
+    "sortOrder": 71
+  },
+  {
+    "name": "GRINGAS LONGANIZA (MAIZ)",
+    "reportName": "GRINGAS LONGANIZA (MAIZ)",
+    "sortOrder": 72
+  },
+  {
+    "name": "GRINGAS MIXTO (MAIZ)",
+    "reportName": "GRINGAS MIXTO (MAIZ)",
+    "sortOrder": 73
+  },
+  {
+    "name": "GRINGAS ARRACHERA (MAIZ)",
+    "reportName": "GRINGAS ARRACHERA (MAIZ)",
+    "sortOrder": 74
+  },
+  {
+    "name": "GRINGAS ASADA",
+    "reportName": "GRINGA DE ASADA",
+    "sortOrder": 75
+  },
+  {
+    "name": "GRINGAS CHISTORRA",
+    "reportName": "GRINGA DE CHISTORRA",
+    "sortOrder": 76
+  },
+  {
+    "name": "GRINGAS LONGANIZA",
+    "reportName": "GRINGA DE LONGANIZA",
+    "sortOrder": 77
+  },
+  {
+    "name": "GRINGAS MIXTO",
+    "reportName": "GRINGA DE MIXTO",
+    "sortOrder": 78
+  },
+  {
+    "name": "BURRITOS ASADA",
+    "reportName": "BURRA DE ASADA",
+    "sortOrder": 79
+  },
+  {
+    "name": "BURRITOS CHISTORRA",
+    "reportName": "BURRA DE CHISTORRA",
+    "sortOrder": 80
+  },
+  {
+    "name": "BURRITOS LONGANIZA",
+    "reportName": "BURRA DE LONGANIZA",
+    "sortOrder": 81
+  },
+  {
+    "name": "BURRITOS MIXTO",
+    "reportName": "BURRA MIXTO",
+    "sortOrder": 82
+  },
+  {
+    "name": "CEBOLLA",
+    "reportName": "CEBOLLA",
+    "sortOrder": 83
+  },
+  {
+    "name": "FRIJOLES CHARROS",
+    "reportName": "FRIJOLES CHARROS",
+    "sortOrder": 84
+  },
+  {
+    "name": "GUACAMOLE",
+    "reportName": "GUACAMOLE",
+    "sortOrder": 85
+  },
+  {
+    "name": "ALAMBRE LONGANIZA (HARINA)",
+    "reportName": "ALAMBRE LONGANIZA (HARINA)",
+    "sortOrder": 86
+  },
+  {
+    "name": "ALAMBRE CHISTORRA (HARINA)",
+    "reportName": "ALAMBRE CHISTORRA",
+    "sortOrder": 87
+  },
+  {
+    "name": "PAPA ASADA",
+    "reportName": "PAPA ASADA",
+    "sortOrder": 88
+  },
+  {
+    "name": "PAPA CHISTORRA",
+    "reportName": "PAPA CHISTORRA",
+    "sortOrder": 89
+  },
+  {
+    "name": "PAPA LONGANIZA",
+    "reportName": "PAPA LONGANIZA",
+    "sortOrder": 90
+  },
+  {
+    "name": "PAPA MIXTA",
+    "reportName": "PAPA MIXTA",
+    "sortOrder": 91
+  },
+  {
+    "name": "PAPA C/ QUESO",
+    "reportName": "PAPA C/ QUESO",
+    "sortOrder": 92
+  },
+  {
+    "name": "PAPA SOLA",
+    "reportName": "PAPA SOLA",
+    "sortOrder": 93
+  },
+  {
+    "name": "BURRITOS ARRACHERA",
+    "reportName": "BURRA DE ARRACHERA",
+    "sortOrder": 94
+  },
+  {
+    "name": "PAPA SENCILLA",
+    "reportName": "PAPA SENCILLA",
+    "sortOrder": 95
+  },
+  {
+    "name": "TLAYUDAS ARRACHERA",
+    "reportName": "TLAYUDAS ARRACHERA",
+    "sortOrder": 96
+  },
+  {
+    "name": "AGUA DE SABOR (JARRA)",
+    "reportName": "AGUA DE SABOR (JARRA)",
+    "sortOrder": 97
+  },
+  {
+    "name": "AGUA DE SABOR (VASO)",
+    "reportName": "AGUA DE SABOR (VASO)",
+    "sortOrder": 98
+  },
+  {
+    "name": "PAPA ASADA (HARINA)",
+    "reportName": "PAPA ASADA (HARINA)",
+    "sortOrder": 99
+  },
+  {
+    "name": "PAPA ARRACHERA (HARINA)",
+    "reportName": "PAPA ARRACHERA (HARINA)",
+    "sortOrder": 100
+  },
+  {
+    "name": "AGUA MINERAL",
+    "reportName": "AGUA MINERAL",
+    "sortOrder": 101
+  },
+  {
+    "name": "AGUA NATURAL",
+    "reportName": "AGUA NATURAL",
+    "sortOrder": 102
+  },
+  {
+    "name": "ATOLE",
+    "reportName": "ATOLE",
+    "sortOrder": 103
+  },
+  {
+    "name": "BASE MICHELADA",
+    "reportName": "BASE MICHELADA",
+    "sortOrder": 104
+  },
+  {
+    "name": "BOING",
+    "reportName": "BOING",
+    "sortOrder": 105
+  },
+  {
+    "name": "CAFÉ DE OLLA",
+    "reportName": "CAFÉ DE OLLA",
+    "sortOrder": 106
+  },
+  {
+    "name": "CERVEZA ESPECIAL",
+    "reportName": "CERVEZA ESPECIAL",
+    "sortOrder": 107
+  },
+  {
+    "name": "CHAPARRITA",
+    "reportName": "CHAPARRITA",
+    "sortOrder": 108
+  },
+  {
+    "name": "CORONA",
+    "reportName": "CORONA",
+    "sortOrder": 109
+  },
+  {
+    "name": "HEINEKEN",
+    "reportName": "HEINEKEN",
+    "sortOrder": 110
+  },
+  {
+    "name": "LIMONADA (JARRA)",
+    "reportName": "LIMONADA (JARRA)",
+    "sortOrder": 111
+  },
+  {
+    "name": "LIMONADA (VASO)",
+    "reportName": "LIMONADA (VASO)",
+    "sortOrder": 112
+  },
+  {
+    "name": "NARANJADA (JARRA)",
+    "reportName": "NARANJADA (JARRA)",
+    "sortOrder": 113
+  },
+  {
+    "name": "NARANJADA (VASO)",
+    "reportName": "NARANJADA (VASO)",
+    "sortOrder": 114
+  },
+  {
+    "name": "SUERO",
+    "reportName": "SUERO",
+    "sortOrder": 115
+  },
+  {
+    "name": "TIZANA",
+    "reportName": "TIZANA",
+    "sortOrder": 116
+  },
+  {
+    "name": "ULTRA",
+    "reportName": "ULTRA",
+    "sortOrder": 117
+  },
+  {
+    "name": "VICTORIA",
+    "reportName": "VICTORIA",
+    "sortOrder": 118
+  },
+  {
+    "name": "REFRESCO",
+    "reportName": "REFRESCO",
+    "sortOrder": 119
+  },
+  {
+    "name": "REFRESCOS SA",
+    "reportName": "REFRESCOS",
+    "sortOrder": 120
+  },
+  {
+    "name": "CAFE AMERICANO",
+    "reportName": "CAFE AMERICANO",
+    "sortOrder": 121
+  },
+  {
+    "name": "CAFE CAPUCHINO ",
+    "reportName": "CAFE CAPUCHINO",
+    "sortOrder": 122
+  },
+  {
+    "name": "CHESCAKE",
+    "reportName": "CHESCAKE",
+    "sortOrder": 123
+  },
+  {
+    "name": "COPA MEZCAL",
+    "reportName": "COPA MEZCAL",
+    "sortOrder": 124
+  },
+  {
+    "name": "COPA MEZCAL TOBALA",
+    "reportName": "COPA MEZCAL TOBALA",
+    "sortOrder": 125
+  },
+  {
+    "name": "FLAN",
+    "reportName": "FLAN",
+    "sortOrder": 126
+  },
+  {
+    "name": "KILO CARNE HARINA",
+    "reportName": "KILO CARNE HARINA",
+    "sortOrder": 127
+  },
+  {
+    "name": "KILO DE CARNE MAIZ",
+    "reportName": "KILO DE CARNE MAIZ",
+    "sortOrder": 128
+  },
+  {
+    "name": "QUESO SENCILLO DE MAIZ",
+    "reportName": "QUESO SENCILLO DE MAIZ",
+    "sortOrder": 129
+  },
+  {
+    "name": "QUESO SENCILLO HARINA",
+    "reportName": "QUESO SENCILLO HARINA",
+    "sortOrder": 130
+  },
+  {
+    "name": "SERVICIO P/LLEVAR",
+    "reportName": "SERVICO A DOMICILIO",
+    "sortOrder": 131
+  },
+  {
+    "name": "SUERO",
+    "reportName": "SUERO",
+    "sortOrder": 132
+  },
+  {
+    "name": "TE",
+    "reportName": "TE",
+    "sortOrder": 133
+  },
+  {
+    "name": "TLAYUDA SENCILLA",
+    "reportName": "TLAYUDA SENCILLA",
+    "sortOrder": 134
+  },
+  {
+    "name": "TOPOCHICO",
+    "reportName": "TOPOCHICO",
+    "sortOrder": 135
+  },
+  {
+    "name": "PANQUE",
+    "reportName": "PANQUE",
+    "sortOrder": 136
+  },
+  {
+    "name": "COPA DE MEZCAL TOVALA",
+    "reportName": "COPA DE MEZCAL TOVALA",
+    "sortOrder": 9999
+  }
+]
