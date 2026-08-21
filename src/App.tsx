@@ -8486,7 +8486,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const existingSubcategories = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.subcategory || "").filter(Boolean).sort()));
+    return Array.from(new Set(products.filter(p => p.isDeleted !== true).map((p) => p.subcategory || "").filter(Boolean).sort()));
   }, [products]);
 
   const crudCategorySubcategories = useMemo(() => {
@@ -8502,7 +8502,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   }, [products, crudSelectedCategory]);
 
   const existingSubgroups = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.subgroup || "").filter(Boolean).sort()));
+    return Array.from(new Set(products.filter(p => p.isDeleted !== true).map((p) => p.subgroup || "").filter(Boolean).sort()));
   }, [products]);
 
   const existingSubgroupsFiltered = useMemo(() => {
@@ -12050,7 +12050,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const subs = Array.from(
       new Set(
         products
-          .filter((p) => p.category === activeCategory)
+          .filter((p) => p.isDeleted !== true && p.category === activeCategory)
           .map((p) => p.subcategory),
       ),
     ).filter(Boolean);
@@ -17083,7 +17083,7 @@ Instrucciones:
     const subcategories = Array.from(
       new Set(
         products
-          .filter((p) => p.category === activeCategory)
+          .filter((p) => p.isDeleted !== true && p.category === activeCategory)
           .map((p) => p.subcategory),
       ),
     )
@@ -25883,7 +25883,7 @@ setCheckoutReturnMode(null);
                   {Array.from(
                     new Set(
                       products
-                        .filter((p) => p.category === manageMenuTab && p.subcategory)
+                        .filter((p) => p.isDeleted !== true && p.category === manageMenuTab && p.subcategory)
                         .map((p) => p.subcategory)
                     )
                   ).sort().map((node) => (
