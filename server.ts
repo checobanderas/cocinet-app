@@ -786,6 +786,81 @@ El formato del resultado debe ser únicamente el JSON válido, sin bloques de c�
     }
   });
 
+  app.post('/api/analyze-excel', async (req, res) => {
+    const { rowsText } = req.body;
+    
+    if (!rowsText) {
+      return res.status(400).json({ error: "No se proporcionó data de Excel" });
+    }
+
+    try {
+      const ai = getGeminiClient();
+      const prompt = 
+        "Analyze this list of products from an Excel/CSV upload. Extract all products with their names and prices. " +
+        "You MUST output the price strictly as a numeric value. " +
+        "Categorize them into 'food', 'drinks', or 'desserts'. " +
+        "Identify subcategories (like Tacos, Hamburguesas, Refrescos, Cervezas, Entradas) and " +
+        "create detailed subgroups logically grouping the options (e.g. 'Tacos de Asada', 'Bebidas Calientes'). " +
+        "For 'destination', use 'kitchen' for food/desserts and 'bar' for drinks. " +
+        "Here is the data:\n\n" + rowsText;
+
+      const modelsToTry = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-1.5-flash"];
+      let response = null;
+      let lastError = null;
+
+      for (const currentModel of modelsToTry) {
+        try {
+          console.log(`Intentando analizar Excel con el modelo: ${currentModel}...`);
+          response = await ai.models.generateContent({
+            model: currentModel,
+            contents: [{ parts: [{ text: prompt }] }],
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    price: { type: Type.NUMBER },
+                    category: { type: Type.STRING, enum: ["food", "drinks", "desserts"] },
+                    subcategory: { type: Type.STRING },
+                    subgroup: { type: Type.STRING },
+                    destination: { type: Type.STRING, enum: ["kitchen", "bar"] },
+                  },
+                  required: ["name", "price", "category", "subcategory", "subgroup", "destination"],
+                },
+              },
+            }
+          });
+          if (response) {
+            console.log(`¡Análisis de Excel exitoso con ${currentModel}!`);
+            break;
+          }
+        } catch (modelErr: any) {
+          console.warn(`Modelo ${currentModel} falló:`, modelErr.message || modelErr);
+          lastError = modelErr;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+
+      if (!response) {
+        throw lastError || new Error("Todos los intentos con Gemini fallaron.");
+      }
+      
+      const jsonText = response.text || "[]";
+      let items = JSON.parse(jsonText.trim());
+      items = items.map((it: any) => ({
+        ...it,
+        subgroup: it.subgroup || it.subcategory || "General"
+      }));
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error analizardo Excel en server:", error);
+      res.status(500).json({ error: error.message || "Fallo de Gemini al analizar Excel." });
+    }
+  });
+
   app.post('/api/voice-order', async (req, res) => {
     const { transcript, menuString, menu } = req.body;
     if (!transcript) {

@@ -442,6 +442,39 @@ export async function deleteProductFromFirebase(productId: string) {
   await runWrite(deleteDoc(ref));
 }
 
+export async function softDeleteAllProductsFromFirebase(tenantId: string, sucursal: string, products: any[]) {
+  try {
+    await createMenuBackup(
+      tenantId,
+      sucursal || 'Sucursal',
+      'Respaldo antes de ocultar - ' + new Date().toLocaleString(),
+      products
+    );
+  } catch (error) {
+    console.error('Error creating backup before deletion:', error);
+  }
+  try {
+    const q = query(collection(db, 'products'));
+    const snapshot = await getDocs(q);
+    const batch = writeBatch(db);
+    let deletedCount = 0;
+    snapshot.docs.forEach((d) => {
+      const data = d.data();
+      const itemTenantId = data.tenantId || 'tenant-1';
+      if (itemTenantId === tenantId && data.isDeleted !== true) {
+        batch.update(d.ref, { isDeleted: true });
+        deletedCount++;
+      }
+    });
+    if (deletedCount > 0) {
+      await runWrite(batch.commit());
+    }
+  } catch (error) {
+    console.error('Error soft deleting products: ', error);
+    throw error;
+  }
+}
+
 export async function deleteAllProductsFromFirebase(tenantId: string, sucursal: string, products: any[]) {
   try {
     // Create a backup first

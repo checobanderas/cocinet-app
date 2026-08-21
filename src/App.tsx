@@ -164,7 +164,7 @@ import {
   generateUUID,
   updateProductInFirebase,
   deleteProductFromFirebase,
-  deleteAllProductsFromFirebase,
+  deleteAllProductsFromFirebase, softDeleteAllProductsFromFirebase,
   addInventoryItemToFirebase,
   updateInventoryItemInFirebase,
   deleteInventoryItemFromFirebase,
@@ -2077,6 +2077,7 @@ export default function App() {
     | "relation_order_ia"
     | null
   >(null);
+  const [menuFilterNode, setMenuFilterNode] = useState("");
   const [productSearch, setProductSearch] = useState("");
 
   // 🏢 Control de Gestión de la Red de Empresas (Concepto Relacional MySQL con UUID y Timestamps)
@@ -4062,6 +4063,180 @@ export default function App() {
       );
     }
     setShowMenuToast(true);
+  };
+
+  const handleExcelUpload = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const XLSX = await import("xlsx");
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const ab = evt.target?.result;
+        if (!ab) return;
+        const wb = XLSX.read(ab, { type: "array" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        if (data && data.length > 0) {
+          analyzeExcelMenu(data);
+        } else {
+          setMenuToastMessage("El archivo está vacío o no se pudo leer.");
+          setShowMenuToast(true);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      console.error("Error leyendo Excel:", err);
+      setMenuToastMessage("Error al procesar el archivo Excel.");
+      setShowMenuToast(true);
+    }
+  };
+
+  const analyzeExcelMenu = async (excelRows: any[]) => {
+    if (excelRows.length === 0) return;
+
+    setIsAnalyzing(true);
+    setDetectedProducts([]);
+    setAnalysisStatus({
+      total: 1,
+      current: 1,
+      completedImages: [],
+      isAnalyzing: true,
+    });
+
+    try {
+      const rowsText = excelRows.map((r) => JSON.stringify(r)).join("\n");
+      let parsedItems = [];
+      let usedDirectGemini = false;
+
+      try {
+        const resp = await fetch("/api/analyze-excel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rowsText }),
+        });
+
+        const contentType = resp.headers.get("content-type");
+        if (!resp.ok || !contentType || !contentType.includes("application/json")) {
+          throw new Error("El API local no está disponible.");
+        }
+
+        parsedItems = await resp.json();
+      } catch (localErr) {
+        console.warn("Fallo al contactar API local para Excel. Intentando Gemini directo del navegador...", localErr);
+
+        const apiKeyToUse =
+          companyConfig.geminiApiKey ||
+          localStorage.getItem("custom_gemini_api_key") ||
+          localStorage.getItem("local_gemini_api_key") ||
+          ((import.meta as any).env?.VITE_GEMINI_API_KEY as string);
+        if (!apiKeyToUse) {
+          throw new Error(
+            "No hay una clave de API de Gemini configurada. Por favor, ingresa tu Clave Gemini desde la sección de Ajustes del Ticket."
+          );
+        }
+
+        usedDirectGemini = true;
+      
+        const prompt = 
+          "Analyze this list of products from an Excel/CSV upload. Extract all products with their names and prices. " +
+          "You MUST output the price strictly as a numeric value. " +
+          "Categorize them into 'food', 'drinks', or 'desserts'. " +
+          "Identify subcategories (like Tacos, Hamburguesas, Refrescos, Cervezas, Entradas) and " +
+          "create detailed subgroups logically grouping the options (e.g. 'Tacos de Asada', 'Bebidas Calientes'). " +
+          "For 'destination', use 'kitchen' for food/desserts and 'bar' for drinks. " +
+          "Here is the data:\n\n" + rowsText;
+
+        const modelsToTry = [
+          "gemini-3.1-flash-lite",
+          "gemini-3.5-flash",
+          "gemini-3.1-pro-preview",
+          "gemini-1.5-flash",
+        ];
+        let lastErr = null;
+        let directSuccess = false;
+
+        for (const currentModel of modelsToTry) {
+          try {
+            console.log(`[Client Gemini] Intentando análisis Excel con ${currentModel}...`);
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKeyToUse}`;
+
+            const requestBody = {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      name: { type: "STRING" },
+                      price: { type: "NUMBER" },
+                      category: {
+                        type: "STRING",
+                        enum: ["food", "drinks", "desserts"],
+                      },
+                      subcategory: { type: "STRING" },
+                      subgroup: { type: "STRING" },
+                      destination: {
+                        type: "STRING",
+                        enum: ["kitchen", "bar"],
+                      },
+                    },
+                    required: ["name", "price", "category", "subcategory", "subgroup", "destination"],
+                  },
+                },
+              },
+            };
+
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            });
+            const resultText = await res.text();
+            if (!res.ok) throw new Error(`Error de Gemini: ${resultText}`);
+
+            const parsedData = JSON.parse(resultText);
+            const candidate = parsedData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (candidate) {
+              parsedItems = JSON.parse(candidate);
+              directSuccess = true;
+              break;
+            }
+          } catch (err) {
+            console.warn(`[Client Gemini] Excel modelo ${currentModel} falló:`, err);
+            lastErr = err;
+          }
+        }
+
+        if (!directSuccess) throw lastErr || new Error("Todos los intentos con Gemini fallaron.");
+      }
+
+      const mapped = (parsedItems || []).map((it: any, idx: number) => ({
+        ...it,
+        id: `ai_excel_${Date.now()}_${idx}`,
+      }));
+
+      setDetectedProducts(mapped);
+      setAnalysisStatus(prev => ({
+        ...prev,
+        completedImages: [{ index: 1, count: mapped.length }],
+      }));
+      setMenuToastMessage(`¡Análisis de Excel exitoso! ${mapped.length} productos detectados.`);
+      setShowMenuToast(true);
+
+    } catch (error: any) {
+      console.error("Error analyzing excel:", error);
+      setMenuToastMessage(`🚨 Error al procesar Excel: ${error.message}`);
+      setShowMenuToast(true);
+    } finally {
+      setIsAnalyzing(false);
+      setAnalysisStatus((prev) => ({ ...prev, isAnalyzing: false }));
+    }
   };
 
   const handleAddProductsToMenu = async (itemsToAdd: any[]) => {
@@ -17114,7 +17289,7 @@ Instrucciones:
 
           {/* Subgroups & Favoritos (Fixed below navbar inside IonToolbar) */}
           {(() => {
-            const filteredProducts = products.filter(
+            const filteredProducts = products.filter(p => p.isDeleted !== true).filter(
               (item) =>
                 item.category === activeCategory &&
                 item.subcategory === activeSubcategory,
@@ -17870,7 +18045,7 @@ Instrucciones:
 
           {/* Product Cards List */}
           {(() => {
-            const baseProducts = products.filter(
+            const baseProducts = products.filter(p => p.isDeleted !== true).filter(
               (item) =>
                 item.category === activeCategory &&
                 item.subcategory === activeSubcategory,
@@ -23375,7 +23550,7 @@ setCheckoutReturnMode(null);
     try {
       // 1. Delete destination products (and automatically back up under menu_backups collection!)
       const destBranchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
-      await deleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
+      await softDeleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
 
       // 2. Fetch all products to get source products
       const allProducts = await getAllProductsFromFirebase();
@@ -23409,6 +23584,7 @@ setCheckoutReturnMode(null);
           id: newRawId,
           uid: newRawId,
           tenantId: selectedTenant.id,
+          isDeleted: false,
           sucursal: selectedTenant.name || selectedTenant.sucursalDefault || "Sucursal"
         };
       });
@@ -23493,11 +23669,15 @@ setCheckoutReturnMode(null);
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setDeleteConfirmation({ isOpen: true, type: "all" })}
+            onClick={() => {
+              if (window.confirm("¿Estás absolutamente seguro que deseas empezar el proceso para borrar TODOS los productos de este tenant?")) {
+                setDeleteConfirmation({ isOpen: true, type: "all" });
+              }
+            }}
             className="px-3 py-1.5 rounded-full bg-red-100 hover:bg-red-200 text-red-600 text-xs font-black flex items-center gap-1 transition border-none shadow-sm cursor-pointer mr-2"
             title="Eliminar Productos Sucursal"
           >
-            <span>🗑️ Eliminar Todo</span>
+            <span>🗑️ Eliminar productos de {selectedTenant?.name || "este tenant"}</span>
           </motion.button>
         ) : null
       })}
@@ -23581,7 +23761,7 @@ setCheckoutReturnMode(null);
                     description:
                       "Copia de forma masiva los productos y la estructura de categorías de otra sucursal de la empresa hacia esta sucursal.",
                     actionExplanation:
-                      "Eliminará los productos de la sucursal actual e importará la carta seleccionada. El sistema realiza un respaldo automático antes de continuar.",
+                      "Ocultar� l�gicamente los productos antiguos e importar� la carta exacta. Tus cortes de venta antiguos y tickets quedan protegidos.",
                     bgGradient:
                       "linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#8b5cf6",
@@ -23601,6 +23781,21 @@ setCheckoutReturnMode(null);
                       "linear-gradient(135deg, rgba(5, 150, 105, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#059669",
                     stat: "Subgrupos IA",
+                  },
+                  {
+                    id: "import_excel_ai" as const,
+                    title: "Importar Excel Ordenado",
+                    emoji: "📊",
+                    color: "#2563eb",
+                    shortTitle: "Excel e IA",
+                    description:
+                      "Sube un archivo Excel o CSV con las columnas PRODUCTO, CONSECUTIVO y PRECIO UNITARIO. La IA se encargará de clasificarlos automáticamente.",
+                    actionExplanation:
+                      "Extraerá los productos y usará Inteligencia Artificial para organizarlos en categorías y subgrupos detallados.",
+                    bgGradient:
+                      "linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
+                    borderColorActive: "#2563eb",
+                    stat: "Subir Tabla",
                   },
                   {
                     id: "food" as const,
@@ -23845,6 +24040,15 @@ setCheckoutReturnMode(null);
                     "Identifica detalladamente alimentos, bebidas y postres con sus subgrupos específicos (tacos gratinados, por pieza, con piña, etc.) para una clasificación perfecta.",
                 },
                 {
+                  id: "import_excel_ai" as const,
+                  title: "Importar Excel Ordenado",
+                  emoji: "📊",
+                  color: "#2563eb",
+                  stat: "Excel e IA Integrados",
+                  actionExplanation:
+                    "Procesa un listado de productos desde Excel/CSV con sus precios usando Inteligencia Artificial para auto-clasificarlos.",
+                },
+                {
                   id: "food" as const,
                   title: "Platillos y Alimentos",
                   emoji: "🌮",
@@ -24034,7 +24238,7 @@ setCheckoutReturnMode(null);
                       ⚠️ Importante antes de continuar
                     </h4>
                     <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.8rem", lineHeight: "1.4" }}>
-                      <li>Se eliminarán todos los productos de la sucursal actual: <strong>{selectedTenant?.name || ""}</strong>.</li>
+                      <li>Se archivarán (borrado lógico) todos los productos de la sucursal actual: <strong>{selectedTenant?.name || ""}</strong>.</li>
                       <li>Se creará un respaldo automático del menú actual en tu historial de respaldos.</li>
                       <li>Los productos importados conservarán sus precios, nombres, descripciones y categorías exactas de la sucursal origen.</li>
                     </ul>
@@ -24093,10 +24297,10 @@ setCheckoutReturnMode(null);
                       ⚠️ ALERTA DE SEGURIDAD (Paso 1 de 2)
                     </h4>
                     <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
-                      Estás a punto de <strong>BORRAR COMPLETAMENTE</strong> todos los productos de esta sucursal (<strong>{selectedTenant?.name || ""}</strong>) e importar los productos de la sucursal/matriz <strong>"{COMPANY_CATALOG.find(c => c.id === importSelectedTenantId)?.name || importSelectedTenantId}"</strong>.
+                      Estás a punto de <strong>ARCHIVAR (BORRADO LÓGICO)</strong> todos los productos de esta sucursal (<strong>{selectedTenant?.name || ""}</strong>) e importar los productos de la sucursal/matriz <strong>"{COMPANY_CATALOG.find(c => c.id === importSelectedTenantId)?.name || importSelectedTenantId}"</strong>.
                     </p>
                     <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
-                      ¿Estás seguro de que deseas continuar? Esta acción no se puede deshacer de forma directa.
+                      ¿Estás seguro de que deseas continuar? Los productos actuales serán marcados como eliminados (borrado lógico) y no se perderán de forma permanente.
                     </p>
                   </div>
 
@@ -24147,7 +24351,7 @@ setCheckoutReturnMode(null);
                       Antes de continuar, el sistema generará automáticamente una copia de respaldo del menú actual en tu historial de respaldos.
                     </p>
                     <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
-                      ¿Aún así deseas continuar con la importación y la eliminación de la carta actual?
+                      ¿Aún así deseas continuar con la importación y el borrado lógico de la carta actual?
                     </p>
                   </div>
 
@@ -24881,7 +25085,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {manageMenuTab === "upload_subgroups" && (
+          {(manageMenuTab === "upload_subgroups" || manageMenuTab === "import_excel_ai") && (
             <div style={{ textAlign: "center", padding: "10px" }}>
               <IonText color="medium">
                 <p
@@ -24901,22 +25105,31 @@ setCheckoutReturnMode(null);
                     </span>
                   ) : (
                     <span>
-                      📸 Sube una o varias imágenes de tu menú para que la IA
-                      detecte y extraiga todos los productos automáticamente al
-                      sistema.
+                      📊 Sube un archivo Excel o CSV con las columnas PRODUCTO, CONSECUTIVO y PRECIO UNITARIO.
+                      La IA extraerá el menú y clasificará los productos en categorías y <b>subgrupos inteligentes</b> de forma automática.
                     </span>
                   )}
                 </p>
               </IonText>
 
-              <input
-                type="file"
-                id="menu-upload"
-                accept="image/*"
-                multiple
-                style={{ display: "none" }}
-                onChange={handleMenuImageUpload}
-              />
+              {manageMenuTab === "upload_subgroups" ? (
+                <input
+                  type="file"
+                  id="menu-upload"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={handleMenuImageUpload}
+                />
+              ) : (
+                <input
+                  type="file"
+                  id="excel-upload"
+                  accept=".xlsx, .xls, .csv"
+                  style={{ display: "none" }}
+                  onChange={handleExcelUpload}
+                />
+              )}
 
               <div
                 style={{
@@ -24928,58 +25141,51 @@ setCheckoutReturnMode(null);
                   alignItems: "center",
                 }}
               >
-                <IonButton
-                  fill="solid"
-                  color="secondary"
-                  onClick={() =>
-                    document.getElementById("menu-upload")?.click()
-                  }
-                >
-                  <IonIcon slot="start" icon={cloudUploadOutline} />
-                  {menuImages.length > 0
-                    ? "➕ Agregar Imagen"
-                    : "📸 Subir Imagen(es)"}
-                </IonButton>
-
-                {menuImages.length > 0 && manageMenuTab === "upload" && (
+                {manageMenuTab === "import_excel_ai" ? (
                   <IonButton
                     fill="solid"
-                    color="primary"
+                    color="secondary"
+                    onClick={() => document.getElementById("excel-upload")?.click()}
                     disabled={isAnalyzing}
-                    onClick={() => analyzeMenuImage(menuImages, false)}
                   >
-                    <IonIcon slot="start" icon={syncOutline} />
-                    {isAnalyzing
-                      ? "Analizando..."
-                      : `✨ Analizar ${menuImages.length} Imagen${menuImages.length > 1 ? "es" : ""}`}
+                    <IonIcon slot="start" icon={cloudUploadOutline} />
+                    {isAnalyzing ? "Analizando Excel..." : "📊 Seleccionar Archivo Excel/CSV"}
                   </IonButton>
-                )}
-
-                {menuImages.length > 0 &&
-                  manageMenuTab === "upload_subgroups" && (
+                ) : (
+                  <>
                     <IonButton
                       fill="solid"
-                      color="success"
-                      disabled={isAnalyzing}
-                      onClick={() => analyzeMenuImage(menuImages, true)}
-                      style={{ fontWeight: "bold" }}
+                      color="secondary"
+                      onClick={() => document.getElementById("menu-upload")?.click()}
                     >
-                      <IonIcon slot="start" icon={syncOutline} />
-                      {isAnalyzing
-                        ? "Analizando..."
-                        : "✨ Generar Menú IA con Subgrupos"}
+                      <IonIcon slot="start" icon={cloudUploadOutline} />
+                      {menuImages.length > 0 ? "➕ Agregar Imagen" : "📸 Subir Imagen(es)"}
                     </IonButton>
-                  )}
 
-                {menuImages.length > 0 && (
-                  <IonButton
-                    fill="outline"
-                    color="danger"
-                    onClick={() => setMenuImages([])}
-                  >
-                    <IonIcon slot="start" icon={trashOutline} />
-                    Limpiar Todo
-                  </IonButton>
+                    {menuImages.length > 0 && (
+                      <IonButton
+                        fill="solid"
+                        color="success"
+                        disabled={isAnalyzing}
+                        onClick={() => analyzeMenuImage(menuImages, true)}
+                        style={{ fontWeight: "bold" }}
+                      >
+                        <IonIcon slot="start" icon={syncOutline} />
+                        {isAnalyzing ? "Analizando..." : "✨ Generar Menú IA con Subgrupos"}
+                      </IonButton>
+                    )}
+
+                    {menuImages.length > 0 && (
+                      <IonButton
+                        fill="outline"
+                        color="danger"
+                        onClick={() => setMenuImages([])}
+                      >
+                        <IonIcon slot="start" icon={trashOutline} />
+                        Limpiar Todo
+                      </IonButton>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -25641,6 +25847,54 @@ setCheckoutReturnMode(null);
               </div>
               <div
                 style={{
+                  display: "flex",
+                  gap: "10px",
+                  marginBottom: "16px",
+                  flexWrap: "wrap"
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Buscar producto por nombre..."
+                  value={menuSearchQuery}
+                  onChange={(e) => setMenuSearchQuery(e.target.value)}
+                  style={{
+                    flex: "1 1 200px",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    outline: "none",
+                  }}
+                />
+                <select
+                  value={menuFilterNode}
+                  onChange={(e) => setMenuFilterNode(e.target.value)}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    minWidth: "150px",
+                    flex: "0 1 auto",
+                    outline: "none",
+                    backgroundColor: "white",
+                  }}
+                >
+                  <option value="">Todos los nodos</option>
+                  {Array.from(
+                    new Set(
+                      products
+                        .filter((p) => p.category === manageMenuTab && p.subcategory)
+                        .map((p) => p.subcategory)
+                    )
+                  ).sort().map((node) => (
+                    <option key={node} value={node}>
+                      {node}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div
+                style={{
                   overflowX: "auto",
                   border: "1px solid #e2e8f0",
                   borderRadius: "8px",
@@ -25674,7 +25928,10 @@ setCheckoutReturnMode(null);
                     </tr>
                   </thead>
                   <tbody>
-                    {products.filter((p) => p.category === manageMenuTab)
+                    {products
+                      .filter((p) => p.category === manageMenuTab)
+                      .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
+                      .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
                       .length === 0 ? (
                       <tr>
                         <td
@@ -25685,13 +25942,14 @@ setCheckoutReturnMode(null);
                             color: "#64748b",
                           }}
                         >
-                          No hay productos registrados en esta categoría.
-                          ¡Agrega uno nuevo pulsando el botón superior!
+                          No hay productos registrados que coincidan con la búsqueda.
                         </td>
                       </tr>
                     ) : (
                       products
                         .filter((p) => p.category === manageMenuTab)
+                        .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
+                        .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
                         .map((p) => (
                           <tr
                             key={p.id}
@@ -43807,6 +44065,46 @@ setCheckoutReturnMode(null);
           </IonContent>
 
         </IonModal>
+
+      <IonAlert
+        isOpen={deleteConfirmation.isOpen}
+        onDidDismiss={() => setDeleteConfirmation({ isOpen: false, type: "single" })}
+        header="⚠️ Confirmar Eliminación"
+        message={
+          deleteConfirmation.type === "single"
+            ? `¿Estás seguro de que deseas eliminar permanentemente el producto ${deleteConfirmation.targetName}?\n\nNota: Este producto solo será eliminado para este tenant/sucursal.`
+            : `¿Estás a punto de eliminar TODOS los productos de ${selectedTenant?.name || "este tenant"}?\n\nEsta es la última confirmación.`
+        }
+        buttons={[
+          {
+            text: "Cancelar",
+            role: "cancel",
+            cssClass: "text-slate-500 font-semibold",
+          },
+          {
+            text: "Sí, Eliminar",
+            role: "destructive",
+            cssClass: "text-rose-600 font-bold",
+            handler: async () => {
+              try {
+                if (deleteConfirmation.type === "single" && deleteConfirmation.targetId) {
+                  await deleteProductFromFirebase(deleteConfirmation.targetId);
+                  setShowMenuToast(true);
+                  setMenuToastMessage("Producto eliminado exitosamente del tenant.");
+                } else if (deleteConfirmation.type === "all") {
+                  await deleteAllProductsFromFirebase(selectedTenant.id, selectedTenant.name || "Sucursal", products);
+                  setShowMenuToast(true);
+                  setMenuToastMessage("Todos los productos fueron eliminados.");
+                }
+              } catch (error) {
+                console.error(error);
+                setShowMenuToast(true);
+                setMenuToastMessage("Error al eliminar.");
+              }
+            },
+          },
+        ]}
+      />
 
       <IonToast
         isOpen={showMenuToast}
