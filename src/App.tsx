@@ -215,16 +215,16 @@ import {
   saveUserToFirebase,
   deleteUserFromFirebase,
   bulkAddUsersToFirebase,
-  subscribeToMenuBackups,
-  createMenuBackup,
+  subscribeToMenúuBackups,
+  createMenúuBackup,
   CorteCuentasFolioRecord,
   subscribeToCorteFolioHistoryFromFirebase,
   saveCorteFolioRecordToFirebase,
-  deleteMenuBackupFromFirebase,
-  restoreMenuBackupInFirebase,
-  MenuBackup,
+  deleteMenúuBackupFromFirebase,
+  restoreMenúuBackupInFirebase,
+  MenúuBackup,
   getAllProductsFromFirebase,
-  getAllMenuBackupsFromFirebase,
+  getAllMenúuBackupsFromFirebase,
   migrateProductsTenant,
   migrateBackupsTenant,
   exportFullDatabaseJson,
@@ -1276,8 +1276,8 @@ export default function App() {
         }
       }
 
-      setMenuToastMessage(`${title}\n${body}`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`${title}\n${body}`);
+      setShowMenúuToast(true);
     };
 
     const triggerOfflineNotification = () => {
@@ -1301,8 +1301,8 @@ export default function App() {
         }
       }
 
-      setMenuToastMessage(`${title}\n${body}`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`${title}\n${body}`);
+      setShowMenúuToast(true);
     };
 
     const checkStatus = async () => {
@@ -1526,7 +1526,7 @@ export default function App() {
       });
     });
 
-    const unsubBackups = subscribeToMenuBackups(tenantId, (data) => {
+    const unsubBackups = subscribeToMenúuBackups(tenantId, (data) => {
       setBackups(data || []);
     });
 
@@ -2019,7 +2019,7 @@ export default function App() {
         topic: "sync:closed_accounts",
         timestamp: getMexicoISOString(),
         details:
-          "📡 Suscripción al tópico de actualizaciones de auditoría de ventas activa.",
+          "📡 Suscripción al tópico de actualizóaciones de auditoría de ventas activa.",
       },
     ];
   });
@@ -2058,13 +2058,13 @@ export default function App() {
   const [corteXArqM2, setCorteXArqM2] = useState<string>("0");
   const [corteXArqM1, setCorteXArqM1] = useState<string>("0");
   const [corteXArqM05, setCorteXArqM05] = useState<string>("0");
-  const [showManageMenuModal, setShowManageMenuModal] = useState(false);
-  const [menuImage, setMenuImage] = useState<string | null>(null);
-  const [menuImages, setMenuImages] = useState<string[]>([]);
+  const [showManageMenúuModal, setShowManageMenúuModal] = useState(false);
+  const [menuImage, setMenúuImage] = useState<string | null>(null);
+  const [menuImages, setMenúuImages] = useState<string[]>([]);
   const [inventoryTab, setInventoryTab] = useState<"stock" | "purchases">(
     "stock",
   );
-  const [manageMenuTab, setManageMenuTab] = useState<
+  const [manageMenúuTab, setManageMenúuTab] = useState<
     | "backup"
     | "import_tenant"
     | "upload_subgroups"
@@ -2077,7 +2077,7 @@ export default function App() {
     | "relation_order_ia"
     | null
   >(null);
-  const [menuFilterNode, setMenuFilterNode] = useState("");
+  const [menuFilterNode, setMenúuFilterNode] = useState("");
   const [productSearch, setProductSearch] = useState("");
 
   // 🏢 Control de Gestión de la Red de Empresas (Concepto Relacional MySQL con UUID y Timestamps)
@@ -3036,7 +3036,7 @@ export default function App() {
     if (modalTenant && modalTenant.id === activeTenantId) {
       setModalUsers(updated.filter(u => u.tenantId === modalTenant.id));
     }
-    triggerAppNotification("💾 Cambios Guardados", "La celda fue actualizada con éxito.", "success");
+    triggerAppNotification("💾 Cambios Guardados", "La celda fue actualizóada con éxito.", "success");
   };
 
   const handleDeleteRow = (userId: string, targetTenantId?: string) => {
@@ -3120,7 +3120,7 @@ export default function App() {
 
   // Import other tenant menu states
   const [importSelectedTenantId, setImportSelectedTenantId] = useState<string>("");
-  const [isImportingTenantMenu, setIsImportingTenantMenu] = useState<boolean>(false);
+  const [isImportingTenantMenúu, setIsImportingTenantMenúu] = useState<boolean>(false);
   const [importConfirmStep, setImportConfirmStep] = useState<0 | 1 | 2>(0);
   const importInProgressRef = useRef<boolean>(false);
 
@@ -3200,7 +3200,7 @@ export default function App() {
   const [cashMovementsLoaded, setCashMovementsLoaded] = useState(false);
   const [expensesLoaded, setExpensesLoaded] = useState(false);
   const [purchasesLoaded, setPurchasesLoaded] = useState(false);
-  const [backups, setBackups] = useState<MenuBackup[]>([]);
+  const [backups, setBackups] = useState<MenúuBackup[]>([]);
 
   // Diagnostic State for Cloud / Firestore sync issues
   const [diagnosticProducts, setDiagnosticProducts] = useState<any[]>([]);
@@ -3652,15 +3652,15 @@ export default function App() {
       setCrudSelectedSubcategory(initialSubcat);
       setCrudNewSubcategoryText("");
       const initialCat = productCrudModal.product?.category ||
-        ((["food", "drinks", "desserts"].includes(manageMenuTab as string))
-          ? (manageMenuTab as "food" | "drinks" | "desserts")
+        ((["food", "drinks", "desserts"].includes(manageMenúuTab as string))
+          ? (manageMenúuTab as "food" | "drinks" | "desserts")
           : "food");
       setCrudSelectedCategory(initialCat);
       const initialSubgroup = productCrudModal.product?.subgroup || "";
       setCrudSelectedSubgroup(initialSubgroup);
       setCrudNewSubgroupText("");
     }
-  }, [productCrudModal.isOpen, productCrudModal.product, manageMenuTab]);
+  }, [productCrudModal.isOpen, productCrudModal.product, manageMenúuTab]);
   const [inventoryCrudModal, setInventoryCrudModal] = useState<{
     isOpen: boolean;
     item: any | null;
@@ -3721,17 +3721,17 @@ export default function App() {
   }>({ isOpen: false, type: null });
   const [tenantBackupMoveTarget, setTenantBackupMoveTarget] = useState("");
 
-  const [showMenuToast, setShowMenuToast] = useState(false);
-  const [menuToastMessage, setMenuToastMessage] = useState("");
+  const [showMenúuToast, setShowMenúuToast] = useState(false);
+  const [menuToastMessage, setMenúuToastMessage] = useState("");
 
   useEffect(() => {
-    if (showMenuToast) {
+    if (showMenúuToast) {
       const timer = setTimeout(() => {
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [showMenuToast]);
+  }, [showMenúuToast]);
   const [isAddingProducts, setIsAddingProducts] = useState(false);
   const [isGeneratingOrder, setIsGeneratingOrder] = useState(false);
 
@@ -3772,15 +3772,15 @@ export default function App() {
       const res = await fetch("/api/config/menu_image");
       const data = await res.json();
       if (data.value) {
-        setMenuImage(data.value);
-        setMenuImages([data.value]);
+        setMenúuImage(data.value);
+        setMenúuImages([data.value]);
       }
     } catch (error) {
       console.log("Config fetch info (offline/startup):", error);
     }
   };
 
-  const handleMenuImageUpload = async (
+  const handleMenúuImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
@@ -3795,10 +3795,10 @@ export default function App() {
           newImages.push(base64String);
           loaded++;
           if (loaded === pFiles.length) {
-            setMenuImages((prev) => {
+            setMenúuImages((prev) => {
               const updated = [...prev, ...newImages].slice(0, 8);
               if (updated.length > 0) {
-                setMenuImage(updated[0]);
+                setMenúuImage(updated[0]);
                 try {
                   fetch("/api/config/menu_image", {
                     method: "POST",
@@ -3818,7 +3818,7 @@ export default function App() {
     }
   };
 
-  const analyzeMenuImage = async (
+  const analyzeMenúuImage = async (
     base64Input: string | string[],
     withSubgroups = false,
   ) => {
@@ -4050,19 +4050,19 @@ export default function App() {
     setAnalysisStatus((prev) => ({ ...prev, isAnalyzing: false }));
 
     if (hasFailure && accumulatedProducts.length === 0) {
-      setMenuToastMessage(
+      setMenúuToastMessage(
         `🚨 Error al analizar imágenes de menú: ${failureReason}. Por favor configura tu Clave Gemini en Ajustes de la Sucursal para que funcione en producción.`,
       );
     } else if (hasFailure) {
-      setMenuToastMessage(
+      setMenúuToastMessage(
         `⚠️ Carga parcial: ${accumulatedProducts.length} productos detectados. Algunas imágenes fallaron (${failureReason}).`,
       );
     } else {
-      setMenuToastMessage(
+      setMenúuToastMessage(
         `¡Análisis completado con éxito! ${accumulatedProducts.length} productos detectados en total.`,
       );
     }
-    setShowMenuToast(true);
+    setShowMenúuToast(true);
   };
 
   const handleExcelUpload = async (e: any) => {
@@ -4081,21 +4081,21 @@ export default function App() {
         const data = XLSX.utils.sheet_to_json(ws);
         
         if (data && data.length > 0) {
-          analyzeExcelMenu(data);
+          analyzeExcelMenúu(data);
         } else {
-          setMenuToastMessage("El archivo está vacío o no se pudo leer.");
-          setShowMenuToast(true);
+          setMenúuToastMessage("El archivo está vacío o no se pudo leer.");
+          setShowMenúuToast(true);
         }
       };
       reader.readAsArrayBuffer(file);
     } catch (err: any) {
       console.error("Error leyendo Excel:", err);
-      setMenuToastMessage("Error al procesar el archivo Excel.");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Error al procesar el archivo Excel.");
+      setShowMenúuToast(true);
     }
   };
 
-  const analyzeExcelMenu = async (excelRows: any[]) => {
+  const analyzeExcelMenúu = async (excelRows: any[]) => {
     if (excelRows.length === 0) return;
 
     setIsAnalyzing(true);
@@ -4226,25 +4226,25 @@ export default function App() {
         ...prev,
         completedImages: [{ index: 1, count: mapped.length }],
       }));
-      setMenuToastMessage(`¡Análisis de Excel exitoso! ${mapped.length} productos detectados.`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`¡Análisis de Excel exitoso! ${mapped.length} productos detectados.`);
+      setShowMenúuToast(true);
 
     } catch (error: any) {
       console.error("Error analyzing excel:", error);
-      setMenuToastMessage(`🚨 Error al procesar Excel: ${error.message}`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`🚨 Error al procesar Excel: ${error.message}`);
+      setShowMenúuToast(true);
     } finally {
       setIsAnalyzing(false);
       setAnalysisStatus((prev) => ({ ...prev, isAnalyzing: false }));
     }
   };
 
-  const handleAddProductsToMenu = async (itemsToAdd: any[]) => {
+  const handleAddProductsToMenúu = async (itemsToAdd: any[]) => {
     if (itemsToAdd.length === 0) return;
 
     setIsAddingProducts(true);
-    setMenuToastMessage(`Iniciando carga de ${itemsToAdd.length} productos...`);
-    setShowMenuToast(true);
+    setMenúuToastMessage(`Iniciando carga de ${itemsToAdd.length} productos...`);
+    setShowMenúuToast(true);
 
     try {
       await bulkAddProductsToFirebase(itemsToAdd, false, selectedTenant.id);
@@ -4256,31 +4256,31 @@ export default function App() {
       const msg = `✅ ¡Éxito! Se importaron ${itemsToAdd.length} productos al menú:\n\n🌮 Alimentos: ${foodCount}\n🥤 Bebidas: ${drinksCount}\n🍰 Postres: ${dessertsCount}`;
       alert(msg);
 
-      setMenuToastMessage(`Cargados: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
+      setMenúuToastMessage(`Cargados: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
       setIsAddingProducts(false);
 
       setTimeout(() => {
         setDetectedProducts([]);
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 4000);
     } catch (error: any) {
       console.error("Error adding products:", error);
-      setMenuToastMessage(
-        `Error: ${error.message || "No se pudieron agregar los productos"}`,
+      setMenúuToastMessage(
+        `Error: ${error.message || "No se pudieron agregóar los productos"}`,
       );
       setIsAddingProducts(false);
       setTimeout(() => {
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 3500);
     }
   };
 
-  const handleResetMenuAndRefill = async (itemsToAdd: any[]) => {
+  const handleResetMenúuAndRefill = async (itemsToAdd: any[]) => {
     if (itemsToAdd.length === 0) return;
 
     setIsAddingProducts(true);
-    setMenuToastMessage("Reiniciando base de datos y preparando carga...");
-    setShowMenuToast(true);
+    setMenúuToastMessage("Reiniciando base de datos y preparando carga...");
+    setShowMenúuToast(true);
 
     try {
       await resetAllSystemsInFirebase(selectedTenant.id);
@@ -4290,21 +4290,21 @@ export default function App() {
       const drinksCount = itemsToAdd.filter(p => p.category === "drinks").length;
       const dessertsCount = itemsToAdd.filter(p => p.category === "desserts").length;
 
-      const msg = `✅ ¡Menú Reiniciado con Éxito! Se cargaron ${itemsToAdd.length} productos:\n\n🌮 Alimentos: ${foodCount}\n🥤 Bebidas: ${drinksCount}\n🍰 Postres: ${dessertsCount}`;
+      const msg = `✅ ¡Menúú Reiniciado con Éxito! Se cargaron ${itemsToAdd.length} productos:\n\n🌮 Alimentos: ${foodCount}\n🥤 Bebidas: ${drinksCount}\n🍰 Postres: ${dessertsCount}`;
       alert(msg);
 
-      setMenuToastMessage(`Reiniciado con: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
+      setMenúuToastMessage(`Reiniciado con: 🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`);
       setIsAddingProducts(false);
       setTimeout(() => {
         setDetectedProducts([]);
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 4000);
     } catch (error: any) {
       console.error("Error resetting menu:", error);
-      setMenuToastMessage("Error al reiniciar el menú.");
+      setMenúuToastMessage("Error al reiniciar el menú.");
       setIsAddingProducts(false);
       setTimeout(() => {
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 3500);
     }
   };
@@ -4739,7 +4739,7 @@ export default function App() {
       triggerAppNotification("📍 DIRECCIÓN AGREGADA", `Se añadió nueva dirección a ${selectedDeliveryClient.name}`, "success");
     } catch (err) {
       console.error("Error adding address on-the-fly:", err);
-      alert("Error al agregar la nueva dirección. ❌");
+      alert("Error al agregóar la nueva dirección. ❌");
     }
   };
 
@@ -4796,7 +4796,7 @@ export default function App() {
   const [activeSubcategory, setActiveSubcategory] = useState<string>("");
   const [activeSubgroup, setActiveSubgroup] = useState<string>("Todos");
   const [activeDrinkType, setActiveDrinkType] = useState<"hot" | "cold">("hot");
-  const [menuSearchQuery, setMenuSearchQuery] = useState<string>("");
+  const [menuSearchQuery, setMenúuSearchQuery] = useState<string>("");
   const [productSalesMap, setProductSalesMap] = useState<Record<string, number>>(() => {
     try {
       const cached = localStorage.getItem("cocinet_product_sales_stats");
@@ -5334,8 +5334,8 @@ export default function App() {
       }
     }
 
-    setMenuToastMessage(`${title}\n${body}`);
-    setShowMenuToast(true);
+    setMenúuToastMessage(`${title}\n${body}`);
+    setShowMenúuToast(true);
   };
 
   // Escuchar eventos y errores de impresión globalmente y monitorear el Sentinela (Puerto 3010) 🖨️⚡
@@ -7524,7 +7524,7 @@ export default function App() {
                             className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-98 text-white font-black text-sm py-4 rounded-2xl shadow-lg border-none transition cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2"
                           >
                             <span>🛵</span>
-                            <span>Guardar Cliente y Pasar al Menú 🌮</span>
+                            <span>Guardar Cliente y Pasar al Menúú 🌮</span>
                           </button>
                         </div>
 
@@ -7586,7 +7586,7 @@ export default function App() {
       };
       setTenantPrinterConfig((prev) => ({ ...prev, [key]: newSetting }));
       setNewAreaName("");
-      triggerAppNotification("✅ Área Creada", `Área de impresión "${newAreaName.trim()} ${newAreaEmoji}" agregada.`, "success");
+      triggerAppNotification("✅ Área Creada", `Área de impresión "${newAreaName.trim()} ${newAreaEmoji}" agregóada.`, "success");
     };
 
     const handleDeleteArea = (key: string) => {
@@ -7880,7 +7880,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3 text-xs text-slate-700 space-y-1">
                 <div className="font-extrabold text-amber-900 flex items-center gap-1.5">
-                  <span>🏷️ Categorías de Menú y Puntos de Impresión</span>
+                  <span>🏷️ Categorías de Menúú y Puntos de Impresión</span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-relaxed font-semibold m-0">
                   Crea categorías dinámicas para tus productos (ej. Comal 🫓) con su emoji y conéctalas con su área de impresión correspondiente.
@@ -8622,10 +8622,10 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         setSelectedTenant(updatedTenant);
       }
       
-      triggerAppNotification("💰 Fondo Guardado", `El fondo de caja inicial se actualizó a $${val.toFixed(2)}`, "success");
+      triggerAppNotification("💰 Fondo Guardado", `El fondo de caja inicial se actualizóó a $${val.toFixed(2)}`, "success");
     } catch (err) {
       console.error("Error saving initial cash fund:", err);
-      triggerAppNotification("Error", "No se pudo actualizar el fondo en el servidor", "warning");
+      triggerAppNotification("Error", "No se pudo actualizóar el fondo en el servidor", "warning");
     }
   };
 
@@ -9292,12 +9292,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       job.printLine("================================").feed(3).cut().execute();
 
-      setMenuToastMessage("Comisionando impresion de precorte...");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Comisionando impresion de precorte...");
+      setShowMenúuToast(true);
     } catch (err: any) {
       console.error("Print precorte failed:", err);
-      setMenuToastMessage("Error de impresion precorte: " + err.message);
-      setShowMenuToast(true);
+      setMenúuToastMessage("Error de impresion precorte: " + err.message);
+      setShowMenúuToast(true);
     }
   };
 
@@ -9311,8 +9311,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       link.download = `Precorte_dia_${getMexicoISOString().split("T")[0]}.txt`;
       link.click();
       URL.revokeObjectURL(url);
-      setMenuToastMessage("Precorte descargado con exito.");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Precorte descargado con exito.");
+      setShowMenúuToast(true);
     } catch (err: any) {
       console.error("Download precorte failed:", err);
     }
@@ -9405,12 +9405,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       job.printLine("================================").feed(3).cut().execute();
 
-      setMenuToastMessage("Comisionando impresion de corte diario...");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Comisionando impresion de corte diario...");
+      setShowMenúuToast(true);
     } catch (err: any) {
       console.error("Print cut failed:", err);
-      setMenuToastMessage("Error de impresion: " + err.message);
-      setShowMenuToast(true);
+      setMenúuToastMessage("Error de impresion: " + err.message);
+      setShowMenúuToast(true);
     }
   };
 
@@ -9424,8 +9424,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       link.download = `Corte_dia_${getMexicoISOString().split("T")[0]}.txt`;
       link.click();
       URL.revokeObjectURL(url);
-      setMenuToastMessage("Reporte de caja descargado con exito.");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Reporte de caja descargado con exito.");
+      setShowMenúuToast(true);
     } catch (err: any) {
       console.error("Download report failed:", err);
     }
@@ -9434,8 +9434,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   const handleResetSales = async () => {
     try {
       setIsAddingProducts(true);
-      setMenuToastMessage("Reiniciando cortes de caja y comandas...");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Reiniciando cortes de caja y comandas...");
+      setShowMenúuToast(true);
 
       const res = await fetch("/api/reset-sales", { method: "POST" });
       if (res.ok) {
@@ -9470,14 +9470,14 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         }
       });
 
-      setMenuToastMessage("Cortes y ventas reiniciadas.");
+      setMenúuToastMessage("Cortes y ventas reiniciadas.");
       setTimeout(() => {
         setIsAddingProducts(false);
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 2000);
     } catch (err: any) {
       console.error("Error resetting sales:", err);
-      setMenuToastMessage(err.message || "Error al reiniciar ventas.");
+      setMenúuToastMessage(err.message || "Error al reiniciar ventas.");
       setIsAddingProducts(false);
     }
   };
@@ -9485,8 +9485,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   const handleResetAllSystems = async () => {
     try {
       setIsAddingProducts(true);
-      setMenuToastMessage("Borrando base de datos y reiniciando sistema...");
-      setShowMenuToast(true);
+      setMenúuToastMessage("Borrando base de datos y reiniciando sistema...");
+      setShowMenúuToast(true);
 
       // 1. Clear IndexedDB
       await clearAllLocalData();
@@ -9497,7 +9497,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       // 3. Call Firebase reset logic (now seeds default tables, products & users)
       await resetAllSystemsInFirebase();
 
-      setMenuToastMessage("Sistema reiniciado. Todo en limpio.");
+      setMenúuToastMessage("Sistema reiniciado. Todo en limpio.");
 
       // 4. Clear current logged in user and reset everything
       setCurrentUser(null);
@@ -9506,11 +9506,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       setTimeout(() => {
         setIsAddingProducts(false);
-        setShowMenuToast(false);
+        setShowMenúuToast(false);
       }, 2000);
     } catch (err: any) {
       console.error("Error resetting all systems:", err);
-      setMenuToastMessage(err.message || "Error al reiniciar el sistema.");
+      setMenúuToastMessage(err.message || "Error al reiniciar el sistema.");
       setIsAddingProducts(false);
     }
   };
@@ -9659,11 +9659,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     subtitle?: string;
     showBack?: boolean;
     onBack?: () => void;
-    showMenu?: boolean;
+    showMenúu?: boolean;
     actions?: React.ReactNode;
     minimal?: boolean;
   }) => {
-    const { title, subtitle, showBack = false, onBack, showMenu = true, actions, minimal = false } = options;
+    const { title, subtitle, showBack = false, onBack, showMenúu = true, actions, minimal = false } = options;
     const currentOpDay = getOperatingDay(new Date());
     const unreadCount = notificationsList.filter(
       (n) => !n.read && getOperatingDay(n.createdAt ? new Date(n.createdAt) : new Date()) === currentOpDay
@@ -9683,7 +9683,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
           }}
         >
           <div className="flex items-center justify-between gap-3 h-14">
-            {/* Left Section: Back or Menu Button */}
+            {/* Left Section: Back or Menúu Button */}
             <div className="flex items-center gap-3">
               {showBack ? (
                 <motion.button
@@ -9695,13 +9695,13 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                 >
                   ⬅️
                 </motion.button>
-              ) : showMenu ? (
+              ) : showMenúu ? (
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowSidebar(true)}
                   className="w-10 h-10 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-lg flex items-center justify-center transition border-none cursor-pointer outline-none shadow-sm"
-                  title="Menú Principal"
+                  title="Menúú Principal"
                 >
                   <IonIcon icon={menuOutline} style={{ fontSize: "22px", color: "white" }} />
                 </motion.button>
@@ -10232,7 +10232,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                                     checked ? "info" : "warning"
                                   );
                                 } catch (err: any) {
-                                  console.error("Error al actualizar folio interno:", err);
+                                  console.error("Error al actualizóar folio interno:", err);
                                 }
                               }}
                               className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500 accent-amber-600 cursor-pointer"
@@ -11453,7 +11453,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                                                                     footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${company.ownerEmail})`,
                                                                     logoUrl: base64,
                                                                   });
-                                                                  triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizó el logo de "${company.name}" en Firebase.`, "success");
+                                                                  triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizóó el logo de "${company.name}" en Firebase.`, "success");
                                                                 } catch (err) {
                                                                   console.error("Firebase error:", err);
                                                                   triggerAppNotification("⚠️ Error Firebase", "No se pudo sincronizar, pero se guardó localmente.", "warning");
@@ -11612,7 +11612,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                                                                     footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${company.ownerEmail})`,
                                                                     logoUrl: base64,
                                                                   });
-                                                                  triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizó el logo de "${company.name}" en Firebase.`, "success");
+                                                                  triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizóó el logo de "${company.name}" en Firebase.`, "success");
                                                                 } catch (err) {
                                                                   console.error("Firebase error:", err);
                                                                   triggerAppNotification("⚠️ Error Firebase", "No se pudo sincronizar, pero se guardó localmente.", "warning");
@@ -12746,8 +12746,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     if (!selectedTable) { alert("execute: Mesa no seleccionada"); return; }
     if (isGeneratingOrder) { console.log("execute: Ya se está generando la orden"); return; }
     setIsGeneratingOrder(true);
-    setMenuToastMessage("Procesando comanda...");
-    setShowMenuToast(true);
+    setMenúuToastMessage("Procesando comanda...");
+    setShowMenúuToast(true);
 
     const tableLabel = selectedTable.label;
     const comandaItems = [...cart];
@@ -12911,7 +12911,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       }
     } catch (error: any) {
       console.error("Error generating order:", error);
-      setMenuToastMessage(
+      setMenúuToastMessage(
         `Error: ${error.message || "No se pudo generar la comanda"}`,
       );
     } finally {
@@ -13371,7 +13371,7 @@ setCheckoutReturnMode(null);
     const totalVal = Number(account.total || (subtotalVal + tipVal - discountVal));
 
     let msg = `¡Hola! 👋 Te saludamos de *${bName}* 🌮🥤\n\n`;
-    msg += `Por este medio nos puedes hacer llegar tu *Constancia de Situación Fiscal (SAT)* 📄 actualizada, así como tu *correo electrónico* ✉️ para poder generarte y enviarte tu factura electrónica.\n\n`;
+    msg += `Por este medio nos puedes hacer llegar tu *Constancia de Situación Fiscal (SAT)* 📄 actualizóada, así como tu *correo electrónico* ✉️ para poder generarte y enviarte tu factura electrónica.\n\n`;
     msg += `📌 *DATOS DEL TICKET A FACTURAR:*\n`;
     msg += `🧾 *Folio:* ${folioStr}\n`;
     msg += `🪑 *Mesa:* ${tableLabel}\n`;
@@ -13452,7 +13452,7 @@ setCheckoutReturnMode(null);
       );
     } catch (err) {
       console.error("Error updating account status:", err);
-      triggerAppNotification("⚠️ Error", "No se pudo actualizar el estatus de la cuenta.", "warning");
+      triggerAppNotification("⚠️ Error", "No se pudo actualizóar el estatus de la cuenta.", "warning");
     }
   };
 
@@ -13821,7 +13821,7 @@ setCheckoutReturnMode(null);
       setAccountToEditPayment(null);
     } catch (err) {
       console.error("Error updating payment method:", err);
-      triggerAppNotification("❌ Error", "No se pudo actualizar el método de pago: " + (err instanceof Error ? err.message : String(err)), "warning");
+      triggerAppNotification("❌ Error", "No se pudo actualizóar el método de pago: " + (err instanceof Error ? err.message : String(err)), "warning");
     }
   };
 
@@ -15613,7 +15613,7 @@ setCheckoutReturnMode(null);
         title: selectedTenant ? `🏢 ${selectedTenant.name}` : "Cocinet",
         subtitle: `📍 ${selectedTenant?.sucursalDefault || "Matriz"}`,
         showBack: false,
-        showMenu: true,
+        showMenúu: true,
         actions: isOnline ? (
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -16415,7 +16415,7 @@ setCheckoutReturnMode(null);
           const promptText = `Dado el siguiente dictado de voz de un cliente en un restaurante de comunidad hispanohablante: "${transcript}"
 Interpreta el dictado de voz y asócialo de forma inteligente con los productos disponibles en el menú.
 
-Menú del restaurante con sus respectivos IDs y nombres oficiales:
+Menúú del restaurante con sus respectivos IDs y nombres oficiales:
 ${menuStringForGemini}
 
 Instrucciones:
@@ -17085,7 +17085,7 @@ Instrucciones:
     );
   };
 
-  const renderMenu = () => {
+  const renderMenúu = () => {
     const subcategories = Array.from(
       new Set(
         products
@@ -17192,7 +17192,7 @@ Instrucciones:
               value={activeCategory}
               onIonChange={(e) => {
                 setActiveCategory(e.detail.value as any);
-                setMenuSearchQuery("");
+                setMenúuSearchQuery("");
                 setActiveSubgroup("Todos");
               }}
               style={{ "--background": "#f1f5f9" }}
@@ -17249,7 +17249,7 @@ Instrucciones:
                     size="small"
                     fill={isActiveSub ? "solid" : "outline"}
                     onClick={() => {
-                      setMenuSearchQuery("");
+                      setMenúuSearchQuery("");
                       if (activeCategory === "food") {
                         if (sub === "Bebidas Calientes") {
                           setActiveCategory("drinks");
@@ -18030,7 +18030,7 @@ Instrucciones:
                   <input
                     type="text"
                     value={menuSearchQuery}
-                    onChange={(e) => setMenuSearchQuery(e.target.value)}
+                    onChange={(e) => setMenúuSearchQuery(e.target.value)}
                     placeholder="🔍 Buscar en TODO el catálogo... (ej: tac arr ma)"
                     className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-sm placeholder:text-slate-400 placeholder:font-normal"
                   />
@@ -18038,7 +18038,7 @@ Instrucciones:
                   {menuSearchQuery && (
                     <button
                       type="button"
-                      onClick={() => setMenuSearchQuery("")}
+                      onClick={() => setMenúuSearchQuery("")}
                       className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 font-black text-sm p-0.5 bg-slate-100 rounded-full w-5 h-5 flex items-center justify-center border-none cursor-pointer"
                     >
                       ✕
@@ -21721,7 +21721,7 @@ setCheckoutReturnMode(null);
             <div className="space-y-6 max-w-2xl mx-auto py-4">
               {/* Cards container */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Card 1: Managing Menu */}
+                {/* Card 1: Managing Menúu */}
                 <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div>
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
@@ -21731,7 +21731,7 @@ setCheckoutReturnMode(null);
                       />
                     </div>
                     <h3 className="text-lg font-bold text-slate-800 mb-1">
-                      Gestionar Carta y Menú
+                      Gestionar Carta y Menúú
                     </h3>
                     <p className="text-sm text-slate-500 mb-4">
                       Baja y alta de alimentos, bebidas y postres. Puedes
@@ -21747,11 +21747,11 @@ setCheckoutReturnMode(null);
                   <button
                     onClick={() => {
                       setAppMode("manage-menu");
-                      setManageMenuTab(null);
+                      setManageMenúuTab(null);
                     }}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-2xl transition duration-200 shadow-sm cursor-pointer"
                   >
-                    Administrar Menú
+                    Administrar Menúú
                   </button>
                 </div>
 
@@ -22063,7 +22063,7 @@ setCheckoutReturnMode(null);
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                        Mensaje del Pie de Ticket / Lema (Ej. "Vuelva pronto")
+                        Menúsaje del Pie de Ticket / Lema (Ej. "Vuelva pronto")
                       </label>
                       <input
                         type="text"
@@ -22076,7 +22076,7 @@ setCheckoutReturnMode(null);
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                        Clave de API Gemini (Para Carga Masiva de Menú e IA de
+                        Clave de API Gemini (Para Carga Masiva de Menúú e IA de
                         Voz) 🔑
                       </label>
                       <input
@@ -22188,10 +22188,10 @@ setCheckoutReturnMode(null);
                             `Hemos sincronizado y guardado con éxito la configuración comercial y la Clave API de la IA de Gemini para: ${selectedTenant.name} ⭐🔑`,
                             "success",
                           );
-                          setMenuToastMessage(
-                            `Configuración de ${selectedTenant.name} actualizada con éxito y sincronizándose por WebSockets... ⚡`,
+                          setMenúuToastMessage(
+                            `Configuración de ${selectedTenant.name} actualizóada con éxito y sincronizándose por WebSockets... ⚡`,
                           );
-                          setShowMenuToast(true);
+                          setShowMenúuToast(true);
                         } catch (err: any) {
                           console.error("Error saving company config:", err);
                           triggerAppNotification(
@@ -22365,8 +22365,8 @@ setCheckoutReturnMode(null);
               printerQueue={printerQueue}
               onDeletePedido={(id) => deletePedidoFromPrinter(selectedTenant!.id, id)}
               triggerAppNotification={(title, body, type) => {
-                setMenuToastMessage(`🔔 [${title}] ${body}`);
-                setShowMenuToast(true);
+                setMenúuToastMessage(`🔔 [${title}] ${body}`);
+                setShowMenúuToast(true);
               }}
             />
           ) : configActiveTab === "users" ? (
@@ -23267,17 +23267,19 @@ setCheckoutReturnMode(null);
 
     const handleSave = async (e: React.FormEvent) => {
       e.preventDefault();
-      const formData = new FormData(e.target as HTMLFormElement);
-      const name = formData.get("name") as string;
-      const price = Number(formData.get("price"));
-      const category = formData.get("category") as "food" | "drinks" | "desserts";
-      const subcategory = formData.get("subcategory") as string;
-      const subgroup = formData.get("subgroup") as string;
-      const destination = formData.get("destination") as string;
-      const reportName = formData.get("reportName") as string;
-      const sortOrderRaw = formData.get("sortOrder");
+      const formDataObj = new FormData(e.target as HTMLFormElement);
+      const selectedTenants = formDataObj.getAll('targetTenants') as string[];
+      
+      const name = formDataObj.get("name") as string;
+      const price = Number(formDataObj.get("price"));
+      const category = formDataObj.get("category") as "food" | "drinks" | "desserts";
+      const subcategory = formDataObj.get("subcategory") as string;
+      const subgroup = formDataObj.get("subgroup") as string;
+      const destination = formDataObj.get("destination") as string;
+      const reportName = formDataObj.get("reportName") as string;
+      const sortOrderRaw = formDataObj.get("sortOrder");
       const sortOrder = sortOrderRaw ? Number(sortOrderRaw) : 9999;
-      const description = formData.get("description") as string;
+      const description = formDataObj.get("description") as string;
 
       if (!name || isNaN(price)) {
         triggerAppNotification("Error", "Nombre y precio son requeridos", "warning");
@@ -23300,27 +23302,89 @@ setCheckoutReturnMode(null);
       };
 
       try {
-        if (isEditing && p) {
-          await updateProductInFirebase(p.id, data);
-          setRelationMatches(prev => prev.map(m => m.productId === p.id ? {
-            ...m,
-            proposedReportName: data.reportName || m.proposedReportName,
-            proposedSortOrder: data.sortOrder === 9999 ? m.proposedSortOrder : data.sortOrder,
-            proposedDescription: data.description || m.proposedDescription,
-            proposedSubgroup: data.subgroup || m.proposedSubgroup
-          } : m));
-          triggerAppNotification("Producto Actualizado", `${name} se actualizó correctamente`, "success");
-        } else {
-          const newId = `prod_${Date.now()}`;
-          await addProductToFirebase({
-            ...data,
-            id: newId,
-            uuid: generateUUID(),
-            created_at: nowTimestamp,
-          });
-          triggerAppNotification("Producto Creado", `${name} se agregó al menú`, "success");
-        }
-        setProductCrudModal({ isOpen: false, product: null });
+          if (selectedTenants.length === 0) {
+            if (isEditing && p) {
+              await updateProductInFirebase(p.id, data);
+              setRelationMatches(prev => prev.map(m => m.productId === p.id ? {
+                ...m,
+                proposedReportName: data.reportName || m.proposedReportName,
+                proposedSortOrder: data.sortOrder === 9999 ? m.proposedSortOrder : data.sortOrder,
+                proposedDescription: data.description || m.proposedDescription,
+                proposedSubgroup: data.subgroup || m.proposedSubgroup
+              } : m));
+              triggerAppNotification("Producto Actualizado", `${name} se actualizóó correctamente`, "success");
+            } else {
+              const newId = `prod_${Date.now()}`;
+              await addProductToFirebase({
+                ...data,
+                id: newId,
+                uuid: generateUUID(),
+                created_at: nowTimestamp,
+              });
+              triggerAppNotification("Producto Creado", `${name} se agregóó al menó`, "success");
+            }
+          } else {
+            const allProducts = await getAllProductsFromFirebase();
+            let createdCount = 0;
+            let updatedCount = 0;
+            
+            if (isEditing && p) {
+              const tenantsToUpdate = [];
+              const tenantsToAdd = [];
+              for (const tId of selectedTenants) {
+                 const matchedProduct = allProducts.find((prod: any) => prod.tenantId === tId && prod.name.trim().toLowerCase() === name.trim().toLowerCase());
+                 if (matchedProduct) {
+                   tenantsToUpdate.push({ tId, matchedProduct });
+                 } else {
+                   tenantsToAdd.push(tId);
+                 }
+              }
+              
+              if (tenantsToAdd.length > 0) {
+                 const tNames = tenantsToAdd.map(tid => COMPANY_CATALOG.find((c:any) => c.id === tid)?.name || tid).join(', ');
+                 const confirmAdd = window.confirm(`El producto "${name}" no existe en: ${tNames}.\n\nó¿Deseas agregóarlo como nuevo en estas sucursales?`);
+                 if (confirmAdd) {
+                    for (const tId of tenantsToAdd) {
+                       const newId = `prod_${tId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                       await addProductToFirebase({
+                         ...data,
+                         id: newId,
+                         uuid: generateUUID(),
+                         tenantId: tId,
+                         created_at: nowTimestamp,
+                       });
+                       createdCount++;
+                    }
+                 }
+              }
+              
+              for (const item of tenantsToUpdate) {
+                 await updateProductInFirebase(item.matchedProduct.id, data);
+                 updatedCount++;
+              }
+              
+              if (updatedCount > 0 || createdCount > 0) {
+                 triggerAppNotification("Proceso Completado", `Se actualizóaron ${updatedCount} y se crearon ${createdCount} en las sucursales seleccionadas.`, "success");
+              }
+            } else {
+              const confirmAdd = window.confirm(`ó¿Seguro que deseas AGREGAR este nuevo producto a las ${selectedTenants.length} sucursales seleccionadas?`);
+              if (confirmAdd) {
+                for (const tId of selectedTenants) {
+                   const newId = `prod_${tId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                   await addProductToFirebase({
+                     ...data,
+                     id: newId,
+                     uuid: generateUUID(),
+                     tenantId: tId,
+                     created_at: nowTimestamp,
+                   });
+                   createdCount++;
+                }
+                triggerAppNotification("Productos Creados", `Se agregóaron ${createdCount} productos a las sucursales seleccionadas.`, "success");
+              }
+            }
+          }
+setProductCrudModal({ isOpen: false, product: null });
       } catch (err) {
         console.error(err);
         triggerAppNotification("Error", "No se pudo guardar el producto", "warning");
@@ -23333,9 +23397,9 @@ setCheckoutReturnMode(null);
         onDidDismiss={() => setProductCrudModal({ isOpen: false, product: null })}
         className="product-crud-modal"
         style={{
-          "--height": "90%",
+          "--height": "95%",
           "--width": "100%",
-          "--max-width": "500px",
+          "--max-width": "1000px",
           "--border-radius": "28px",
         }}
       >
@@ -23343,10 +23407,10 @@ setCheckoutReturnMode(null);
           <div className="p-6 bg-[#1e293b] text-white flex justify-between items-center shrink-0">
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight m-0">
-                {isEditing ? "✏️ Editar Producto" : "➕ Nuevo Producto"}
+                {isEditing ? "?? Editar Producto" : "? Nuevo Producto"}
               </h2>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                Panel de Administración de Menú
+                Panel de Administración de Menúó
               </p>
             </div>
             <button 
@@ -23357,183 +23421,232 @@ setCheckoutReturnMode(null);
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
-            <form onSubmit={handleSave} className="space-y-5 pb-6">
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Nombre del Platillo / Bebida</label>
-                <input
-                  name="name"
-                  type="text"
-                  defaultValue={p?.name || ""}
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                  placeholder="Ej. Tacos de Pastor Especial"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Precio ($)</label>
-                  <input
-                    name="price"
-                    type="number"
-                    step="0.01"
-                    defaultValue={p?.price || ""}
-                    required
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="0.00"
-                  />
+          <div className="flex-1 overflow-hidden p-0">
+            <form onSubmit={handleSave} className="flex flex-col md:flex-row h-full">
+              {/* Left Column: Tenants Grouped by Owner */}
+              <div className="w-full md:w-2/5 bg-slate-100 border-r border-slate-200 p-6 overflow-y-auto h-full">
+                <div className="mb-4">
+                  <label className="block text-[12px] font-black text-slate-600 uppercase">
+                    ?? Replicar en Sucursales
+                  </label>
+                  <p className="text-[10px] text-slate-500 font-bold mt-1">
+                    (Opcional) Selecciona dónde aplicarós los cambios. Deja vacóo para aplicar solo en la sucursal actual.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Categoría</label>
-                  <select
-                    name="category"
-                    defaultValue={p?.category || crudSelectedCategory}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const catObj = productCategories.find((c) => c.id === val);
-                      if (catObj && catObj.destination) {
-                        const form = e.target.form as HTMLFormElement;
-                        const destSelect = form.elements.namedItem("destination") as HTMLSelectElement;
-                        if (destSelect) destSelect.value = catObj.destination;
-                      }
-                    }}
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
-                  >
-                    {productCategories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name} {cat.emoji || "🍽️"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subcategoría</label>
-                  <input
-                    name="subcategory"
-                    type="text"
-                    defaultValue={p?.subcategory || "General"}
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Ej. Tacos"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subgrupo / Variante</label>
-                  <input
-                    name="subgroup"
-                    type="text"
-                    defaultValue={p?.subgroup || ""}
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Ej. Pastor"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Descripción del Producto</label>
-                <textarea
-                  name="description"
-                  defaultValue={p?.description || ""}
-                  rows={2}
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                  placeholder="Detalles del platillo (ingredientes, alérgenos, etc.)"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Nombre para Reportes</label>
-                  <input
-                    name="reportName"
-                    type="text"
-                    defaultValue={p?.reportName || ""}
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Ej. TACO DE PASTOR DE MAÍZ"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Orden en Reportes</label>
-                  <input
-                    name="sortOrder"
-                    type="number"
-                    defaultValue={p?.sortOrder && p?.sortOrder !== 9999 ? p?.sortOrder : ""}
-                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="9999"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Punto de Impresión (Área)</label>
-                <select
-                  name="destination"
-                  defaultValue={p?.destination || (p?.category === "drinks" ? "barra" : "cocina")}
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
-                >
-                  {Object.keys(tenantPrinterConfig).map((areaKey) => {
-                    const cfg = tenantPrinterConfig[areaKey];
+                
+                <div className="space-y-4 pb-10">
+                  {Array.from(new Set(COMPANY_CATALOG.map(c => c.ownerKey))).map(ownerKey => {
+                    const ownerBranches = COMPANY_CATALOG.filter(c => c.ownerKey === ownerKey);
+                    if (ownerBranches.length === 0) return null;
                     return (
-                      <option key={areaKey} value={areaKey}>
-                        {cfg?.emoji || "🖨️"} {cfg?.name || areaKey}
-                      </option>
+                      <div key={ownerKey || "default"} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-1 rounded mb-2 inline-block truncate max-w-full">
+                          PROPIETARIO: {ownerKey || "N/A"}
+                        </div>
+                        <div className="space-y-1.5 pl-1">
+                          {ownerBranches.map((t) => (
+                            <label key={t.id} className="flex items-center gap-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors">
+                              <input type="checkbox" name="targetTenants" value={t.id} className="w-4 h-4 accent-indigo-600" />
+                              <span className="truncate">{t.emoji || '??'} {t.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     );
                   })}
-                  <option value="none">🚫 Sin impresión</option>
-                </select>
+                </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-                <label className="block text-[11px] font-black text-slate-500 uppercase">Notas Rápidas (Modificadores)</label>
-                <div className="flex flex-wrap gap-2">
-                  {crudQuickNotes.map((note, idx) => (
-                    <span key={idx} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 border border-indigo-100">
-                      {note}
-                      <button type="button" onClick={() => setCrudQuickNotes(prev => prev.filter((_, i) => i !== idx))} className="text-indigo-300 hover:text-indigo-600">✕</button>
-                    </span>
-                  ))}
-                  {crudQuickNotes.length === 0 && <span className="text-[10px] text-slate-400 font-bold italic">No hay notas agregadas</span>}
-                </div>
-                <div className="flex gap-2 pt-2">
+              {/* Right Column: Edit Form */}
+              <div className="w-full md:w-3/5 p-6 space-y-5 overflow-y-auto h-full pb-20">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Nombre del Platillo / Bebida</label>
                   <input
+                    name="name"
                     type="text"
-                    value={newCrudQuickNoteText}
-                    onChange={(e) => setNewCrudQuickNoteText(e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
-                    placeholder="Ej. Sin Cebolla"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
+                    defaultValue={p?.name || ""}
+                    required
+                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                    placeholder="Ej. Tacos de Pastor Especial"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Precio ($)</label>
+                    <input
+                      name="price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={p?.price || ""}
+                      required
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Categoróa</label>
+                    <select
+                      name="category"
+                      defaultValue={p?.category || crudSelectedCategory}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const catObj = productCategories.find((c) => c.id === val);
+                        if (catObj && catObj.destination) {
+                          const form = e.target.form as HTMLFormElement;
+                          const destSelect = form.elements.namedItem("destination") as HTMLSelectElement;
+                          if (destSelect) destSelect.value = catObj.destination;
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
+                    >
+                      {productCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name} {cat.emoji || "???"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subcategoróa</label>
+                    <input
+                      name="subcategory"
+                      type="text"
+                      defaultValue={p?.subcategory || ""}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="Ej. Tacos"
+                      list="existing-subcategories"
+                    />
+                    <datalist id="existing-subcategories">
+                      {existingSubcategories.map((sc, i) => (
+                        <option key={i} value={sc} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subgrupo / Variante</label>
+                    <input
+                      name="subgroup"
+                      type="text"
+                      defaultValue={p?.subgroup || ""}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="Ej. Porciones 1kg"
+                      list="existing-subgroups"
+                    />
+                    <datalist id="existing-subgroups">
+                      {existingSubgroups.map((sg, i) => (
+                        <option key={i} value={sg} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Descripción del Producto</label>
+                  <textarea
+                    name="description"
+                    defaultValue={p?.description || ""}
+                    rows={3}
+                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm resize-y"
+                    placeholder="Detalles del platillo (ingredientes, alórgenos, etc.)"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Nombre para Reportes</label>
+                    <input
+                      name="reportName"
+                      type="text"
+                      defaultValue={p?.reportName || ""}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="Ej. TACO DE PASTOR DE MAIZ"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Orden en Reportes</label>
+                    <input
+                      name="sortOrder"
+                      type="number"
+                      defaultValue={p?.sortOrder === 9999 ? "" : p?.sortOrder}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="9999"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Punto de Impresión (órea)</label>
+                  <select
+                    name="destination"
+                    defaultValue={p?.destination || "Cocina"}
+                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
+                  >
+                    {Object.keys(tenantPrinterConfig).map((areaKey) => {
+                      const cfg = tenantPrinterConfig[areaKey];
+                      return (
+                        <option key={areaKey} value={areaKey}>
+                          {cfg?.emoji || "???"} {cfg?.name || areaKey}
+                        </option>
+                      );
+                    })}
+                    <option value="none">?? Sin impresión</option>
+                  </select>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+                  <label className="block text-[11px] font-black text-slate-500 uppercase">Notas Rópidas (Modificadores)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {crudQuickNotes.map((note, idx) => (
+                      <span key={idx} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 border border-indigo-100">
+                        {note}
+                        <button type="button" onClick={() => setCrudQuickNotes(prev => prev.filter((_, i) => i !== idx))} className="text-indigo-300 hover:text-indigo-600">?</button>
+                      </span>
+                    ))}
+                    {crudQuickNotes.length === 0 && <span className="text-[10px] text-slate-400 font-bold italic">No hay notas agregóadas</span>}
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <input
+                      type="text"
+                      value={newCrudQuickNoteText}
+                      onChange={(e) => setNewCrudQuickNoteText(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
+                      placeholder="Ej. Sin Cebolla"
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (newCrudQuickNoteText.trim()) {
+                            setCrudQuickNotes(prev => [...prev, newCrudQuickNoteText.trim()]);
+                            setNewCrudQuickNoteText("");
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
                         if (newCrudQuickNoteText.trim()) {
                           setCrudQuickNotes(prev => [...prev, newCrudQuickNoteText.trim()]);
                           setNewCrudQuickNoteText("");
                         }
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newCrudQuickNoteText.trim()) {
-                        setCrudQuickNotes(prev => [...prev, newCrudQuickNoteText.trim()]);
-                        setNewCrudQuickNoteText("");
-                      }
-                    }}
-                    className="bg-indigo-600 text-white px-5 py-3 rounded-xl text-xs font-black shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
-                  >
-                    Añadir
-                  </button>
+                      }}
+                      className="bg-indigo-600 text-white px-5 py-3 rounded-xl text-xs font-black shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
+                    >
+                      Aóadir
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-teal-600/20 transition-all active:scale-95 uppercase tracking-widest text-sm mt-4 border-b-4 border-teal-800"
-              >
-                {isEditing ? "Guardar Cambios ✓" : "Registrar Producto ✓"}
-              </button>
+                <button
+                  type="submit"
+                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-teal-600/20 transition-all active:scale-95 uppercase tracking-widest text-sm mt-4 border-b-4 border-teal-800"
+                >
+                  {isEditing ? "Guardar Cambios ?" : "Registrar Producto ?"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -23541,89 +23654,7 @@ setCheckoutReturnMode(null);
     );
   };
 
-  const handleImportTenantMenu = async () => {
-    if (importInProgressRef.current) return;
-    if (!importSelectedTenantId) {
-      triggerAppNotification("Error ⚠️", "Por favor selecciona una sucursal origen.", "warning");
-      return;
-    }
-
-    const sourceTenant = COMPANY_CATALOG.find((c) => c.id === importSelectedTenantId);
-    const sourceTenantName = sourceTenant ? sourceTenant.name : importSelectedTenantId;
-
-    importInProgressRef.current = true;
-    setIsImportingTenantMenu(true);
-    try {
-      // 1. Delete destination products (and automatically back up under menu_backups collection!)
-      const destBranchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
-      await softDeleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
-
-      // 2. Fetch all products to get source products
-      const allProducts = await getAllProductsFromFirebase();
-      const sourceProductsRaw = allProducts.filter((p: any) => p.tenantId === importSelectedTenantId);
-
-      if (sourceProductsRaw.length === 0) {
-        triggerAppNotification("Advertencia ⚠️", "La sucursal origen seleccionada no contiene productos para importar.", "warning");
-        setIsImportingTenantMenu(false);
-        setImportConfirmStep(0);
-        return;
-      }
-
-      // De-duplicate source products by name and category to clean up any existing database duplicates
-      const seenKeys = new Set<string>();
-      const sourceProducts: any[] = [];
-      sourceProductsRaw.forEach((p: any) => {
-        if (!p.name) return;
-        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          sourceProducts.push(p);
-        }
-      });
-
-      // 3. Map to destination payload
-      const productsToInsert = sourceProducts.map((p: any) => {
-        const { id, uid, tenantId, sucursal, ...rest } = p;
-        const newRawId = `prod_${selectedTenant.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        return {
-          ...rest,
-          id: newRawId,
-          uid: newRawId,
-          tenantId: selectedTenant.id,
-          isDeleted: false,
-          sucursal: selectedTenant.name || selectedTenant.sucursalDefault || "Sucursal"
-        };
-      });
-
-      // 4. Save to Firebase
-      await bulkAddProductsToFirebase(productsToInsert);
-
-      // 5. Reset selection states and UI
-      setImportSelectedTenantId("");
-      setManageMenuTab(null);
-      setImportConfirmStep(0);
-
-      // Compute exact quantities per category
-      const foodCount = productsToInsert.filter((p: any) => p.category === "food").length;
-      const drinksCount = productsToInsert.filter((p: any) => p.category === "drinks").length;
-      const dessertsCount = productsToInsert.filter((p: any) => p.category === "desserts").length;
-
-      triggerAppNotification(
-        "¡Éxito! 📥",
-        `Se han importado exitosamente ${productsToInsert.length} productos desde "${sourceTenantName}" a la sucursal actual:
-        🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`,
-        "success"
-      );
-    } catch (error: any) {
-      console.error("Error al importar menú de otra sucursal:", error);
-      triggerAppNotification("Error ❌", error.message || "Ocurrió un error inesperado durante la importación.", "warning");
-    } finally {
-      setIsImportingTenantMenu(false);
-      importInProgressRef.current = false;
-    }
-  };
-
-  const renderManageMenu = () => {
+  const renderManageMenúu = () => {
     const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
     if (!hasAccess) {
       return (
@@ -23661,12 +23692,12 @@ setCheckoutReturnMode(null);
     return (
       <IonPage>
       {renderMaterialHeader({
-        title: "Administrar Menú",
+        title: "Administrar Menúú",
         subtitle: `Productos totales: ${products.length}`,
         showBack: true,
         onBack: () => {
-          if (manageMenuTab !== null) {
-            setManageMenuTab(null);
+          if (manageMenúuTab !== null) {
+            setManageMenúuTab(null);
           } else {
             setAppMode("admin");
           }
@@ -23692,7 +23723,7 @@ setCheckoutReturnMode(null);
           style={{ "--background": "#f8fafc" }}
         >
           {/* Dashboard/Control Center Widgets representing standard actions - Conditionally visible */}
-          {manageMenuTab === null ? (
+          {manageMenúuTab === null ? (
             <div
               style={{
                 background: "white",
@@ -23767,18 +23798,18 @@ setCheckoutReturnMode(null);
                     description:
                       "Copia de forma masiva los productos y la estructura de categorías de otra sucursal de la empresa hacia esta sucursal.",
                     actionExplanation:
-                      "Ocultar� l�gicamente los productos antiguos e importar� la carta exacta. Tus cortes de venta antiguos y tickets quedan protegidos.",
+                      "Ocultaró lógicamente los productos antiguos e importaró la carta exacta. Tus cortes de venta antiguos y tickets quedan protegidos.",
                     bgGradient:
                       "linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#8b5cf6",
-                    stat: "Importar Menú",
+                    stat: "Importar Menúú",
                   },
                   {
                     id: "upload_subgroups" as const,
-                    title: "Generar Menú IA con Subgrupos",
+                    title: "Generar Menúú IA con Subgrupos",
                     emoji: "✨",
                     color: "#059669",
-                    shortTitle: "Menú con Subgrupos",
+                    shortTitle: "Menúú con Subgrupos",
                     description:
                       "Carga fotos del menú para identificar alimentos, bebidas y postres, además de subgrupos inteligentes como tacos gratinados, por pieza, quesadillas chicas o bebidas frías/calientes.",
                     actionExplanation:
@@ -23909,13 +23940,13 @@ setCheckoutReturnMode(null);
                     stat: "Relacionar e ID",
                   },
                 ].map((w) => {
-                  const isActive = manageMenuTab === w.id;
+                  const isActive = manageMenúuTab === w.id;
                   return (
                     <motion.div
                       key={w.id}
                       whileHover={{ scale: 1.02, cursor: "pointer" }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setManageMenuTab(w.id as any)}
+                      onClick={() => setManageMenúuTab(w.id as any)}
                       style={{
                         background: w.bgGradient,
                         borderRadius: "14px",
@@ -24038,7 +24069,7 @@ setCheckoutReturnMode(null);
                 },
                 {
                   id: "upload_subgroups" as const,
-                  title: "Generar Menú IA con Subgrupos",
+                  title: "Generar Menúú IA con Subgrupos",
                   emoji: "✨",
                   color: "#059669",
                   stat: "Subgrupos IA Extendido",
@@ -24090,7 +24121,7 @@ setCheckoutReturnMode(null);
                   actionExplanation:
                     "Diseña recetas ligando platillos con insumos. Descuenta de forma automática e inteligente en cada venta.",
                 },
-              ].find((w) => w.id === manageMenuTab);
+              ].find((w) => w.id === manageMenúuTab);
 
               if (!activeWidget) return null;
 
@@ -24121,7 +24152,7 @@ setCheckoutReturnMode(null);
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => setManageMenuTab(null)}
+                      onClick={() => setManageMenúuTab(null)}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -24140,7 +24171,7 @@ setCheckoutReturnMode(null);
                       }}
                     >
                       <span style={{ fontSize: "1rem" }}>⬅️</span> Volver a la
-                      Administración del Menú
+                      Administración del Menúú
                     </motion.button>
                     <div
                       style={{
@@ -24198,11 +24229,11 @@ setCheckoutReturnMode(null);
               );
             })()
           )}
-          {manageMenuTab === "import_tenant" && (
+          {manageMenúuTab === "import_tenant" && (
             <div style={{ padding: "24px", background: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
               <div style={{ marginBottom: "20px" }}>
                 <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.25rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>📥</span> Importar Menú de Otra Sucursal o Matriz
+                  <span>📥</span> Importar Menúú de Otra Sucursal o Matriz
                 </h3>
                 <p style={{ margin: "6px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
                   Clona todo el catálogo de productos de otra sucursal. Esta operación reemplazará la carta de la sucursal actual por la seleccionada.
@@ -24218,7 +24249,7 @@ setCheckoutReturnMode(null);
                     <select
                       value={importSelectedTenantId}
                       onChange={(e) => setImportSelectedTenantId(e.target.value)}
-                      disabled={isImportingTenantMenu}
+                      disabled={isImportingTenantMenúu}
                       style={{
                         width: "100%",
                         padding: "12px 14px",
@@ -24227,7 +24258,7 @@ setCheckoutReturnMode(null);
                         border: "1.5px solid #cbd5e1",
                         background: "#f8fafc",
                         outline: "none",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer"
+                        cursor: isImportingTenantMenúu ? "not-allowed" : "pointer"
                       }}
                     >
                       <option value="">-- Seleccionar Sucursal --</option>
@@ -24277,7 +24308,7 @@ setCheckoutReturnMode(null);
                       type="button"
                       onClick={() => {
                         setImportSelectedTenantId("");
-                        setManageMenuTab(null);
+                        setManageMenúuTab(null);
                       }}
                       style={{
                         padding: "12px 20px",
@@ -24364,23 +24395,23 @@ setCheckoutReturnMode(null);
                   <div style={{ display: "flex", gap: "12px" }}>
                     <button
                       type="button"
-                      onClick={handleImportTenantMenu}
-                      disabled={isImportingTenantMenu}
+                      onClick={handleImportTenantMenúu}
+                      disabled={isImportingTenantMenúu}
                       style={{
                         padding: "12px 24px",
-                        background: isImportingTenantMenu ? "#a78bfa" : "#7c3aed",
+                        background: isImportingTenantMenúu ? "#a78bfa" : "#7c3aed",
                         color: "white",
                         fontWeight: "bold",
                         borderRadius: "12px",
                         border: "none",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                        cursor: isImportingTenantMenúu ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
                         gap: "8px",
                         fontSize: "0.9rem"
                       }}
                     >
-                      {isImportingTenantMenu ? (
+                      {isImportingTenantMenúu ? (
                         <>
                           <span style={{ display: "inline-block" }} className="animate-spin">🔄</span>
                           Importando...
@@ -24395,7 +24426,7 @@ setCheckoutReturnMode(null);
                     <button
                       type="button"
                       onClick={() => setImportConfirmStep(0)}
-                      disabled={isImportingTenantMenu}
+                      disabled={isImportingTenantMenúu}
                       style={{
                         padding: "12px 20px",
                         background: "white",
@@ -24403,7 +24434,7 @@ setCheckoutReturnMode(null);
                         fontWeight: "bold",
                         borderRadius: "12px",
                         border: "1.5px solid #cbd5e1",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                        cursor: isImportingTenantMenúu ? "not-allowed" : "pointer",
                         fontSize: "0.9rem"
                       }}
                     >
@@ -24414,7 +24445,7 @@ setCheckoutReturnMode(null);
               )}
             </div>
           )}
-          {manageMenuTab === "backup" && (
+          {manageMenúuTab === "backup" && (
             <div style={{ padding: "16px", background: "#f8fafc", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
               {/* Backups Panel */}
               <div style={{ display: "flex", gap: "20px", flexDirection: "column" }}>
@@ -24449,7 +24480,7 @@ setCheckoutReturnMode(null);
                           setIsDiagnosticRunning(true);
                           try {
                             const prods = await getAllProductsFromFirebase();
-                            const bks = await getAllMenuBackupsFromFirebase();
+                            const bks = await getAllMenúuBackupsFromFirebase();
                             setDiagnosticProducts(prods);
                             setDiagnosticBackups(bks);
                             setDiagnosticRunCount(prev => prev + 1);
@@ -24543,7 +24574,7 @@ setCheckoutReturnMode(null);
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm("¿Seguro que deseas restablecer la conexión de Firebase a los valores por defecto del sistema?")) {
+                            if (window.confirm("¿¿Seguro que deseas restablecer la conexión de Firebase a los valores por defecto del sistema?")) {
                               localStorage.removeItem("custom_firebase_config");
                               localStorage.removeItem("custom_firebase_db_id");
                               triggerAppNotification("Conexión Restablecida 🔄", "Se han borrado tus credenciales personalizadas. Recargando la página...", "success");
@@ -24571,7 +24602,7 @@ setCheckoutReturnMode(null);
                             };
                             localStorage.setItem("custom_firebase_config", JSON.stringify(configObj));
                             localStorage.setItem("custom_firebase_db_id", customDbId.trim());
-                            triggerAppNotification("Configuración Guardada 🔥", "¡Credenciales de Firebase actualizadas! Recargando para establecer conexión segura...", "success");
+                            triggerAppNotification("Configuración Guardada 🔥", "¡Credenciales de Firebase actualizóadas! Recargando para establecer conexión segura...", "success");
                             setTimeout(() => window.location.reload(), 1500);
                           }}
                           style={{ padding: "6px 12px", background: "#059669", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "bold", cursor: "pointer" }}
@@ -24693,7 +24724,7 @@ setCheckoutReturnMode(null);
                                             fill="clear"
                                             size="small"
                                             onClick={async () => {
-                                              if (window.confirm(`¿Deseas migrar/copiar los ${groups[k].length} productos de "${name}" a la sucursal actual "${selectedTenant?.name}" (${selectedTenant?.id})?`)) {
+                                              if (window.confirm(`¿¿Deseas migrar/copiar los ${groups[k].length} productos de "${name}" a la sucursal actual "${selectedTenant?.name}" (${selectedTenant?.id})?`)) {
                                                 try {
                                                   await migrateProductsTenant(groups[k].map(p => p.id), selectedTenant.id);
                                                   triggerAppNotification("Migración Exitosa 🚀", "Los productos se han migrado con éxito.", "success");
@@ -24747,11 +24778,11 @@ setCheckoutReturnMode(null);
                                           <button
                                             type="button"
                                             onClick={async () => {
-                                              if (window.confirm(`¿Deseas migrar esta copia de seguridad "${bk.name}" para que pertenezca a la sucursal actual "${selectedTenant?.name}"?`)) {
+                                              if (window.confirm(`¿¿Deseas migrar esta copia de seguridad "${bk.name}" para que pertenezca a la sucursal actual "${selectedTenant?.name}"?`)) {
                                                 try {
                                                   await migrateBackupsTenant([bk.id], selectedTenant.id);
                                                   triggerAppNotification("Respaldo Vinculado 🔄", "El respaldo ahora pertenece a esta sucursal.", "success");
-                                                  const bks = await getAllMenuBackupsFromFirebase();
+                                                  const bks = await getAllMenúuBackupsFromFirebase();
                                                   setDiagnosticBackups(bks);
                                                 } catch (err) {
                                                   triggerAppNotification("Error ❌", "No se pudo vincular el respaldo.", "warning");
@@ -24766,10 +24797,10 @@ setCheckoutReturnMode(null);
                                         <button
                                           type="button"
                                           onClick={async () => {
-                                            if (window.confirm(`⚠️ ¿Deseas RESTAURAR DIRECTAMENTE este respaldo de ${bk.products?.length || 0} productos en tu sucursal activa "${selectedTenant?.name}"?\nEsto reemplazará tu menú actual.`)) {
+                                            if (window.confirm(`⚠️ ¿¿Deseas RESTAURAR DIRECTAMENTE este respaldo de ${bk.products?.length || 0} productos en tu sucursal activa "${selectedTenant?.name}"?\nEsto reemplazará tu menú actual.`)) {
                                               try {
-                                                await restoreMenuBackupInFirebase(selectedTenant.id, bk.products || []);
-                                                triggerAppNotification("Menú Restaurado 🔄", `¡Se ha restaurado el menú con éxito con los ${bk.products?.length || 0} productos!`, "success");
+                                                await restoreMenúuBackupInFirebase(selectedTenant.id, bk.products || []);
+                                                triggerAppNotification("Menúú Restaurado 🔄", `¡Se ha restaurado el menú con éxito con los ${bk.products?.length || 0} productos!`, "success");
                                               } catch (err) {
                                                 triggerAppNotification("Error al Restaurar ❌", "No se pudo completar la restauración.", "warning");
                                               }
@@ -24802,7 +24833,7 @@ setCheckoutReturnMode(null);
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
                     <div>
                       <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.1rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span>💾</span> Generar Respaldo de Menú
+                        <span>💾</span> Generar Respaldo de Menúú
                       </h3>
                       <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
                         Guarda el estado actual de tu menú (<b>{products.length} productos</b>) para la sucursal <b>{selectedTenant?.name || selectedTenant?.sucursalDefault || "Principal"}</b>.
@@ -24879,7 +24910,7 @@ setCheckoutReturnMode(null);
                           const backupName = newBackupName.trim() ? `${autoSuffix} - ${newBackupName.trim()}` : autoSuffix;
                           const branchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
                           
-                          await createMenuBackup(
+                          await createMenúuBackup(
                             selectedTenant.id,
                             branchName,
                             backupName,
@@ -25018,14 +25049,14 @@ setCheckoutReturnMode(null);
                                       )
                                     ) {
                                       try {
-                                        await restoreMenuBackupInFirebase(
+                                        await restoreMenúuBackupInFirebase(
                                           selectedTenant.id,
                                           bk.products || []
                                         );
                                         
                                         if (enableBackupNotifications) {
                                           triggerAppNotification(
-                                            "Menu Restaurado 🔄",
+                                            "Menúu Restaurado 🔄",
                                             `¡El menú se ha restaurado exitosamente al respaldo "${bk.name}"! 🔄✅`,
                                             "success"
                                           );
@@ -25056,7 +25087,7 @@ setCheckoutReturnMode(null);
                                       )
                                     ) {
                                       try {
-                                        await deleteMenuBackupFromFirebase(bk.id);
+                                        await deleteMenúuBackupFromFirebase(bk.id);
                                         
                                         if (enableBackupNotifications) {
                                           triggerAppNotification(
@@ -25091,7 +25122,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {(manageMenuTab === "upload_subgroups" || manageMenuTab === "import_excel_ai") && (
+          {(manageMenúuTab === "upload_subgroups" || manageMenúuTab === "import_excel_ai") && (
             <div style={{ textAlign: "center", padding: "10px" }}>
               <IonText color="medium">
                 <p
@@ -25101,7 +25132,7 @@ setCheckoutReturnMode(null);
                     fontWeight: "500",
                   }}
                 >
-                  {manageMenuTab === "upload_subgroups" ? (
+                  {manageMenúuTab === "upload_subgroups" ? (
                     <span>
                       ✨ Sube imágenes de tu menú impreso. El sistema detectará
                       los platillos, bebidas, postres y creará{" "}
@@ -25118,14 +25149,14 @@ setCheckoutReturnMode(null);
                 </p>
               </IonText>
 
-              {manageMenuTab === "upload_subgroups" ? (
+              {manageMenúuTab === "upload_subgroups" ? (
                 <input
                   type="file"
                   id="menu-upload"
                   accept="image/*"
                   multiple
                   style={{ display: "none" }}
-                  onChange={handleMenuImageUpload}
+                  onChange={handleMenúuImageUpload}
                 />
               ) : (
                 <input
@@ -25147,7 +25178,7 @@ setCheckoutReturnMode(null);
                   alignItems: "center",
                 }}
               >
-                {manageMenuTab === "import_excel_ai" ? (
+                {manageMenúuTab === "import_excel_ai" ? (
                   <IonButton
                     fill="solid"
                     color="secondary"
@@ -25173,11 +25204,11 @@ setCheckoutReturnMode(null);
                         fill="solid"
                         color="success"
                         disabled={isAnalyzing}
-                        onClick={() => analyzeMenuImage(menuImages, true)}
+                        onClick={() => analyzeMenúuImage(menuImages, true)}
                         style={{ fontWeight: "bold" }}
                       >
                         <IonIcon slot="start" icon={syncOutline} />
-                        {isAnalyzing ? "Analizando..." : "✨ Generar Menú IA con Subgrupos"}
+                        {isAnalyzing ? "Analizando..." : "✨ Generar Menúú IA con Subgrupos"}
                       </IonButton>
                     )}
 
@@ -25185,7 +25216,7 @@ setCheckoutReturnMode(null);
                       <IonButton
                         fill="outline"
                         color="danger"
-                        onClick={() => setMenuImages([])}
+                        onClick={() => setMenúuImages([])}
                       >
                         <IonIcon slot="start" icon={trashOutline} />
                         Limpiar Todo
@@ -25367,7 +25398,7 @@ setCheckoutReturnMode(null);
                         id={`btn-remove-preview-img-${idx}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMenuImages((prev) =>
+                          setMenúuImages((prev) =>
                             prev.filter((_, i) => i !== idx),
                           );
                         }}
@@ -25458,7 +25489,7 @@ setCheckoutReturnMode(null);
                 </div>
               )}
 
-              {/* Dynamic Table for Editing and Confirming Extracted Menu Products */}
+              {/* Dynamic Table for Editing and Confirming Extracted Menúu Products */}
               {detectedProducts.length > 0 && !isAnalyzing && (
                 <div
                   style={{
@@ -25517,11 +25548,11 @@ setCheckoutReturnMode(null);
                           isAddingProducts || detectedProducts.length === 0
                         }
                         onClick={() =>
-                          handleAddProductsToMenu(detectedProducts)
+                          handleAddProductsToMenúu(detectedProducts)
                         }
                         style={{ fontWeight: "bold" }}
                       >
-                        📥 Importar al Menú
+                        📥 Importar al Menúú
                       </IonButton>
                       <IonButton
                         fill="outline"
@@ -25535,12 +25566,12 @@ setCheckoutReturnMode(null);
                               "⚠️ ¿Estás seguro de que deseas borrar ABSOLUTAMENTE todo tu menú actual y reemplazarlo con los productos detectados?",
                             )
                           ) {
-                            handleResetMenuAndRefill(detectedProducts);
+                            handleResetMenúuAndRefill(detectedProducts);
                           }
                         }}
                         style={{ fontWeight: "bold" }}
                       >
-                        ⚠️ Reiniciar Menú e Importar
+                        ⚠️ Reiniciar Menúú e Importar
                       </IonButton>
                     </div>
                   </div>
@@ -25815,9 +25846,9 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {(manageMenuTab === "food" ||
-            manageMenuTab === "drinks" ||
-            manageMenuTab === "desserts") && (
+          {(manageMenúuTab === "food" ||
+            manageMenúuTab === "drinks" ||
+            manageMenúuTab === "desserts") && (
             <div style={{ padding: "10px" }}>
               <div
                 style={{
@@ -25835,9 +25866,9 @@ setCheckoutReturnMode(null);
                     textTransform: "capitalize",
                   }}
                 >
-                  {manageMenuTab === "food"
+                  {manageMenúuTab === "food"
                     ? "Alimentos 🌮"
-                    : manageMenuTab === "drinks"
+                    : manageMenúuTab === "drinks"
                       ? "Bebidas 🍹"
                       : "Postres 🍰"}
                 </h3>
@@ -25863,7 +25894,7 @@ setCheckoutReturnMode(null);
                   type="text"
                   placeholder="Buscar producto por nombre..."
                   value={menuSearchQuery}
-                  onChange={(e) => setMenuSearchQuery(e.target.value)}
+                  onChange={(e) => setMenúuSearchQuery(e.target.value)}
                   style={{
                     flex: "1 1 200px",
                     padding: "10px",
@@ -25874,7 +25905,7 @@ setCheckoutReturnMode(null);
                 />
                 <select
                   value={menuFilterNode}
-                  onChange={(e) => setMenuFilterNode(e.target.value)}
+                  onChange={(e) => setMenúuFilterNode(e.target.value)}
                   style={{
                     padding: "10px",
                     borderRadius: "8px",
@@ -25889,7 +25920,7 @@ setCheckoutReturnMode(null);
                   {Array.from(
                     new Set(
                       products
-                        .filter((p) => p.isDeleted !== true && p.category === manageMenuTab && p.subcategory)
+                        .filter((p) => p.isDeleted !== true && p.category === manageMenúuTab && p.subcategory)
                         .map((p) => p.subcategory)
                     )
                   ).sort().map((node) => (
@@ -25935,7 +25966,7 @@ setCheckoutReturnMode(null);
                   </thead>
                   <tbody>
                     {products
-                      .filter((p) => p.category === manageMenuTab)
+                      .filter((p) => p.category === manageMenúuTab)
                       .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
                       .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
                       .length === 0 ? (
@@ -25953,7 +25984,7 @@ setCheckoutReturnMode(null);
                       </tr>
                     ) : (
                       products
-                        .filter((p) => p.category === manageMenuTab)
+                        .filter((p) => p.category === manageMenúuTab)
                         .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
                         .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
                         .map((p) => (
@@ -26050,7 +26081,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {manageMenuTab === "recipes" && (
+          {manageMenúuTab === "recipes" && (
             <div style={{ padding: "10px" }}>
               <div
                 style={{
@@ -26452,7 +26483,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {manageMenuTab === "adhoc_notes" && (
+          {manageMenúuTab === "adhoc_notes" && (
             <div style={{ padding: "10px" }}>
               <div
                 style={{
@@ -26582,7 +26613,7 @@ setCheckoutReturnMode(null);
                         <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569" }}>Producto</th>
                         <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569" }}>Categoría</th>
                         <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569" }}>Subcategoría</th>
-                        <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569" }}>Notas Ad-Hoc / Mensajes Default</th>
+                        <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569" }}>Notas Ad-Hoc / Menúsajes Default</th>
                         <th style={{ padding: "12px 16px", fontWeight: "700", color: "#475569", textAlign: "right" }}>Acciones</th>
                       </tr>
                     </thead>
@@ -26756,7 +26787,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {manageMenuTab === "split_products" && (
+          {manageMenúuTab === "split_products" && (
             <div style={{ padding: "10px" }}>
               <div
                 style={{
@@ -27036,7 +27067,7 @@ setCheckoutReturnMode(null);
                       <button
                         onClick={async () => {
                           if (splitProposedItems.length === 0) {
-                            alert("Por favor agrega al menos una variante para crear.");
+                            alert("Por favor agregóa al menos una variante para crear.");
                             return;
                           }
                           let original = products.find(p => p.id === splitSelectedProductId);
@@ -27123,7 +27154,7 @@ setCheckoutReturnMode(null);
             </div>
           )}
 
-          {manageMenuTab === "relation_order_ia" && (() => {
+          {manageMenúuTab === "relation_order_ia" && (() => {
             const filteredMatches = relationMatches.filter(match => {
               const pObj = products.find(p => p.id === match.productId);
               const q = relationSearch.trim().toLowerCase();
@@ -27256,7 +27287,7 @@ setCheckoutReturnMode(null);
                         <div style={{ display: "flex", background: "#f1f5f9", padding: "3px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
                           <button
                             type="button"
-                            onClick={() => setManageMenuViewMode("tree")}
+                            onClick={() => setManageMenúuViewMode("tree")}
                             style={{
                               padding: "6px 12px",
                               borderRadius: "8px",
@@ -27264,8 +27295,8 @@ setCheckoutReturnMode(null);
                               fontWeight: "bold",
                               border: "none",
                               cursor: "pointer",
-                              background: manageMenuViewMode === "tree" ? "#4f46e5" : "transparent",
-                              color: manageMenuViewMode === "tree" ? "white" : "#64748b",
+                              background: manageMenúuViewMode === "tree" ? "#4f46e5" : "transparent",
+                              color: manageMenúuViewMode === "tree" ? "white" : "#64748b",
                               transition: "all 0.2s"
                             }}
                           >
@@ -27273,7 +27304,7 @@ setCheckoutReturnMode(null);
                           </button>
                           <button
                             type="button"
-                            onClick={() => setManageMenuViewMode("table")}
+                            onClick={() => setManageMenúuViewMode("table")}
                             style={{
                               padding: "6px 12px",
                               borderRadius: "8px",
@@ -27281,8 +27312,8 @@ setCheckoutReturnMode(null);
                               fontWeight: "bold",
                               border: "none",
                               cursor: "pointer",
-                              background: manageMenuViewMode === "table" ? "#4f46e5" : "transparent",
-                              color: manageMenuViewMode === "table" ? "white" : "#64748b",
+                              background: manageMenúuViewMode === "table" ? "#4f46e5" : "transparent",
+                              color: manageMenúuViewMode === "table" ? "white" : "#64748b",
                               transition: "all 0.2s"
                             }}
                           >
@@ -27290,7 +27321,7 @@ setCheckoutReturnMode(null);
                           </button>
                         </div>
 
-                        {manageMenuViewMode === "tree" && (
+                        {manageMenúuViewMode === "tree" && (
                           <div style={{ display: "flex", gap: "6px" }}>
                             <button
                               type="button"
@@ -27622,7 +27653,7 @@ setCheckoutReturnMode(null);
                     )}
 
                     {/* VISTA DE ÁRBOLES O TABLA */}
-                    {manageMenuViewMode === "tree" ? (
+                    {manageMenúuViewMode === "tree" ? (
                       <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         {(() => {
                           const secObj: Record<string, Record<string, typeof relationMatches>> = {};
@@ -28031,7 +28062,7 @@ setCheckoutReturnMode(null);
                               />
                             </th>
                             <th style={{ padding: "12px", width: "50px", textAlign: "center", color: "#475569", fontWeight: "700" }}>Mover</th>
-                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Producto Original (Waiter Menu)</th>
+                            <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Producto Original (Waiter Menúu)</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Subgrupo</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Sección</th>
                             <th style={{ padding: "12px", color: "#475569", fontWeight: "700" }}>Nombre en Reportes (Deseado por Dueño)</th>
@@ -28337,8 +28368,8 @@ setCheckoutReturnMode(null);
   const [relationFilter, setRelationFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [relationSearch, setRelationSearch] = useState<string>("");
 
-  // Tree View & Drag and Drop State for Menu Products Reordering
-  const [manageMenuViewMode, setManageMenuViewMode] = useState<'tree' | 'table'>('tree');
+  // Tree View & Drag and Drop State for Menúu Products Reordering
+  const [manageMenúuViewMode, setManageMenúuViewMode] = useState<'tree' | 'table'>('tree');
   const [collapsedTreeSections, setCollapsedTreeSections] = useState<Record<string, boolean>>({});
   const [collapsedTreeSubgroups, setCollapsedTreeSubgroups] = useState<Record<string, boolean>>({});
   const [treeDragSource, setTreeDragSource] = useState<{
@@ -28781,7 +28812,7 @@ setCheckoutReturnMode(null);
 
       triggerAppNotification(
         "📋 Catálogo Sincronizado",
-        `Se han actualizado ${targets.length} productos con nombres de reporte, subgrupos, subcategorías, descripciones y orden secuencial con éxito.`,
+        `Se han actualizóado ${targets.length} productos con nombres de reporte, subgrupos, subcategorías, descripciones y orden secuencial con éxito.`,
         "success"
       );
 
@@ -28789,7 +28820,7 @@ setCheckoutReturnMode(null);
         setRelationMatches([]);
         setRelationLog([]);
         setSelectedRelationProductIds([]);
-        setManageMenuTab(null);
+        setManageMenúuTab(null);
       }
     } catch (err: any) {
       alert("❌ Ocurrió un error al guardar los cambios en la base de datos: " + err.message);
@@ -29257,7 +29288,7 @@ setCheckoutReturnMode(null);
                 borderRight: "1px solid rgba(255, 255, 255, 0.08)",
               }}
             >
-              {/* Header inside Menu */}
+              {/* Header inside Menúu */}
               <div
                 style={{
                   padding: "20px 16px 16px 16px",
@@ -29459,7 +29490,7 @@ setCheckoutReturnMode(null);
                 </div>
               </div>
 
-              {/* Menu content list */}
+              {/* Menúu content list */}
               <div style={{ flex: 1, overflowY: "auto", padding: "16px 12px" }}>
                 {/* CATÁLOGOS SECTION */}
                 <div style={{ marginBottom: "20px" }}>
@@ -29489,7 +29520,7 @@ setCheckoutReturnMode(null);
                           <button
                             onClick={() => {
                               setAppMode("manage-menu");
-                              setManageMenuTab(null);
+                              setManageMenúuTab(null);
                               setShowSidebar(false);
                             }}
                             className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
@@ -29938,7 +29969,7 @@ setCheckoutReturnMode(null);
     };
 
     const handleDeleteSupplier = async (id: string) => {
-      if (window.confirm("¿Seguro que deseas eliminar este proveedor?")) {
+      if (window.confirm("¿¿Seguro que deseas eliminar este proveedor?")) {
         try {
           await deleteSupplierFromFirebase(id);
         } catch (err) {
@@ -29989,7 +30020,7 @@ setCheckoutReturnMode(null);
                   </div>
                   <h3 className="font-bold text-slate-700">Sin Proveedores</h3>
                   <p className="text-sm text-slate-500 mb-4">
-                    Aún no has agregado proveedores a tu catálogo.
+                    Aún no has agregóado proveedores a tu catálogo.
                   </p>
                   <button
                     onClick={() =>
@@ -30292,7 +30323,7 @@ setCheckoutReturnMode(null);
     };
 
     const handleDeleteCustomer = async (id: string) => {
-      if (window.confirm("¿Seguro que deseas eliminar este cliente?")) {
+      if (window.confirm("¿¿Seguro que deseas eliminar este cliente?")) {
         try {
           await deleteCustomerFromFirebase(id);
         } catch (err) {
@@ -30343,7 +30374,7 @@ setCheckoutReturnMode(null);
                   </div>
                   <h3 className="font-bold text-slate-700">Sin Clientes</h3>
                   <p className="text-sm text-slate-500 mb-4">
-                    Aún no has agregado clientes a tu catálogo.
+                    Aún no has agregóado clientes a tu catálogo.
                   </p>
                   <button
                     onClick={() =>
@@ -30665,8 +30696,8 @@ setCheckoutReturnMode(null);
       try {
         if (selectedExpenseForEdit) {
           await updateExpenseInFirebase(selectedExpenseForEdit.id, expenseData);
-          setMenuToastMessage(
-            `✅ Gasto actualizado: ${expenseConcept} por $${amountNum.toFixed(2)}`,
+          setMenúuToastMessage(
+            `✅ Gasto actualizóado: ${expenseConcept} por $${amountNum.toFixed(2)}`,
           );
 
           if (
@@ -30675,13 +30706,13 @@ setCheckoutReturnMode(null);
             Notification.permission === "granted"
           ) {
             new Notification("Gastos Sincronizados ⚡", {
-              body: `Se ha actualizado un gasto: "${expenseConcept}" por $${amountNum.toFixed(2)}`,
+              body: `Se ha actualizóado un gasto: "${expenseConcept}" por $${amountNum.toFixed(2)}`,
               icon: "/public/icon.png",
             });
           }
         } else {
           await addExpenseToFirebase(expenseData);
-          setMenuToastMessage(
+          setMenúuToastMessage(
             `🎉 Gasto registrado con éxito: ${expenseConcept} por $${amountNum.toFixed(2)}`,
           );
 
@@ -30696,7 +30727,7 @@ setCheckoutReturnMode(null);
             });
           }
         }
-        setShowMenuToast(true);
+        setShowMenúuToast(true);
         // Reset form fields
         setExpenseConcept("");
         setExpenseAmount("");
@@ -30706,8 +30737,8 @@ setCheckoutReturnMode(null);
         setShowExpenseModal(false);
       } catch (err: any) {
         console.error("Error al registrar gasto:", err);
-        setMenuToastMessage(`❌ Error al guardar gasto: ${err.message}`);
-        setShowMenuToast(true);
+        setMenúuToastMessage(`❌ Error al guardar gasto: ${err.message}`);
+        setShowMenúuToast(true);
       }
     };
 
@@ -30797,15 +30828,15 @@ setCheckoutReturnMode(null);
     const handleDeleteExpense = async (expense: any) => {
       if (
         window.confirm(
-          `⚠️ ¿Seguro que deseas eliminar el gasto "${expense.concept}" por $${expense.amount.toFixed(2)}?\nEsta acción es irreversible.`,
+          `⚠️ ¿¿Seguro que deseas eliminar el gasto "${expense.concept}" por $${expense.amount.toFixed(2)}?\nEsta acción es irreversible.`,
         )
       ) {
         try {
           await deleteExpenseFromFirebase(expense.id);
-          setMenuToastMessage(
+          setMenúuToastMessage(
             `🗑️ Gasto eliminado con éxito: ${expense.concept}`,
           );
-          setShowMenuToast(true);
+          setShowMenúuToast(true);
 
           if (
             expenseEnableNotifications &&
@@ -30819,8 +30850,8 @@ setCheckoutReturnMode(null);
           }
         } catch (err: any) {
           console.error("Error al eliminar gasto:", err);
-          setMenuToastMessage(`❌ Error al eliminar: ${err.message}`);
-          setShowMenuToast(true);
+          setMenúuToastMessage(`❌ Error al eliminar: ${err.message}`);
+          setShowMenúuToast(true);
         }
       }
     };
@@ -30829,13 +30860,13 @@ setCheckoutReturnMode(null);
       if (typeof Notification !== "undefined") {
         Notification.requestPermission().then((permission) => {
           if (permission === "granted") {
-            setMenuToastMessage(
+            setMenúuToastMessage(
               "🔔 ¡Notificaciones activadas con éxito! Estás sincronizado en tiempo real.",
             );
-            setShowMenuToast(true);
+            setShowMenúuToast(true);
           } else {
-            setMenuToastMessage("⚠️ Permiso de notificaciones denegado.");
-            setShowMenuToast(true);
+            setMenúuToastMessage("⚠️ Permiso de notificaciones denegado.");
+            setShowMenúuToast(true);
           }
         });
       } else {
@@ -32199,14 +32230,14 @@ setCheckoutReturnMode(null);
   const handleSaveMovement = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!opsInsumoId) {
-      setMenuToastMessage("⚠️ Por favor selecciona un insumo de la lista.");
-      setShowMenuToast(true);
+      setMenúuToastMessage("⚠️ Por favor selecciona un insumo de la lista.");
+      setShowMenúuToast(true);
       return;
     }
     const qtyNum = parseFloat(opsQty);
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      setMenuToastMessage("⚠️ Ingrese una cantidad válida mayor a cero.");
-      setShowMenuToast(true);
+      setMenúuToastMessage("⚠️ Ingrese una cantidad válida mayor a cero.");
+      setShowMenúuToast(true);
       return;
     }
 
@@ -32242,10 +32273,10 @@ setCheckoutReturnMode(null);
       setOpsConcept("");
       setSelectedInsumoForMov(null);
     } catch (err: any) {
-      setMenuToastMessage(
+      setMenúuToastMessage(
         `❌ Error al guardar movimiento: ${err.message || err}`,
       );
-      setShowMenuToast(true);
+      setShowMenúuToast(true);
     }
   };
 
@@ -32267,7 +32298,7 @@ setCheckoutReturnMode(null);
           subtitle: selectedTenant?.name || "Cocinet",
           showBack: !!selectedTableGestion,
           onBack: () => setSelectedTableGestion(null),
-          showMenu: !selectedTableGestion,
+          showMenúu: !selectedTableGestion,
           actions: (selectedTableGestion && isOnline) ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -32295,7 +32326,7 @@ setCheckoutReturnMode(null);
           <IonGrid style={{ height: "100%", margin: 0, padding: 0 }}>
             <IonRow style={{ height: "100%" }}>
               
-              {/* Mitad Izquierda: Mapa de Mesas o Menú */}
+              {/* Mitad Izquierda: Mapa de Mesas o Menúú */}
               <IonCol size="6" style={{ height: "100%", overflow: "hidden", borderRight: "2px solid #334155", paddingRight: "16px", position: "relative" }}>
                 <AnimatePresence mode="wait">
                   {!selectedTableGestion ? (
@@ -32479,7 +32510,7 @@ setCheckoutReturnMode(null);
                       className="embedded-menu-container"
                       style={{ position: "absolute", top: 0, left: 0, right: 16, bottom: 0, overflow: "hidden", borderRadius: "16px", background: "#1e293b" }}
                     >
-                      {renderMenu()}
+                      {renderMenúu()}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -33189,7 +33220,7 @@ setCheckoutReturnMode(null);
                         >
                           <span className="flex items-center gap-2">
                             <span className="text-xl">🛒</span>
-                            <span>Gasto de Tiendita / Menor Directo</span>
+                            <span>Gasto de Tiendita / Menúor Directo</span>
                           </span>
                           <span className="text-indigo-600 text-xs font-black">
                             Siguiente ➡️
@@ -34139,7 +34170,7 @@ setCheckoutReturnMode(null);
                   </h4>
                   {gastoItems.length === 0 ? (
                     <div className="text-center py-6 text-slate-400 text-xs font-semibold">
-                      Ningún producto agregado todavía. ¡Carga un producto para
+                      Ningún producto agregóado todavía. ¡Carga un producto para
                       ver el desglose!
                     </div>
                   ) : (
@@ -35734,7 +35765,7 @@ setCheckoutReturnMode(null);
                                     <button
                                       onClick={async (e) => {
                                         e.stopPropagation();
-                                        if (window.confirm(`¿Deseas asignar y re-atribuir este corte/turno al usuario Patrón matriz (${patronUserName})? This will normalize reporting statistics.`)) {
+                                        if (window.confirm(`¿¿Deseas asignar y re-atribuir este corte/turno al usuario Patrón matriz (${patronUserName})? This will normalize reporting statistics.`)) {
                                           try {
                                             await updateCashierSessionInFirebase(session.id, {
                                               userId: patronUserId,
@@ -36522,7 +36553,7 @@ setCheckoutReturnMode(null);
           isOpen={showCloseTurnConfirm}
           onDidDismiss={() => setShowCloseTurnConfirm(false)}
           header="Registrar Arqueo"
-          message="¿Confirmas guardar los conteos de billetes y monedas actuales? Esto actualizará el arqueo y balance general sin interrumpir la operación del día."
+          message="¿Confirmas guardar los conteos de billetes y monedas actuales? Esto actualizóará el arqueo y balance general sin interrumpir la operación del día."
           buttons={[
             {
               text: 'Cancelar',
@@ -36742,8 +36773,8 @@ setCheckoutReturnMode(null);
                         triggerAppNotification("💰 Fondo Guardado", `El fondo inicial ha sido corregido a $${newVal.toFixed(2)} y guardado como predeterminado. ⚡`, "success");
                       }
                     } catch (err) {
-                      console.error("Error actualizando fondo:", err);
-                      triggerAppNotification("Error", "No se pudo actualizar el fondo en el servidor", "warning");
+                      console.error("Error actualizóando fondo:", err);
+                      triggerAppNotification("Error", "No se pudo actualizóar el fondo en el servidor", "warning");
                     }
                   }}
                   className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition cursor-pointer border-none outline-none text-center shadow-md"
@@ -37694,7 +37725,7 @@ setCheckoutReturnMode(null);
                         await deleteCurrentCorteInFirebase(tid);
                         
                         localStorage.removeItem(`pos_tables_${tid}`);
-                        // Solo actualizamos el estado en memoria para que React sincronice con localStorage si es necesario,
+                        // Solo actualizóamos el estado en memoria para que React sincronice con localStorage si es necesario,
                         // o dejamos que el reload vuelva a cargar de Firebase.
                         setTables((prev: any[]) => prev.map((t: any) => t.tenantId === tid ? { ...t, status: "available", comandas: [], waiterId: null, activeAccount: null } : t));
                         setHistory((prev: any[]) => prev.filter((h: any) => h.tenantId !== tid));
@@ -37765,7 +37796,7 @@ setCheckoutReturnMode(null);
                     await deleteAllTenantHistoryInFirebase(tid);
                     
                     localStorage.removeItem(`pos_tables_${tid}`);
-                    // Solo actualizamos la memoria local de React y filtramos por inquilino.
+                    // Solo actualizóamos la memoria local de React y filtramos por inquilino.
 
                     setTables((prev: any[]) => prev.map((t: any) => t.tenantId === tid ? { ...t, status: "available", comandas: [], waiterId: null, activeAccount: null } : t));
                     setHistory((prev: any[]) => prev.filter((h: any) => h.tenantId !== tid));
@@ -37923,7 +37954,7 @@ setCheckoutReturnMode(null);
                           const date2Str = d2.toISOString().slice(0, 10);
 
                           const ok = window.confirm(
-                            `¿Deseas crear 2 RESPALDOS INDEPENDIENTES para los últimos 2 días por separado?\n\n1. Respaldo Ayer: ${date1Str}\n2. Respaldo Anteayer: ${date2Str}`
+                            `¿¿Deseas crear 2 RESPALDOS INDEPENDIENTES para los últimos 2 días por separado?\n\n1. Respaldo Ayer: ${date1Str}\n2. Respaldo Anteayer: ${date2Str}`
                           );
                           if (!ok) return;
 
@@ -38109,7 +38140,7 @@ setCheckoutReturnMode(null);
                                   );
                                   if (!ok1) return;
                                   const ok2 = window.confirm(
-                                    `⚠️ CONFIRMACIÓN FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${selectedTenant?.name}".\n\n¿Deseas continuar?`
+                                    `⚠️ CONFIRMACIÓN FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${selectedTenant?.name}".\n\n¿¿Deseas continuar?`
                                   );
                                   if (!ok2) return;
                                   setIsTenantBackupLoading(true);
@@ -38151,7 +38182,7 @@ setCheckoutReturnMode(null);
                                       );
                                       if (!ok1) return;
                                       const ok2 = window.confirm(
-                                        `⚠️ ADVERTENCIA FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${destTenant?.name}".\n\nLos IDs de documentos serán reescritos con el tenantId destino.\n\n¿Deseas continuar?`
+                                        `⚠️ ADVERTENCIA FINAL\n\nEsta acción escribirá ${totalDocs} registros sobre "${destTenant?.name}".\n\nLos IDs de documentos serán reescritos con el tenantId destino.\n\n¿¿Deseas continuar?`
                                       );
                                       if (!ok2) return;
                                       setIsTenantBackupLoading(true);
@@ -38222,7 +38253,7 @@ setCheckoutReturnMode(null);
                   onClick={() => setShowSidebar(true)}
                   className="p-2 text-white bg-slate-800 rounded-lg cursor-pointer hover:bg-slate-700 transition"
                 >
-                  ☰ Menú
+                  ☰ Menúú
                 </button>
               </IonButtons>
               <IonTitle className="font-black text-stone-800">📑 Historial de Cortes 2</IonTitle>
@@ -38366,8 +38397,8 @@ setCheckoutReturnMode(null);
     // Smart suggestion algorithm ("💡 Sugerir Selección para Nivelar" -> Preferentemente importes más pequeños)
     const handleSmartSuggestion = () => {
       if (montoObjetivo <= 0) {
-        setMenuToastMessage("⚠️ Ingresa un monto objetivo mayor a $0 para nivelar.");
-        setShowMenuToast(true);
+        setMenúuToastMessage("⚠️ Ingresa un monto objetivo mayor a $0 para nivelar.");
+        setShowMenúuToast(true);
         return;
       }
 
@@ -38379,8 +38410,8 @@ setCheckoutReturnMode(null);
 
       if (neededFromCash <= 0) {
         setCorte2SelectedAccountIds([...mandatoryAccountIds]);
-        setMenuToastMessage("💡 Las cuentas obligatorias (Factura/Tarjeta/Transf) cubren el monto objetivo.");
-        setShowMenuToast(true);
+        setMenúuToastMessage("💡 Las cuentas obligatorias (Factura/Tarjeta/Transf) cubren el monto objetivo.");
+        setShowMenúuToast(true);
         return;
       }
 
@@ -38391,8 +38422,8 @@ setCheckoutReturnMode(null);
 
       if (optionalCashAccounts.length === 0) {
         setCorte2SelectedAccountIds([...mandatoryAccountIds]);
-        setMenuToastMessage("ℹ️ No hay cuentas en efectivo adicionales para seleccionar.");
-        setShowMenuToast(true);
+        setMenúuToastMessage("ℹ️ No hay cuentas en efectivo adicionales para seleccionar.");
+        setShowMenúuToast(true);
         return;
       }
 
@@ -38406,19 +38437,19 @@ setCheckoutReturnMode(null);
       }
 
       setCorte2SelectedAccountIds([...mandatoryAccountIds, ...selectedCashIds]);
-      setMenuToastMessage(`💡 Sugerencia aplicada: ${selectedCashIds.length} cuentas de menor importe seleccionadas para nivelación.`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`💡 Sugerencia aplicada: ${selectedCashIds.length} cuentas de menor importe seleccionadas para nivelación.`);
+      setShowMenúuToast(true);
     };
 
     // Batch Print handlers
     const handlePrintAllAccounts = async () => {
       if (currentShiftAccounts.length === 0) {
-        setMenuToastMessage("⚠️ No hay cuentas en este turno para imprimir.");
-        setShowMenuToast(true);
+        setMenúuToastMessage("⚠️ No hay cuentas en este turno para imprimir.");
+        setShowMenúuToast(true);
         return;
       }
-      setMenuToastMessage(`🖨️ Imprimiendo las ${currentShiftAccounts.length} cuentas del turno...`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`🖨️ Imprimiendo las ${currentShiftAccounts.length} cuentas del turno...`);
+      setShowMenúuToast(true);
       for (const acc of currentShiftAccounts) {
         const folioNum = assignedFolioMap[acc.id];
         await reprintAccount(acc, folioNum);
@@ -38429,12 +38460,12 @@ setCheckoutReturnMode(null);
     const handlePrintSelectedAccounts = async () => {
       const selectedAccounts = currentShiftAccounts.filter((acc) => activeSelectedSet.has(acc.id));
       if (selectedAccounts.length === 0) {
-        setMenuToastMessage("⚠️ No hay cuentas con checkbox / foliadas para imprimir.");
-        setShowMenuToast(true);
+        setMenúuToastMessage("⚠️ No hay cuentas con checkbox / foliadas para imprimir.");
+        setShowMenúuToast(true);
         return;
       }
-      setMenuToastMessage(`🖨️ Imprimiendo las ${selectedAccounts.length} cuentas foliadas (con checkbox)...`);
-      setShowMenuToast(true);
+      setMenúuToastMessage(`🖨️ Imprimiendo las ${selectedAccounts.length} cuentas foliadas (con checkbox)...`);
+      setShowMenúuToast(true);
       for (const acc of selectedAccounts) {
         const folioNum = assignedFolioMap[acc.id];
         await reprintAccount(acc, folioNum);
@@ -38455,7 +38486,7 @@ setCheckoutReturnMode(null);
           `⚠️ ADVERTENCIA: El folio inicial ingresado provoca un salto en la numeración.\n\n` +
           `Esperado (donde terminó el turno anterior): ${expectedFolioAnterior}\n` +
           `Ingresado actualmente: ${folioAnterior}\n\n` +
-          `¿Deseas guardar de todos modos con este salto de folios?\n` +
+          `¿¿Deseas guardar de todos modos con este salto de folios?\n` +
           `(Si das 'Cancelar', se corregirá al valor esperado automáticamente).`;
           
         if (!window.confirm(confirmMsg)) {
@@ -38525,11 +38556,11 @@ setCheckoutReturnMode(null);
           localStorage.setItem("cocinet_product_sales_stats", JSON.stringify(stats));
         } catch (e) {}
 
-        setMenuToastMessage(`✅ Guardado exitoso: Folios #${folioAnterior + 1} al #${lastAssignedFolio} registrados.`);
-        setShowMenuToast(true);
+        setMenúuToastMessage(`✅ Guardado exitoso: Folios #${folioAnterior + 1} al #${lastAssignedFolio} registrados.`);
+        setShowMenúuToast(true);
       } catch (err: any) {
-        setMenuToastMessage(`❌ Error al guardar nivelación: ${err.message || err}`);
-        setShowMenuToast(true);
+        setMenúuToastMessage(`❌ Error al guardar nivelación: ${err.message || err}`);
+        setShowMenúuToast(true);
       }
     };
 
@@ -38912,7 +38943,7 @@ setCheckoutReturnMode(null);
                 className="p-2.5 text-white bg-slate-800 rounded-xl cursor-pointer hover:bg-slate-700 transition flex items-center gap-2 ml-2 font-black text-xs shadow-sm"
               >
                 <span>☰</span>
-                <span>Menú</span>
+                <span>Menúú</span>
               </button>
             </IonButtons>
             <IonTitle className="font-black text-amber-700">📑 Cortes — {selectedTenant?.name || "Sucursal"}</IonTitle>
@@ -41628,10 +41659,10 @@ setCheckoutReturnMode(null);
                         link.download = `CorteExpress_${companyConfig.businessName.replace(/\s+/g, "_")}_${getMexicoISOString().split("T")[0]}.txt`;
                         link.click();
                         URL.revokeObjectURL(url);
-                        setMenuToastMessage(
+                        setMenúuToastMessage(
                           "Ticket de Corte Express exportado con éxito.",
                         );
-                        setShowMenuToast(true);
+                        setShowMenúuToast(true);
                       } catch (err: any) {
                         console.error("Export ticket failed:", err);
                       }
@@ -41744,10 +41775,10 @@ setCheckoutReturnMode(null);
                       link.download = `CorteExpress_${companyConfig.businessName}.txt`;
                       link.click();
                       URL.revokeObjectURL(url);
-                      setMenuToastMessage(
+                      setMenúuToastMessage(
                         "Ticket de Corte Express exportado con éxito.",
                       );
-                      setShowMenuToast(true);
+                      setShowMenúuToast(true);
                     }}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 px-4 rounded-xl shadow cursor-pointer border-none outline-none uppercase text-center"
                   >
@@ -43184,8 +43215,8 @@ setCheckoutReturnMode(null);
         isOpen={showPrinterTemplateModal}
         onClose={() => setShowPrinterTemplateModal(false)}
         triggerAppNotification={(title, body, type) => {
-          setMenuToastMessage(`🔔 [${title}] ${body}`);
-          setShowMenuToast(true);
+          setMenúuToastMessage(`🔔 [${title}] ${body}`);
+          setShowMenúuToast(true);
         }}
       />
       {/* Master Render */}
@@ -43194,13 +43225,13 @@ setCheckoutReturnMode(null);
       ) : (
         <>
           {appMode === "floorplan" && renderFloorplan()}
-          {appMode === "menu" && renderMenu()}
+          {appMode === "menu" && renderMenúu()}
           {appMode === "review" && renderReview()}
           {appMode === "table-details" && renderTableDetails()}
           {appMode === "checkout" && renderCheckout()}
           {appMode === "admin" && renderAdminPanel()}
 
-          {appMode === "manage-menu" && renderManageMenu()}
+          {appMode === "manage-menu" && renderManageMenúu()}
           {appMode === "suppliers" && renderSuppliers()}
           {appMode === "customers" && renderCustomers()}
           {appMode === "reports" && renderReports()}
@@ -44478,17 +44509,17 @@ setCheckoutReturnMode(null);
               try {
                 if (deleteConfirmation.type === "single" && deleteConfirmation.targetId) {
                   await deleteProductFromFirebase(deleteConfirmation.targetId);
-                  setShowMenuToast(true);
-                  setMenuToastMessage("Producto eliminado exitosamente del tenant.");
+                  setShowMenúuToast(true);
+                  setMenúuToastMessage("Producto eliminado exitosamente del tenant.");
                 } else if (deleteConfirmation.type === "all") {
                   await deleteAllProductsFromFirebase(selectedTenant.id, selectedTenant.name || "Sucursal", products);
-                  setShowMenuToast(true);
-                  setMenuToastMessage("Todos los productos fueron eliminados.");
+                  setShowMenúuToast(true);
+                  setMenúuToastMessage("Todos los productos fueron eliminados.");
                 }
               } catch (error) {
                 console.error(error);
-                setShowMenuToast(true);
-                setMenuToastMessage("Error al eliminar.");
+                setShowMenúuToast(true);
+                setMenúuToastMessage("Error al eliminar.");
               }
             },
           },
@@ -44496,8 +44527,8 @@ setCheckoutReturnMode(null);
       />
 
       <IonToast
-        isOpen={showMenuToast}
-        onDidDismiss={() => setShowMenuToast(false)}
+        isOpen={showMenúuToast}
+        onDidDismiss={() => setShowMenúuToast(false)}
         message={menuToastMessage}
         duration={4000}
         position="bottom"
