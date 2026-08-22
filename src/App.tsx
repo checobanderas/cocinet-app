@@ -4953,6 +4953,12 @@ export default function App() {
   const [corte2FolioAnterior, setCorte2FolioAnterior] = useState<number>(0);
   const [corte2MontoObjetivo, setCorte2MontoObjetivo] = useState<number>(0);
   const [corte2SelectedAccountIds, setCorte2SelectedAccountIds] = useState<string[]>([]);
+  
+  // State for Multi-Turn Report
+  const [showMultiTurnModal, setShowMultiTurnModal] = useState<boolean>(false);
+  const [multiTurnStartDate, setMultiTurnStartDate] = useState<string>("");
+  const [multiTurnEndDate, setMultiTurnEndDate] = useState<string>("");
+  const [multiTurnPreviewReady, setMultiTurnPreviewReady] = useState<boolean>(false);
 
   const [systemUseRawBt, setSystemUseRawBt] = useState<boolean>(() => {
     return localStorage.getItem("system_use_rawbt") === "true"; // por default será false ya que la clave no existirá
@@ -38439,6 +38445,25 @@ setCheckoutReturnMode(null);
     // Save record to Firebase
     const handleSaveCorte2Record = async () => {
       if (!selectedTenant?.id) return;
+
+      // 1. Validation for Folio Anterior jump
+      const prevRecord = corte2Records.find((r) => r.date < activeDateKey);
+      const expectedFolioAnterior = prevRecord ? prevRecord.folioFinal : 0;
+
+      if (folioAnterior !== expectedFolioAnterior) {
+        const confirmMsg = 
+          `⚠️ ADVERTENCIA: El folio inicial ingresado provoca un salto en la numeración.\n\n` +
+          `Esperado (donde terminó el turno anterior): ${expectedFolioAnterior}\n` +
+          `Ingresado actualmente: ${folioAnterior}\n\n` +
+          `¿Deseas guardar de todos modos con este salto de folios?\n` +
+          `(Si das 'Cancelar', se corregirá al valor esperado automáticamente).`;
+          
+        if (!window.confirm(confirmMsg)) {
+          setCorte2FolioAnterior(expectedFolioAnterior);
+          return; // Detener ejecución para que el usuario guarde con el número correcto
+        }
+      }
+
       const recId = existingRecord?.id || `corte2_${activeDateKey.replace(/-/g, "")}_${selectedTenant.id}`;
       const recordToSave: CorteCuentasFolioRecord = {
         id: recId,
@@ -38456,6 +38481,33 @@ setCheckoutReturnMode(null);
 
       try {
         await saveCorteFolioRecordToFirebase(selectedTenant.id, recordToSave);
+        
+        // 2. Domino/Recursive update for subsequent shifts
+        const subsequentRecords = [...corte2Records]
+          .filter(r => r.date > activeDateKey)
+          .sort((a, b) => a.date.localeCompare(b.date)); // Sort chronologically ascending
+          
+        if (subsequentRecords.length > 0) {
+          let currentChainFolio = lastAssignedFolio; // Final folio of the record we just saved
+          
+          for (const nextRec of subsequentRecords) {
+            const foliosCount = nextRec.selectedAccountIds.length;
+            const nextFolioFinal = currentChainFolio + foliosCount;
+            
+            // Update only if there is a discrepancy to save database writes
+            if (nextRec.folioAnterior !== currentChainFolio || nextRec.folioFinal !== nextFolioFinal) {
+              const updatedRec: CorteCuentasFolioRecord = {
+                ...nextRec,
+                folioAnterior: currentChainFolio,
+                folioFinal: nextFolioFinal
+              };
+              await saveCorteFolioRecordToFirebase(selectedTenant.id, updatedRec);
+            }
+            
+            currentChainFolio = nextFolioFinal;
+          }
+        }
+
         // Actualizar ranking estático de favoritos por nodo en el corte de caja para el día siguiente 📊🏆
         try {
           const stats: Record<string, number> = {};
@@ -38528,6 +38580,328 @@ setCheckoutReturnMode(null);
 
     const selectedCount = currentShiftAccounts.filter((acc) => activeSelectedSet.has(acc.id)).length;
 
+    // --- LOGICA REPORTE MULTI-TURNO ---
+    const enhancedMultiTurnRecords = corte2Records
+      .filter(r => {
+        if (!multiTurnStartDate || !multiTurnEndDate) return false;
+        return r.date >= multiTurnStartDate && r.date <= multiTurnEndDate;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(r => {
+        let cashTotal = 0;
+        let cardTotal = 0;
+        let transferTotal = 0;
+        
+        const shiftAccounts = shiftAccountsMap[r.date] || [];
+        const selectedAccounts = shiftAccounts.filter(acc => r.selectedAccountIds.includes(acc.id));
+        
+        selectedAccounts.forEach(acc => {
+          const amt = Number(acc.total || 0);
+          const method = (acc.paymentMethod || "").toLowerCase();
+          if (["card", "tarjeta"].some(m => method.includes(m))) {
+            cardTotal += amt;
+          } else if (["transfer", "transferencia", "banco", "bank"].some(m => method.includes(m))) {
+            transferTotal += amt;
+          } else {
+            cashTotal += amt;
+          }
+        });
+        
+        return {
+          ...r,
+          cashTotal,
+          cardTotal,
+          transferTotal
+        };
+      });
+
+    const totalMultiTurnSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + (r.montoFoliado || 0), 0);
+    const totalCashSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.cashTotal, 0);
+    const totalCardSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.cardTotal, 0);
+    const totalTransferSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.transferTotal, 0);
+
+    const handleExportMultiTurnWhatsApp = () => {
+      let text = `*REPORTE MULTI-TURNO*\n`;
+      text += `Sucursal: ${selectedTenant?.name || "N/A"}\n`;
+      text += `Periodo: ${multiTurnStartDate} al ${multiTurnEndDate}\n\n`;
+      enhancedMultiTurnRecords.forEach(r => {
+        text += `📅 Turno: ${r.date}\n`;
+        text += `🔢 Folios: ${r.folioAnterior + 1} al ${r.folioFinal}\n`;
+        text += `💵 Efectivo: $${r.cashTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        text += `💳 Tarjeta: $${r.cardTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        text += `🏦 Transfer: $${r.transferTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        text += `💰 TOTAL: $${r.montoFoliado.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
+      });
+      if (enhancedMultiTurnRecords.length === 0) {
+        text += `No hay folios registrados en este periodo.\n\n`;
+      }
+      text += `*RESUMEN DEL PERIODO*\n`;
+      text += `💵 Efectivo: $${totalCashSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+      text += `💳 Tarjeta: $${totalCardSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+      text += `🏦 Transfer: $${totalTransferSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+      text += `*💰 TOTAL GLOBAL: $${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})}*\n`;
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      window.open(url, "_blank");
+    };
+
+    const handleExportMultiTurnExcel = () => {
+      const html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head><meta charset="utf-8"></head>
+        <body>
+          <table border="1">
+            <thead>
+              <tr>
+                <th colspan="7" style="font-size:16px; font-weight:bold; background-color:#d9e1f2;">
+                  REPORTE MULTI-TURNO - ${selectedTenant?.name || "N/A"}
+                </th>
+              </tr>
+              <tr>
+                <th colspan="7" style="font-size:14px; background-color:#f0f0f0;">
+                  Periodo: ${multiTurnStartDate} al ${multiTurnEndDate}
+                </th>
+              </tr>
+              <tr style="background-color:#d9e1f2;">
+                <th>Turno</th>
+                <th>Folio Inicial</th>
+                <th>Folio Final</th>
+                <th>Efectivo ($)</th>
+                <th>Tarjeta ($)</th>
+                <th>Transferencia ($)</th>
+                <th>Total ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${enhancedMultiTurnRecords.map(r => `
+                <tr>
+                  <td>${r.date}</td>
+                  <td>${r.folioAnterior + 1}</td>
+                  <td>${r.folioFinal}</td>
+                  <td>${r.cashTotal}</td>
+                  <td>${r.cardTotal}</td>
+                  <td>${r.transferTotal}</td>
+                  <td>${r.montoFoliado}</td>
+                </tr>
+              `).join('')}
+              <tr style="background-color:#ffff00; font-weight:bold;">
+                <td colspan="3" align="right">TOTAL PERIODO</td>
+                <td>${totalCashSum}</td>
+                <td>${totalCardSum}</td>
+                <td>${totalTransferSum}</td>
+                <td>${totalMultiTurnSum}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+      const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Reporte_MultiTurno_${multiTurnStartDate}_al_${multiTurnEndDate}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    const renderMultiTurnModal = () => (
+      <IonModal
+        isOpen={showMultiTurnModal}
+        onDidDismiss={() => setShowMultiTurnModal(false)}
+        style={{
+          "--height": "auto",
+          "--max-height": "90vh",
+          "--width": "100%",
+          "--max-width": "850px",
+          "--border-radius": "24px",
+        }}
+      >
+        <div className="p-6 bg-white space-y-5 overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between border-b pb-3 print:hidden">
+            <h2 className="text-xl font-black text-amber-700 flex items-center gap-2">
+              <span>📑</span> Reporte Multi-Turnos
+            </h2>
+            <button
+              onClick={() => setShowMultiTurnModal(false)}
+              className="text-stone-400 hover:text-rose-500 font-bold transition text-2xl"
+            >
+              ×
+            </button>
+          </div>
+
+          {!multiTurnPreviewReady ? (
+            <div className="space-y-5 print:hidden">
+              <p className="text-sm text-stone-600 font-bold">
+                Selecciona el rango de turnos que deseas incluir en el reporte:
+              </p>
+              
+              <div className="flex flex-col gap-4 bg-stone-50 p-5 rounded-2xl border-2 border-stone-200">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-black text-stone-700 uppercase tracking-wider">Desde el Turno:</label>
+                  <select
+                    value={multiTurnStartDate}
+                    onChange={(e) => setMultiTurnStartDate(e.target.value)}
+                    className="bg-white border-2 border-stone-300 text-stone-800 font-bold text-sm px-3 py-2.5 rounded-xl outline-none focus:border-amber-500 transition"
+                  >
+                    <option value="">-- Selecciona --</option>
+                    {[...sortedShiftKeys].sort((a, b) => a.localeCompare(b)).map(key => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-black text-stone-700 uppercase tracking-wider">Hasta el Turno:</label>
+                  <select
+                    value={multiTurnEndDate}
+                    onChange={(e) => setMultiTurnEndDate(e.target.value)}
+                    className="bg-white border-2 border-stone-300 text-stone-800 font-bold text-sm px-3 py-2.5 rounded-xl outline-none focus:border-amber-500 transition"
+                  >
+                    <option value="">-- Selecciona --</option>
+                    {[...sortedShiftKeys].sort((a, b) => a.localeCompare(b)).map(key => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {multiTurnStartDate && multiTurnEndDate && multiTurnStartDate > multiTurnEndDate && (
+                <div className="text-rose-600 font-bold text-sm text-center">
+                  ⚠️ El turno inicial debe ser anterior o igual al turno final.
+                </div>
+              )}
+              
+              <button
+                disabled={!multiTurnStartDate || !multiTurnEndDate || multiTurnStartDate > multiTurnEndDate}
+                onClick={() => setMultiTurnPreviewReady(true)}
+                className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl shadow-md transition"
+              >
+                Generar Vista Previa
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* VISTA PREVIA / PDF CONTENT */}
+              <div id="multi-turn-print-area" className="space-y-4">
+                <div className="text-center border-b pb-4">
+                  <h3 className="text-2xl font-black text-slate-900">REPORTE MULTI-TURNO</h3>
+                  <p className="text-sm text-slate-600 font-bold mt-1">Sucursal: {selectedTenant?.name || "N/A"}</p>
+                  <p className="text-xs text-slate-500 font-bold mt-1">
+                    Periodo: {multiTurnStartDate} al {multiTurnEndDate}
+                  </p>
+                </div>
+                
+                {enhancedMultiTurnRecords.length > 0 ? (
+                  <div className="overflow-y-auto max-h-[45vh] border-2 border-stone-200 rounded-xl">
+                    <table className="w-full text-left border-collapse text-[11px] md:text-sm">
+                      <thead className="sticky top-0 bg-stone-100 z-10 shadow-sm">
+                        <tr className="border-b-2 border-stone-300">
+                          <th className="py-2 px-2 font-black text-stone-700">Turno</th>
+                          <th className="py-2 px-1 font-black text-stone-700 text-center">Folios</th>
+                          <th className="py-2 px-2 font-black text-stone-700 text-right">Efectivo</th>
+                          <th className="py-2 px-2 font-black text-stone-700 text-right">Tarjeta</th>
+                          <th className="py-2 px-2 font-black text-stone-700 text-right">Transfer.</th>
+                          <th className="py-2 px-2 font-black text-stone-700 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-200 bg-white">
+                        {enhancedMultiTurnRecords.map(r => (
+                          <tr key={r.id} className="hover:bg-stone-50 transition">
+                            <td className="py-2 px-2 font-bold text-stone-800 whitespace-nowrap">{r.date}</td>
+                            <td className="py-2 px-1 font-bold text-stone-600 text-center whitespace-nowrap">
+                              {r.folioAnterior + 1} al {r.folioFinal}
+                            </td>
+                            <td className="py-2 px-2 font-bold text-stone-600 text-right">
+                              ${r.cashTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                            </td>
+                            <td className="py-2 px-2 font-bold text-stone-600 text-right">
+                              ${r.cardTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                            </td>
+                            <td className="py-2 px-2 font-bold text-stone-600 text-right">
+                              ${r.transferTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                            </td>
+                            <td className="py-2 px-2 font-black text-emerald-700 text-right">
+                              ${r.montoFoliado.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-emerald-50 border-t-4 border-emerald-500 sticky bottom-0">
+                          <td colSpan={2} className="py-3 px-2 font-black text-emerald-900 text-right">TOTALES:</td>
+                          <td className="py-3 px-2 font-black text-emerald-900 text-right">
+                            ${totalCashSum.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                          </td>
+                          <td className="py-3 px-2 font-black text-emerald-900 text-right">
+                            ${totalCardSum.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                          </td>
+                          <td className="py-3 px-2 font-black text-emerald-900 text-right">
+                            ${totalTransferSum.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                          </td>
+                          <td className="py-3 px-2 font-black text-emerald-900 text-right text-base">
+                            ${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center p-6 bg-stone-50 border-2 border-dashed border-stone-200 rounded-2xl">
+                    <span className="text-3xl block mb-2">📬</span>
+                    <span className="text-stone-500 font-bold">No se encontraron folios guardados en este rango de fechas.</span>
+                    <p className="text-xs text-stone-400 mt-2">Recuerda que debes haber guardado el registro de nivelación para cada turno.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de Exportar */}
+              <div className="grid grid-cols-3 gap-2 print:hidden">
+                <button
+                  onClick={handleExportMultiTurnExcel}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition"
+                >
+                  <span className="text-lg">📥</span>
+                  <span className="text-xs">Excel</span>
+                </button>
+                <button
+                  onClick={handleExportMultiTurnWhatsApp}
+                  className="bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition"
+                >
+                  <span className="text-lg">💬</span>
+                  <span className="text-xs">WhatsApp</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const printContents = document.getElementById("multi-turn-print-area")?.innerHTML;
+                    if (printContents) {
+                      const originalContents = document.body.innerHTML;
+                      document.body.innerHTML = printContents;
+                      window.print();
+                      document.body.innerHTML = originalContents;
+                      window.location.reload();
+                    }
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition"
+                >
+                  <span className="text-lg">🖨️</span>
+                  <span className="text-xs">PDF/Imp.</span>
+                </button>
+              </div>
+
+              <div className="text-center print:hidden mt-4">
+                <button
+                  onClick={() => setMultiTurnPreviewReady(false)}
+                  className="text-stone-500 font-bold text-sm underline hover:text-stone-700 cursor-pointer"
+                >
+                  ← Volver a Selección
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </IonModal>
+    );
+
     return (
       <IonPage>
         <IonHeader>
@@ -38541,7 +38915,7 @@ setCheckoutReturnMode(null);
                 <span>Menú</span>
               </button>
             </IonButtons>
-            <IonTitle className="font-black text-amber-700">📑 Historial de Cortes 2 — Nivelación de Ingresos</IonTitle>
+            <IonTitle className="font-black text-amber-700">📑 Cortes — {selectedTenant?.name || "Sucursal"}</IonTitle>
           </IonToolbar>
         </IonHeader>
 
@@ -38563,28 +38937,42 @@ setCheckoutReturnMode(null);
                   </div>
                 </div>
 
-                {/* Shift Date Selector */}
-                <div className="flex items-center gap-3 bg-stone-100 p-2 rounded-2xl border border-stone-300">
-                  <span className="text-xs font-black text-stone-700 pl-2">📅 Turno:</span>
-                  <select
-                    value={activeDateKey}
-                    onChange={(e) => {
-                      setCorte2SelectedDate(e.target.value);
-                      setCorte2SelectedAccountIds([]);
-                      setCorte2FolioAnterior(0);
-                      setCorte2MontoObjetivo(0);
+                {/* Shift Date Selector & Multi-Turn Report Button */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3 bg-stone-100 p-2 rounded-2xl border border-stone-300">
+                    <span className="text-xs font-black text-stone-700 pl-2">📅 Turno:</span>
+                    <select
+                      value={activeDateKey}
+                      onChange={(e) => {
+                        setCorte2SelectedDate(e.target.value);
+                        setCorte2SelectedAccountIds([]);
+                        setCorte2FolioAnterior(0);
+                        setCorte2MontoObjetivo(0);
+                      }}
+                      className="bg-white text-amber-900 font-black text-sm px-3 py-2 rounded-xl border-2 border-stone-300 outline-none cursor-pointer shadow-sm focus:border-amber-500"
+                    >
+                      {sortedShiftKeys.map((key) => (
+                        <option key={key} value={key}>
+                          Corte del {key} ({shiftAccountsMap[key]?.length || 0} cuentas)
+                        </option>
+                      ))}
+                      {!sortedShiftKeys.includes(activeDateKey) && (
+                        <option value={activeDateKey}>{activeDateKey}</option>
+                      )}
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowMultiTurnModal(true);
+                      setMultiTurnPreviewReady(false);
+                      setMultiTurnStartDate("");
+                      setMultiTurnEndDate("");
                     }}
-                    className="bg-white text-amber-900 font-black text-sm px-3 py-2 rounded-xl border-2 border-stone-300 outline-none cursor-pointer shadow-sm focus:border-amber-500"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer"
                   >
-                    {sortedShiftKeys.map((key) => (
-                      <option key={key} value={key}>
-                        Corte del {key} ({shiftAccountsMap[key]?.length || 0} cuentas)
-                      </option>
-                    ))}
-                    {!sortedShiftKeys.includes(activeDateKey) && (
-                      <option value={activeDateKey}>{activeDateKey}</option>
-                    )}
-                  </select>
+                    <span>📑</span>
+                    <span>Reporte Multi-Turnos</span>
+                  </button>
                 </div>
               </div>
 
@@ -38594,7 +38982,7 @@ setCheckoutReturnMode(null);
                 {/* Folio Anterior */}
                 <div className="bg-stone-50 p-4 rounded-2xl border-2 border-stone-200 flex flex-col gap-1">
                   <label className="text-[11px] font-black text-stone-700 uppercase tracking-wider">
-                    🔢 Folio Inicial / Anterior:
+                    🔢 ÚLTIMO FOLIO (TURNO PASADO):
                   </label>
                   <input
                     type="number"
@@ -38604,7 +38992,7 @@ setCheckoutReturnMode(null);
                     className="bg-white border-2 border-stone-300 text-amber-800 font-black text-xl px-3 py-2 rounded-xl outline-none focus:border-amber-500 transition shadow-inner"
                     placeholder="0"
                   />
-                  <span className="text-[11px] text-stone-500 font-bold italic">Folio previo del día anterior</span>
+                  <span className="text-[11px] text-stone-500 font-bold italic">Folio final en el que se quedó ayer</span>
                 </div>
 
                 {/* Monto Objetivo a Nivelar */}
@@ -38897,6 +39285,7 @@ setCheckoutReturnMode(null);
 
           </div>
         </IonContent>
+        {renderMultiTurnModal()}
       </IonPage>
     );
   };

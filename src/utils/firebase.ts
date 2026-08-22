@@ -3,7 +3,7 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentMultipleTabManager, CACHE_SIZE_UNLIMITED,
   CACHE_SIZE_UNLIMITED,
   setLogLevel
 } from "firebase/firestore";
@@ -78,7 +78,7 @@ try {
     experimentalForceLongPolling: true,
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager(),
-      cacheSizeBytes: CACHE_SIZE_UNLIMITED
+      cacheSizeBytes: 41943040 // 40 MB default instead of UNLIMITED to avoid IndexedDB crashes
     })
   }, cleanDbId);
 } catch (error: any) {
