@@ -4797,6 +4797,7 @@ export default function App() {
   const [activeSubgroup, setActiveSubgroup] = useState<string>("Todos");
   const [activeDrinkType, setActiveDrinkType] = useState<"hot" | "cold">("hot");
   const [menuSearchQuery, setMenuSearchQuery] = useState<string>("");
+  const [showDeletedProducts, setShowDeletedProducts] = useState<boolean>(false);
   const [productSalesMap, setProductSalesMap] = useState<Record<string, number>>(() => {
     try {
       const cached = localStorage.getItem("cocinet_product_sales_stats");
@@ -26011,6 +26012,23 @@ setProductCrudModal({ isOpen: false, product: null });
                     </option>
                   ))}
                 </select>
+                <button
+                  onClick={() => setShowDeletedProducts(!showDeletedProducts)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    border: "1px solid",
+                    borderColor: showDeletedProducts ? "#f97316" : "#cbd5e1",
+                    backgroundColor: showDeletedProducts ? "#fff7ed" : "white",
+                    color: showDeletedProducts ? "#ea580c" : "#64748b",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {showDeletedProducts ? "Ocultar Borrados" : "Mostrar Borrados"}
+                </button>
               </div>
               <div
                 style={{
@@ -26047,32 +26065,38 @@ setProductCrudModal({ isOpen: false, product: null });
                     </tr>
                   </thead>
                   <tbody>
-                    {products
-                      .filter((p) => p.category === manageMenuTab)
-                      .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
-                      .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
-                      .length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          style={{
-                            padding: "32px",
-                            textAlign: "center",
-                            color: "#64748b",
-                          }}
-                        >
-                          No hay productos registrados que coincidan con la búsqueda.
-                        </td>
-                      </tr>
-                    ) : (
-                      products
+                    {(() => {
+                      const searchTokens = menuSearchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+                      const filteredProducts = products
                         .filter((p) => p.category === manageMenuTab)
-                        .filter((p) => !menuSearchQuery || p.name.toLowerCase().includes(menuSearchQuery.toLowerCase()))
-                        .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode)
-                        .map((p) => (
+                        .filter((p) => showDeletedProducts ? true : p.isDeleted !== true)
+                        .filter((p) => searchTokens.every(token => p.name.toLowerCase().includes(token)))
+                        .filter((p) => !menuFilterNode || p.subcategory === menuFilterNode);
+
+                      if (filteredProducts.length === 0) {
+                        return (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              style={{
+                                padding: "32px",
+                                textAlign: "center",
+                                color: "#64748b",
+                              }}
+                            >
+                              No hay productos registrados que coincidan con la búsqueda.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filteredProducts.map((p) => (
                           <tr
                             key={p.id}
-                            style={{ borderBottom: "1px solid #e2e8f0" }}
+                            style={{ 
+                              borderBottom: "1px solid #e2e8f0",
+                              backgroundColor: p.isDeleted ? "#ffedd5" : "transparent"
+                            }}
                           >
                             <td
                               style={{
@@ -26134,29 +26158,53 @@ setProductCrudModal({ isOpen: false, product: null });
                               >
                                 Editar
                               </button>
-                              <button
-                                onClick={() => {
-                                  setDeleteConfirmation({
-                                    isOpen: true,
-                                    type: "single",
-                                    targetId: p.id,
-                                    targetName: p.name,
-                                  });
-                                }}
-                                style={{
-                                  color: "#ef4444",
-                                  fontWeight: "bold",
-                                  cursor: "pointer",
-                                  background: "none",
-                                  border: "none",
-                                }}
-                              >
-                                Eliminar
-                              </button>
+                              {p.isDeleted ? (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm(`¿Seguro que deseas recuperar ${p.name}?`)) {
+                                      try {
+                                        await updateProductInFirebase(p.id, { isDeleted: false });
+                                        triggerAppNotification("Recuperado", `${p.name} ha sido recuperado`, "success");
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    color: "#f59e0b",
+                                    fontWeight: "bold",
+                                    cursor: "pointer",
+                                    background: "none",
+                                    border: "none",
+                                  }}
+                                >
+                                  Recuperar
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setDeleteConfirmation({
+                                      isOpen: true,
+                                      type: "single",
+                                      targetId: p.id,
+                                      targetName: p.name,
+                                    });
+                                  }}
+                                  style={{
+                                    color: "#ef4444",
+                                    fontWeight: "bold",
+                                    cursor: "pointer",
+                                    background: "none",
+                                    border: "none",
+                                  }}
+                                >
+                                  Eliminar
+                                </button>
+                              )}
                             </td>
                           </tr>
-                        ))
-                    )}
+                        ));
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -44574,7 +44622,7 @@ setCheckoutReturnMode(null);
         header="⚠️ Confirmar Eliminación"
         message={
           deleteConfirmation.type === "single"
-            ? `¿Estás seguro de que deseas eliminar permanentemente el producto ${deleteConfirmation.targetName}?\n\nNota: Este producto solo será eliminado para este tenant/sucursal.`
+            ? `¿Estás seguro de que deseas eliminar (lógicamente) el producto ${deleteConfirmation.targetName}?\n\nNota: Este producto solo será ocultado para este tenant/sucursal.`
             : `¿Estás a punto de eliminar TODOS los productos de ${selectedTenant?.name || "este tenant"}?\n\nEsta es la última confirmación.`
         }
         buttons={[
@@ -44590,13 +44638,13 @@ setCheckoutReturnMode(null);
             handler: async () => {
               try {
                 if (deleteConfirmation.type === "single" && deleteConfirmation.targetId) {
-                  await deleteProductFromFirebase(deleteConfirmation.targetId);
+                  await updateProductInFirebase(deleteConfirmation.targetId, { isDeleted: true });
                   setShowMenuToast(true);
-                  setMenuToastMessage("Producto eliminado exitosamente del tenant.");
+                  setMenuToastMessage("Producto eliminado lógicamente del tenant.");
                 } else if (deleteConfirmation.type === "all") {
-                  await deleteAllProductsFromFirebase(selectedTenant.id, selectedTenant.name || "Sucursal", products);
+                  await softDeleteAllProductsFromFirebase(selectedTenant.id, selectedTenant.name || "Sucursal", products);
                   setShowMenuToast(true);
-                  setMenuToastMessage("Todos los productos fueron eliminados.");
+                  setMenuToastMessage("Todos los productos fueron eliminados lógicamente.");
                 }
               } catch (error) {
                 console.error(error);
