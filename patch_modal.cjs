@@ -2,7 +2,7 @@ const fs = require('fs');
 let content = fs.readFileSync('src/App.tsx', 'utf-8');
 
 const startStr = 'const renderProductCrudModal = () => {';
-const endStr = 'const renderManageMenu = () => {';
+const endStr = 'const handleImportTenantMenu = async () => {';
 
 const startIdx = content.indexOf(startStr);
 const endIdx = content.indexOf(endStr);
@@ -63,7 +63,7 @@ const newModalCode = `const renderProductCrudModal = () => {
                 proposedDescription: data.description || m.proposedDescription,
                 proposedSubgroup: data.subgroup || m.proposedSubgroup
               } : m));
-              triggerAppNotification("Producto Actualizado", \`\${name} se actualizó correctamente\`, "success");
+              triggerAppNotification("Producto Actualizado", \`\${name} se actualizï¿½ correctamente\`, "success");
             } else {
               const newId = \`prod_\${Date.now()}\`;
               await addProductToFirebase({
@@ -72,7 +72,7 @@ const newModalCode = `const renderProductCrudModal = () => {
                 uuid: generateUUID(),
                 created_at: nowTimestamp,
               });
-              triggerAppNotification("Producto Creado", \`\${name} se agregó al menú\`, "success");
+              triggerAppNotification("Producto Creado", \`\${name} se agregï¿½ al menï¿½\`, "success");
             }
           } else {
             const allProducts = await getAllProductsFromFirebase();
@@ -93,7 +93,7 @@ const newModalCode = `const renderProductCrudModal = () => {
               
               if (tenantsToAdd.length > 0) {
                  const tNames = tenantsToAdd.map(tid => COMPANY_CATALOG.find((c:any) => c.id === tid)?.name || tid).join(', ');
-                 const confirmAdd = window.confirm(\`El producto "\${name}" no existe en: \${tNames}.\\n\\n¿Deseas agregarlo como nuevo en estas sucursales?\`);
+                 const confirmAdd = window.confirm(\`El producto "\${name}" no existe en: \${tNames}.\\n\\nï¿½Deseas agregarlo como nuevo en estas sucursales?\`);
                  if (confirmAdd) {
                     for (const tId of tenantsToAdd) {
                        const newId = \`prod_\${tId}_\${Date.now()}_\${Math.random().toString(36).substr(2, 5)}\`;
@@ -118,7 +118,7 @@ const newModalCode = `const renderProductCrudModal = () => {
                  triggerAppNotification("Proceso Completado", \`Se actualizaron \${updatedCount} y se crearon \${createdCount} en las sucursales seleccionadas.\`, "success");
               }
             } else {
-              const confirmAdd = window.confirm(\`¿Seguro que deseas AGREGAR este nuevo producto a las \${selectedTenants.length} sucursales seleccionadas?\`);
+              const confirmAdd = window.confirm(\`ï¿½Seguro que deseas AGREGAR este nuevo producto a las \${selectedTenants.length} sucursales seleccionadas?\`);
               if (confirmAdd) {
                 for (const tId of selectedTenants) {
                    const newId = \`prod_\${tId}_\${Date.now()}_\${Math.random().toString(36).substr(2, 5)}\`;
@@ -161,7 +161,7 @@ setProductCrudModal({ isOpen: false, product: null });
                 {isEditing ? "?? Editar Producto" : "? Nuevo Producto"}
               </h2>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                Panel de Administración de Menú
+                Panel de Administraciï¿½n de Menï¿½
               </p>
             </div>
             <button 
@@ -181,7 +181,7 @@ setProductCrudModal({ isOpen: false, product: null });
                     ?? Replicar en Sucursales
                   </label>
                   <p className="text-[10px] text-slate-500 font-bold mt-1">
-                    (Opcional) Selecciona dónde aplicarás los cambios. Deja vacío para aplicar solo en la sucursal actual.
+                    (Opcional) Selecciona dï¿½nde aplicarï¿½s los cambios. Deja vacï¿½o para aplicar solo en la sucursal actual.
                   </p>
                 </div>
                 
@@ -236,7 +236,7 @@ setProductCrudModal({ isOpen: false, product: null });
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Categoría</label>
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Categorï¿½a</label>
                     <select
                       name="category"
                       defaultValue={p?.category || crudSelectedCategory}
@@ -262,7 +262,7 @@ setProductCrudModal({ isOpen: false, product: null });
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subcategoría</label>
+                    <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Subcategorï¿½a</label>
                     <input
                       name="subcategory"
                       type="text"
@@ -296,13 +296,13 @@ setProductCrudModal({ isOpen: false, product: null });
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Descripción del Producto</label>
+                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Descripciï¿½n del Producto</label>
                   <textarea
                     name="description"
                     defaultValue={p?.description || ""}
                     rows={3}
                     className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm resize-y"
-                    placeholder="Detalles del platillo (ingredientes, alérgenos, etc.)"
+                    placeholder="Detalles del platillo (ingredientes, alï¿½rgenos, etc.)"
                   />
                 </div>
 
@@ -330,7 +330,7 @@ setProductCrudModal({ isOpen: false, product: null });
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Punto de Impresión (Área)</label>
+                  <label className="block text-[11px] font-black text-slate-500 uppercase ml-1">Punto de Impresiï¿½n (ï¿½rea)</label>
                   <select
                     name="destination"
                     defaultValue={p?.destination || "Cocina"}
@@ -344,12 +344,12 @@ setProductCrudModal({ isOpen: false, product: null });
                         </option>
                       );
                     })}
-                    <option value="none">?? Sin impresión</option>
+                    <option value="none">?? Sin impresiï¿½n</option>
                   </select>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-                  <label className="block text-[11px] font-black text-slate-500 uppercase">Notas Rápidas (Modificadores)</label>
+                  <label className="block text-[11px] font-black text-slate-500 uppercase">Notas Rï¿½pidas (Modificadores)</label>
                   <div className="flex flex-wrap gap-2">
                     {crudQuickNotes.map((note, idx) => (
                       <span key={idx} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 border border-indigo-100">
@@ -386,7 +386,7 @@ setProductCrudModal({ isOpen: false, product: null });
                       }}
                       className="bg-indigo-600 text-white px-5 py-3 rounded-xl text-xs font-black shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
                     >
-                      Añadir
+                      Aï¿½adir
                     </button>
                   </div>
                 </div>
