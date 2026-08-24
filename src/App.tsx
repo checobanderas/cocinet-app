@@ -12970,7 +12970,7 @@ Instrucciones:
           selectedTenant={selectedTenant}
           restrictedOwnerKey={restrictedOwnerKey}
           isSystemsMode={isSystemsMode}
-          isSistemas={isSistemas}
+          isSistemas={currentUser?.id?.endsWith('-sistemas') || false}
           activeOwnerFilter={activeOwnerFilter}
           handleSwitchBranch={handleSwitchBranch}
         />
