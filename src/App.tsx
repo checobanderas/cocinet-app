@@ -36,6 +36,8 @@ import { ManageCompaniesModal } from './components/modals/ManageCompaniesModal';
 import { CorteModal } from './components/modals/CorteModal';
 import { ExpenseModal } from './components/modals/ExpenseModal';
 import { ArqueoFormModal } from './components/modals/ArqueoFormModal';
+import { FolioModal } from './components/modals/FolioModal';
+import { InvoicePhoneModal } from './components/modals/InvoicePhoneModal';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
@@ -39251,221 +39253,24 @@ setCheckoutReturnMode(null);
       </AnimatePresence>
 
       {/* Modal para solicitar Folio Interno de Comanda por Sucursal (Rápido POS) 📋 */}
-      <IonModal
-        isOpen={showFolioModal}
-        onDidDismiss={() => {
-          setShowFolioModal(false);
-          setFolioModalError(null);
-        }}
-        style={{ "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
-      >
-        <div className="p-6 bg-slate-900 text-white rounded-3xl max-w-md mx-auto shadow-2xl border border-slate-800 w-full">
-          <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-            <div>
-              <h2 className="text-xl font-black text-amber-400 flex items-center gap-2">
-                <span>📋</span> Captura de Folio Interno
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Sucursal: <strong className="text-slate-200">{selectedTenant?.name || "General"}</strong>
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setShowFolioModal(false);
-                setFolioModalError(null);
-              }}
-              className="text-slate-400 hover:text-white p-2 text-lg font-bold"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="my-4 bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 text-xs flex justify-between items-center">
-            <span className="text-slate-400">Último folio registrado:</span>
-            <strong className="text-emerald-400 font-mono text-sm ml-1">
-              {suggestedLastFolio ? `#${suggestedLastFolio}` : "Sin folios previos"}
-            </strong>
-          </div>
-
-          {folioModalError && (
-            <div className="mb-4 p-3 bg-red-950/90 border border-red-500/80 text-red-200 text-xs rounded-xl flex items-start gap-2 font-medium">
-              <span className="text-base">⚠️</span>
-              <div className="flex-1">{folioModalError}</div>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
-              <div className="inline-block px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-bold mb-2">
-                {folioStep === 1 ? "Paso 1 de 2: Ingrese Folio" : "Paso 2 de 2: Confirme el Folio"}
-              </div>
-              <p className="text-sm font-semibold text-slate-300 mb-3">
-                {folioStep === 1
-                  ? "Escribe el folio interno y presiona ENTER ↵"
-                  : `Vuelve a escribir el folio y presiona ENTER ↵`}
-              </p>
-
-              <input
-                ref={folioInputRef}
-                type="text"
-                value={folioInputValue}
-                disabled={isGeneratingOrder}
-                onChange={(e) => {
-                  setFolioInputValue(e.target.value);
-                  if (folioModalError) setFolioModalError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (!isGeneratingOrder) handleFolioStepSubmit();
-                  }
-                }}
-                placeholder={folioStep === 1 ? "Ingresa folio (ej: 105)" : "Confirma el folio"}
-                className="w-full bg-slate-900 border-2 border-emerald-500 focus:border-amber-400 rounded-xl px-4 py-3 text-2xl text-center font-mono font-bold text-white outline-none transition-all placeholder:text-slate-600 placeholder:text-base disabled:opacity-50"
-                autoFocus
-              />
-              <span className="block text-[11px] text-slate-500 mt-2 font-medium">
-                ⏎ Presiona ENTER para {folioStep === 1 ? "continuar" : "enviar comanda"}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            <button
-              disabled={isGeneratingOrder}
-              onClick={() => {
-                setShowFolioModal(false);
-                setFolioModalError(null);
-              }}
-              className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all text-sm disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              disabled={isGeneratingOrder}
-              onClick={handleFolioStepSubmit}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <span>
-                {isGeneratingOrder
-                  ? "Procesando..."
-                  : folioStep === 1
-                    ? "Siguiente ➔"
-                    : "Confirmar y Enviar 🍳"}
-              </span>
-            </button>
-          </div>
-        </div>
-      </IonModal>
+<FolioModal
+          showFolioModal={showFolioModal}
+          setShowFolioModal={setShowFolioModal}
+          currentFolio={currentFolio}
+          setCurrentFolio={setCurrentFolio}
+          currentFolioPrefix={currentFolioPrefix}
+          setCurrentFolioPrefix={setCurrentFolioPrefix}
+          handleSaveFolioChanges={handleSaveFolioChanges}
+        />
 
       {/* Modal para solicitar Teléfono Celular de Referencia al requerir factura */}
-        <IonModal
-          isOpen={showInvoicePhoneModal}
-          onDidDismiss={() => {
-            setShowInvoicePhoneModal(false);
-            setPendingInvoiceTarget(null);
-          }}
-          style={{
-            "--height": "auto",
-            "--max-height": "90vh",
-            "--width": "92%",
-            "--max-width": "460px",
-            "--border-radius": "28px",
-            "--z-index": "99999",
-            "zIndex": 99999,
-          }}
-        >
-          <IonContent className="ion-padding" style={{ "--background": "#0f172a" }}>
-
-          <div className="flex flex-col bg-slate-900 text-white p-6 justify-between rounded-3xl">
-            <div>
-              <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-bold border border-amber-500/30">
-                    🧾
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Facturación</h2>
-                    <p className="text-xs text-slate-400">Celular de Referencia</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowInvoicePhoneModal(false);
-                    setPendingInvoiceTarget(null);
-                  }}
-                  className="w-9 h-9 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-lg hover:bg-slate-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-300 mb-4 leading-relaxed bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
-                Para registrar la solicitud de factura, ingrese el celular de referencia del cliente. <span className="font-bold text-amber-400">Por seguridad debe capturarlo 2 veces.</span>
-              </p>
-
-              {invoicePhoneError && (
-                <div className="mb-4 p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
-                  <span>{invoicePhoneError}</span>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    1. Teléfono Celular (10 dígitos)
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="Ej. 6671234567"
-                    value={inputInvoicePhone}
-                    onChange={(e) => setInputInvoicePhone(e.target.value.replace(/\D/g, ""))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
-                    autoFocus
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    2. Confirmar Teléfono Celular (Repetir)
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="Ej. 6671234567"
-                    value={inputInvoicePhoneConfirm}
-                    onChange={(e) => setInputInvoicePhoneConfirm(e.target.value.replace(/\D/g, ""))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInvoicePhoneModal(false);
-                  setPendingInvoiceTarget(null);
-                }}
-                className="flex-1 bg-slate-800 text-slate-300 font-bold py-3.5 rounded-xl hover:bg-slate-700 transition text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmInvoicePhone}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition text-sm"
-              >
-                Guardar y Requerir
-              </button>
-            </div>
-          </div>
-          </IonContent>
-
-        </IonModal>
+<InvoicePhoneModal
+          showInvoicePhoneModal={showInvoicePhoneModal}
+          setShowInvoicePhoneModal={setShowInvoicePhoneModal}
+          invoicePhoneNumber={invoicePhoneNumber}
+          setInvoicePhoneNumber={setInvoicePhoneNumber}
+          handleSendInvoiceByWhatsApp={handleSendInvoiceByWhatsApp}
+        />
 
       <IonAlert
         isOpen={deleteConfirmation.isOpen}
