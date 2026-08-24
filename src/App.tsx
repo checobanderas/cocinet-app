@@ -85,6 +85,8 @@ import { ExpensesView } from './components/views/ExpensesView';
 import { GestionCuentasView } from './components/views/GestionCuentasView';
 import { CorteTabla2View } from './components/views/CorteTabla2View';
 import { ReporteMovimientosView } from './components/views/ReporteMovimientosView';
+import { MaterialHeaderView } from './components/views/MaterialHeaderView';
+import { PrecuentaItemView } from './components/views/PrecuentaItemView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
@@ -7256,164 +7258,25 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     />
   );;
 
-  const renderMaterialHeader = (options: {
-    title: string;
-    subtitle?: string;
-    showBack?: boolean;
-    onBack?: () => void;
-    showMenu?: boolean;
-    actions?: React.ReactNode;
-    minimal?: boolean;
-  }) => {
-    const { title, subtitle, showBack = false, onBack, showMenu = true, actions, minimal = false } = options;
-    const currentOpDay = getOperatingDay(new Date());
-    const unreadCount = notificationsList.filter(
-      (n) => !n.read && getOperatingDay(n.createdAt ? new Date(n.createdAt) : new Date()) === currentOpDay
-    ).length;
-
-    return (
-      <IonHeader className="ion-no-border" style={{ zIndex: 100 }}>
-        <div 
-          className={`w-full text-white shadow-lg border-b select-none transition-all duration-500 ${
-            isOnline 
-              ? "bg-black border-neutral-900" 
-              : "bg-red-600 border-red-700"
-          }`}
-          style={{
-            fontFamily: "'Space Grotesk', sans-serif",
-            padding: "10px 16px",
-          }}
-        >
-          <div className="flex items-center justify-between gap-3 h-14">
-            {/* Left Section: Back or Menu Button */}
-            <div className="flex items-center gap-3">
-              {showBack ? (
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onBack || (() => setAppMode("floorplan"))}
-                  className="w-10 h-10 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-lg flex items-center justify-center transition border-none cursor-pointer outline-none shadow-sm text-amber-400"
-                  title="Retroceder"
-                >
-                  ⬅️
-                </motion.button>
-              ) : showMenu ? (
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowSidebar(true)}
-                  className="w-10 h-10 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-lg flex items-center justify-center transition border-none cursor-pointer outline-none shadow-sm"
-                  title="Menú Principal"
-                >
-                  <IonIcon icon={menuOutline} style={{ fontSize: "22px", color: "white" }} />
-                </motion.button>
-              ) : null}
-
-              {/* Title Section */}
-              <div className="text-left flex flex-col justify-center leading-tight">
-                <h1 className="text-sm sm:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[140px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg m-0">
-                  {title}
-                </h1>
-                {subtitle && (
-                  <span className="text-[9px] sm:text-[11px] text-slate-300 font-bold tracking-normal truncate max-w-[140px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg">
-                    {subtitle}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Right Section: User details & Notifications & Actions & Logout */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {actions}
-
-              {/* Notifications Button */}
-              {!minimal && currentUser && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowNotificationModal(true)}
-                  className="relative w-9 h-9 rounded-full bg-indigo-900/40 hover:bg-indigo-800 flex items-center justify-center text-lg border-none cursor-pointer outline-none transition"
-                  title="Notificaciones"
-                >
-                  🔔
-                  {unreadCount > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center font-black shadow-md border border-white animate-bounce">
-                      {unreadCount}
-                    </div>
-                  )}
-                </motion.button>
-              )}
-
-              {/* Branch indicator & Switcher button */}
-              {!minimal && selectedTenant && (
-                <div className="flex items-center gap-1.5">
-                  <div className="hidden sm:flex items-center px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
-                      🏢 {selectedTenant.name}
-                    </span>
-                  </div>
-
-                  {(isOwnerUnlocked || currentUser?.role === "owner" || currentUser?.role === "supervisor" || isMasterAdmin) && (
-                    <motion.button
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowBranchSwitcherModal(true)}
-                      className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] uppercase flex items-center gap-1 shadow-md border border-indigo-400/40 cursor-pointer"
-                      title="Cambiar de Sucursal (Patrón / Supervisor)"
-                    >
-                      <span>🚪</span>
-                      <span className="hidden xs:inline">Cambiar Sucursal</span>
-                    </motion.button>
-                  )}
-                </div>
-              )}
-
-              {!minimal && currentUser && (
-                <div className="hidden md:flex flex-col items-end text-right leading-none gap-0.5">
-                  <span className="text-[11px] font-black text-slate-200">{currentUser.name}</span>
-                  <span className="text-[8px] font-black uppercase text-amber-500 tracking-wider">
-                    {currentUser.role}
-                  </span>
-                </div>
-              )}
-
-              {/* Quick switch profile 👤🔄 */}
-              {!minimal && currentUser && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setCurrentUser(null);
-                    setSelectedLoginUser(null);
-                    setLoginSubStep("user");
-                    localStorage.removeItem("pos_current_user");
-                  }}
-                  className="w-9 h-9 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-sm flex items-center justify-center border-none cursor-pointer outline-none transition"
-                  title="Cambiar Usuario 👤🔄"
-                >
-                  👤🔄
-                </motion.button>
-              )}
-
-              {/* Logout Button (Cerrar Sesión) */}
-              {!minimal && currentUser && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleLogout}
-                  className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1 transition border-none shadow-md shadow-rose-900/20 cursor-pointer outline-none"
-                  title="Cerrar Sesión Completa"
-                >
-                  <span className="hidden sm:inline">Cerrar Sesión</span>
-                  <span>🚪</span>
-                </motion.button>
-              )}
-            </div>
-          </div>
-        </div>
-      </IonHeader>
-    );
-  };
+  const renderMaterialHeader = (options: {     title: string;     subtitle?: string;     showBack?: boolean;     onBack?: () => void;     showMenu?: boolean;     actions?: React.ReactNode;     minimal?: boolean;   }) => (
+    <MaterialHeaderView
+      currentUser={currentUser}
+      handleLogout={handleLogout}
+      isMasterAdmin={isMasterAdmin}
+      isOnline={isOnline}
+      isOwnerUnlocked={isOwnerUnlocked}
+      notificationsList={notificationsList}
+      selectedTenant={selectedTenant}
+      setAppMode={setAppMode}
+      setCurrentUser={setCurrentUser}
+      setLoginSubStep={setLoginSubStep}
+      setSelectedLoginUser={setSelectedLoginUser}
+      setShowBranchSwitcherModal={setShowBranchSwitcherModal}
+      setShowNotificationModal={setShowNotificationModal}
+      setShowSidebar={setShowSidebar}
+      options={options}
+    />
+  );;
 
   const renderLogin = () => (
     <LoginView
@@ -11134,237 +10997,18 @@ Instrucciones:
     />
   );;
 
-  const renderPrecuentaItem = (
-    item: CartItem,
-    showDelete = false,
-    folio?: number,
-    index?: number,
-  ) => {
-    const isCancelled = item.isCancelled;
-    const isPendingCancellation = item.isPendingCancellation;
-    const canSelect = showDelete && !isCancelled && !isPendingCancellation && folio !== undefined;
-    const isSelected = canSelect && (itemsSelectedForCancellation || []).some(
-      (it) => it.folio === folio && it.productId === item.product.id && it.plate === item.plate
-    );
-
-    return (
-      <div
-        key={`item-${item.product.id}-${item.plate}-${folio}-${index}`}
-        onClick={() => {
-          if (canSelect) {
-            const newItem = { folio, productId: item.product.id, plate: item.plate };
-            if (isSelected) {
-              setItemsSelectedForCancellation(prev => prev.filter(it => !(it.folio === folio && it.productId === item.product.id && it.plate === item.plate)));
-            } else {
-              setItemsSelectedForCancellation(prev => [...prev, newItem]);
-            }
-          }
-        }}
-        style={{
-          background: isSelected ? "#fff1f2" : "white",
-          borderBottom: "1px solid #f1f5f9",
-          opacity: isCancelled ? 0.6 : 1,
-          cursor: canSelect ? "pointer" : "default",
-        }}
-      >
-        <div style={{ padding: "8px 12px" }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ flex: 1, marginRight: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
-              {canSelect && (
-                <div 
-                  className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all cursor-pointer ${
-                    isSelected ? "bg-rose-500 border-rose-500 shadow-sm" : "bg-white border-slate-300 hover:border-rose-400"
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const newItem = { folio, productId: item.product.id, plate: item.plate };
-                    if (isSelected) {
-                      setItemsSelectedForCancellation(prev => prev.filter(it => !(it.folio === folio && it.productId === item.product.id && it.plate === item.plate)));
-                    } else {
-                      setItemsSelectedForCancellation(prev => [...prev, newItem]);
-                    }
-                  }}
-                >
-                  {isSelected && <IonIcon icon={checkmarkOutline} className="text-white text-xs font-black" />}
-                </div>
-              )}
-              <div style={{ flex: 1 }}>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  {item.plate > 0 && (
-                    <IonBadge
-                      style={{
-                        background: getComensalColor(item.plate),
-                        fontSize: "0.65rem",
-                        fontWeight: "900",
-                        borderRadius: "6px",
-                        padding: "2px 6px",
-                      }}
-                    >
-                      C{item.plate}
-                    </IonBadge>
-                  )}
-                  <h3
-                    style={{
-                      fontWeight: "900",
-                      margin: 0,
-                      fontSize: "0.95rem",
-                      color: isCancelled ? "#94a3b8" : isPendingCancellation ? "#b45309" : "#1e293b",
-                      lineHeight: "1.2",
-                      textDecoration: isCancelled ? "line-through" : "none",
-                      whiteSpace: "normal",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {getFormattedProductName(item.product)}
-                  </h3>
-                  {isPendingCancellation && (
-                    <IonBadge color="warning" style={{ fontSize: "0.6rem", fontWeight: "bold" }}>EN ESPERA ⏳</IonBadge>
-                  )}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    marginTop: "2px",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#64748b",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    ${item.product.price.toFixed(2)}
-                  </span>
-                  <span style={{ color: "#cbd5e1", fontSize: "0.7rem" }}>•</span>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: isCancelled ? "#94a3b8" : isPendingCancellation ? "#b45309" : "#10b981",
-                      fontWeight: "900",
-                      textDecoration: isCancelled ? "line-through" : "none",
-                    }}
-                  >
-                    ${(item.quantity * item.product.price).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <IonText
-                style={{
-                  fontWeight: "900",
-                  fontSize: "1.1rem",
-                  color: isCancelled ? "#94a3b8" : isPendingCancellation ? "#b45309" : "#1e293b",
-                }}
-              >
-                x{item.quantity}
-              </IonText>
-
-              {isPendingCancellation && folio !== undefined && (
-                <div className="flex gap-1">
-                   <IonButton
-                      fill="clear"
-                      color="danger"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // This will show a PIN modal to authorize
-                        setPendingCancellationTarget({ type: 'item', id: selectedTable!.id, items: [{ folio, productId: item.product.id, plate: item.plate }] });
-                        setShowAuthorizeCancellationModal(true);
-                      }}
-                    >
-                      <IonIcon icon={shieldCheckmarkOutline} slot="icon-only" />
-                   </IonButton>
-                   <IonButton
-                      fill="clear"
-                      color="medium"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRevertItemCancellation(selectedTable!.id, selectedTable, folio, item.product.id, item.plate);
-                      }}
-                    >
-                      <IonIcon icon={refreshOutline} slot="icon-only" />
-                   </IonButton>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {item.notes && (
-            <div
-              style={{
-                marginTop: "8px",
-                background: "#fff7ed",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                fontSize: "0.8rem",
-                color: "#c2410c",
-                border: "1px solid #ffedd5",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "8px",
-              }}
-            >
-              <IonIcon
-                icon={chatbubbleEllipsesOutline}
-                style={{ fontSize: "0.9rem", marginTop: "2px" }}
-              />
-              <span style={{ fontWeight: "bold", lineHeight: "1.4" }}>
-                {item.notes}
-              </span>
-            </div>
-          )}
-
-          {isCancelled && (
-            <div
-              style={{
-                marginTop: "8px",
-                background: "#fef2f2",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                fontSize: "0.75rem",
-                color: "#b91c1c",
-                border: "1px solid #fee2e2",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: "bold",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                <IonIcon icon={closeCircleOutline} />
-                CANCELADO
-              </div>
-              <div style={{ marginTop: "2px" }}>
-                Motivo: {item.cancellationReason}
-              </div>
-              {item.cancelledBy && (
-                <div style={{ marginTop: "2px", opacity: 0.8 }}>
-                  Por: {item.cancelledBy.name}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const renderPrecuentaItem = (     item: CartItem,     showDelete = false,     folio?: number,     index?: number,   ) => (
+    <PrecuentaItemView
+      cancellationReason={cancellationReason}
+      handleRevertItemCancellation={handleRevertItemCancellation}
+      itemsSelectedForCancellation={itemsSelectedForCancellation}
+      selectedTable={selectedTable}
+      setItemsSelectedForCancellation={setItemsSelectedForCancellation}
+      setPendingCancellationTarget={setPendingCancellationTarget}
+      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal}
+      item={item} showDeletefalse={showDeletefalse} folio={folio} index={index}
+    />
+  );;
 
   const renderReview = () => (
     <ReviewView
