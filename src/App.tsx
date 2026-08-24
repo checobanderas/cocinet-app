@@ -13306,11 +13306,16 @@ Instrucciones:
 <FolioModal
           showFolioModal={showFolioModal}
           setShowFolioModal={setShowFolioModal}
-          currentFolio={currentFolio}
-          setCurrentFolio={setCurrentFolio}
-          currentFolioPrefix={currentFolioPrefix}
-          setCurrentFolioPrefix={setCurrentFolioPrefix}
-          handleSaveFolioChanges={handleSaveFolioChanges}
+          setFolioModalError={setFolioModalError}
+          selectedTenant={selectedTenant}
+          suggestedLastFolio={suggestedLastFolio}
+          folioModalError={folioModalError}
+          folioStep={folioStep}
+          folioInputRef={folioInputRef}
+          folioInputValue={folioInputValue}
+          isGeneratingOrder={isGeneratingOrder}
+          setFolioInputValue={setFolioInputValue}
+          handleFolioStepSubmit={handleFolioStepSubmit}
         />
 
       {/* Modal para solicitar Teléfono Celular de Referencia al requerir factura */}

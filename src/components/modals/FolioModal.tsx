@@ -5,22 +5,31 @@ import { closeOutline, saveOutline } from 'ionicons/icons';
 interface FolioModalProps {
   showFolioModal: boolean;
   setShowFolioModal: (v: boolean) => void;
-  // Let's add any props passed in
-  currentFolio: any;
-  setCurrentFolio: (v: any) => void;
-  currentFolioPrefix: any;
-  setCurrentFolioPrefix: (v: any) => void;
-  handleSaveFolioChanges: () => void;
+  setFolioModalError: (v: any) => void;
+  selectedTenant: any;
+  suggestedLastFolio: any;
+  folioModalError: any;
+  folioStep: any;
+  folioInputRef: any;
+  folioInputValue: any;
+  isGeneratingOrder: boolean;
+  setFolioInputValue: (v: any) => void;
+  handleFolioStepSubmit: () => void;
 }
 
 export const FolioModal: React.FC<FolioModalProps> = ({
   showFolioModal,
   setShowFolioModal,
-  currentFolio,
-  setCurrentFolio,
-  currentFolioPrefix,
-  setCurrentFolioPrefix,
-  handleSaveFolioChanges
+  setFolioModalError,
+  selectedTenant,
+  suggestedLastFolio,
+  folioModalError,
+  folioStep,
+  folioInputRef,
+  folioInputValue,
+  isGeneratingOrder,
+  setFolioInputValue,
+  handleFolioStepSubmit
 }) => {
   return (
       <IonModal
