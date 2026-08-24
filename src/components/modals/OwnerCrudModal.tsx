@@ -1,23 +1,47 @@
-import React from "react";
-import { IonModal } from "@ionic/react";
+import React from 'react';
+import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
+import { trashOutline, saveOutline, closeOutline } from 'ionicons/icons';
 
 interface OwnerCrudModalProps {
   showOwnerCrudModal: boolean;
-  setShowOwnerCrudModal: (show: boolean) => void;
+  setShowOwnerCrudModal: (v: boolean) => void;
+  editingOwner: any;
+  setEditingOwner: (v: any) => void;
+  formOwnerName: string;
+  setFormOwnerName: (v: string) => void;
+  formOwnerPin: string;
+  setFormOwnerPin: (v: string) => void;
+  formOwnerSupervisorPin: string;
+  setFormOwnerSupervisorPin: (v: string) => void;
+  formOwnerAccent: string;
+  setFormOwnerAccent: (v: string) => void;
+  formOwnerLogo: string;
+  setFormOwnerLogo: (v: string) => void;
+  formOwnerAvatar: string;
+  setFormOwnerAvatar: (v: string) => void;
+  handleSaveOwner: () => Promise<void>;
+  handleDeleteOwner: () => Promise<void>;
+  triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
 }
 
 export const OwnerCrudModal: React.FC<OwnerCrudModalProps> = ({
   showOwnerCrudModal,
   setShowOwnerCrudModal,
-}) => {
-  if (!showOwnerCrudModal) return null;
-
-  return (
-    <IonModal isOpen={showOwnerCrudModal} onDidDismiss={() => setShowOwnerCrudModal(false)}>
-      <div className="p-6">
-        <h2 className="text-xl font-bold">Administración de Propietarios</h2>
-        <button onClick={() => setShowOwnerCrudModal(false)}>Cerrar</button>
-      </div>
-    </IonModal>
-  );
-};
+  editingOwner,
+  setEditingOwner,
+  formOwnerName,
+  setFormOwnerName,
+  formOwnerPin,
+  setFormOwnerPin,
+  formOwnerSupervisorPin,
+  setFormOwnerSupervisorPin,
+  formOwnerAccent,
+  setFormOwnerAccent,
+  formOwnerLogo,
+  setFormOwnerLogo,
+  formOwnerAvatar,
+  setFormOwnerAvatar,
+  handleSaveOwner,
+  handleDeleteOwner,
+  triggerAppNotification
+}) => {};
