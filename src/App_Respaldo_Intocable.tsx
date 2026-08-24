@@ -22,7 +22,13 @@ import {
   getCompanyCatalog
 } from "./utils/appHelpers";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { SwitchTenantOverlay } from './components/modals/SwitchTenantOverlay';
+import { PinModalOverlay } from './components/modals/PinModalOverlay';
+import { CancellationPinPad } from './components/common/CancellationPinPad';
+import { FolioModal } from './components/modals/FolioModal';
+import { InvoiceModal } from './components/modals/InvoiceModal';
+
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -280,9 +286,6 @@ type Destination = "kitchen" | "bar";
 type UserRole = "mesero" | "cajero" | "admin";
 
 import { CompanyTenant, DEFAULT_COMPANY_CATALOG } from "./utils/companyCatalog";
-import { PinsStructureModal } from './components/modals/PinsStructureModal';
-import { DeviceRequestsModal } from './components/modals/DeviceRequestsModal';
-import { BluetoothConfigModal } from './components/modals/BluetoothConfigModal';
 
 let COMPANY_CATALOG: CompanyTenant[] = (() => {
   try {
@@ -1279,7 +1282,7 @@ export default function App() {
         }
       }
 
-      setMenuToastMessage(`${title}\import { ConfigurePrefixModal } from './components/modals/ConfigurePrefixModal';\nn${body}`);
+      setMenuToastMessage(`${title}\n${body}`);
       setShowMenuToast(true);
     };
 
@@ -2401,35 +2404,6 @@ export default function App() {
   const [isSwitchingTenant, setIsSwitchingTenant] = useState<boolean>(false);
   const [switchingTenantName, setSwitchingTenantName] = useState<string>("");
 
-  const renderSwitchingTenantOverlay = () => {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 999999,
-          background: "rgba(15, 23, 42, 0.85)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-        }}
-      >
-        <IonSpinner name="crescent" style={{ width: "64px", height: "64px", color: "#6366f1", marginBottom: "20px" }} />
-        <h2 style={{ fontSize: "1.4rem", fontWeight: "800", margin: "0 0 8px 0" }}>
-          🔄 Conectando a {switchingTenantName || "Sucursal"}...
-        </h2>
-        <p style={{ color: "#94a3b8", fontSize: "0.9rem", margin: 0 }}>
-          Sincronizando base de datos y catálogo de productos...
-        </p>
-      </div>
-    );
-  };
 
   const [customOwners, setCustomOwners] = useState<any[]>(() => {
     try {
@@ -4791,7 +4765,7 @@ export default function App() {
   };
 
   const [mainTab, setMainTab] = useState<"mesas" | "comandas" | "cuentas">(
-    "mesas",
+    window.innerWidth >= 768 ? "cuentas" : "mesas",
   );
   const [activeCategory, setActiveCategory] = useState<
     "food" | "drinks" | "desserts"
@@ -7545,125 +7519,470 @@ export default function App() {
     );
   };
 
+  const renderBluetoothConfigModal = () => {
+    if (!showBluetoothConfigModal) return null;
 
-  const renderPinModalOverlay = () => {
-    if (!pendingTenant) return null;
+    const tenantName = selectedTenant?.name || "Sucursal Actual";
+
+    const updateAreaConfig = (areaKey: string, key: keyof AreaPrinterSetting, val: any) => {
+      setTenantPrinterConfig((prev) => {
+        const current = prev[areaKey] || {
+          id: areaKey,
+          name: areaKey,
+          mode: "windows",
+          printerName: areaKey,
+          windowsPort: "3010",
+        };
+        return {
+          ...prev,
+          [areaKey]: {
+            ...current,
+            [key]: val,
+          },
+        };
+      });
+    };
+
+    const handleAddArea = () => {
+      if (!newAreaName.trim()) {
+        triggerAppNotification("⚠️ Nombre Requerido", "Ingresa un nombre para la nueva área (ej. Comal).", "warning");
+        return;
+      }
+      const key = newAreaName.toLowerCase().trim().replace(/[^a-z0-9]/g, "_");
+      if (tenantPrinterConfig[key]) {
+        triggerAppNotification("⚠️ Área Existente", "Ya existe un área de impresión con este nombre.", "warning");
+        return;
+      }
+      const newSetting: AreaPrinterSetting = {
+        id: key,
+        name: newAreaName.trim(),
+        emoji: newAreaEmoji.trim() || "🖨️",
+        mode: "windows",
+        printerName: key,
+        windowsPort: "3010",
+        isCustom: true,
+      };
+      setTenantPrinterConfig((prev) => ({ ...prev, [key]: newSetting }));
+      setNewAreaName("");
+      triggerAppNotification("✅ Área Creada", `Área de impresión "${newAreaName.trim()} ${newAreaEmoji}" agregada.`, "success");
+    };
+
+    const handleDeleteArea = (key: string) => {
+      setTenantPrinterConfig((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      triggerAppNotification("🗑️ Área Eliminada", "Se eliminó el área personalizada.", "info");
+    };
+
+    const handleAddCategory = () => {
+      if (!newCatName.trim()) {
+        triggerAppNotification("⚠️ Nombre Requerido", "Ingresa un nombre para la nueva categoría (ej. Comal).", "warning");
+        return;
+      }
+      const id = newCatName.toLowerCase().trim().replace(/[^a-z0-9]/g, "_");
+      if (productCategories.some((c) => c.id === id)) {
+        triggerAppNotification("⚠️ Categoría Existente", "Ya existe una categoría con este nombre.", "warning");
+        return;
+      }
+      const newCat: ProductCategorySetting = {
+        id,
+        name: newCatName.trim(),
+        emoji: newCatEmoji.trim() || "🍽️",
+        destination: newCatDest || "cocina",
+      };
+      setProductCategories((prev) => [...prev, newCat]);
+      setNewCatName("");
+      triggerAppNotification("✅ Categoría Creada", `Categoría "${newCatName.trim()} ${newCatEmoji}" creada exitosamente.`, "success");
+    };
+
+    const handleDeleteCategory = (catId: string) => {
+      if (["food", "drinks", "desserts"].includes(catId)) {
+        triggerAppNotification("⚠️ Categoría por Defecto", "Las categorías principales no se pueden eliminar.", "warning");
+        return;
+      }
+      setProductCategories((prev) => prev.filter((c) => c.id !== catId));
+      triggerAppNotification("🗑️ Categoría Eliminada", "Categoría personalizada eliminada.", "info");
+    };
+
+    const activeAreaKeys = Object.keys(tenantPrinterConfig);
 
     return (
-      <div
-        style={{ zIndex: 9999999 }}
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none"
+      <IonModal
+        isOpen={showBluetoothConfigModal}
+        onDidDismiss={() => setShowBluetoothConfigModal(false)}
+        style={{
+          "--height": "auto",
+          "--max-height": "94vh",
+          "--width": "100%",
+          "--max-width": "720px",
+          "--border-radius": "24px",
+        }}
       >
-        <div
-          className="bg-slate-900 border border-slate-850 rounded-3xl max-w-sm w-full p-6 text-white text-center space-y-6 shadow-2xl relative"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="p-6 bg-white space-y-5 overflow-y-auto max-h-[90vh]">
           {/* Header */}
-          <div className="space-y-2">
-            <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner animate-bounce">
-              🔒
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 text-xl font-black shadow-sm">
+                🖨️
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 m-0">Configuración de Impresoras y Categorías</h2>
+                <p className="text-xs font-bold text-indigo-600 m-0 flex items-center gap-1 mt-0.5">
+                  <span>🏢 Empresa / Inquilino:</span>
+                  <span className="bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md font-black">{tenantName}</span>
+                </p>
+              </div>
             </div>
-            <h3 className="text-sm font-black tracking-wider uppercase text-rose-400 m-0 p-0">
-              CÓDIGO REQUERIDO 🔑
-            </h3>
-            <p className="text-[11.5px] text-slate-300 font-bold leading-relaxed px-2 m-0 p-0">
-              Ingresa el PIN de seguridad de{" "}
-              <span className="text-white font-extrabold underline decoration-rose-500">
-                4 dígitos
-              </span>{" "}
-              para poder habilitar la sincronización de datos de esta sucursal:
-            </p>
-            <div className="bg-slate-800 border border-slate-700/60 py-2 px-3.5 rounded-2xl inline-block font-black text-xs text-indigo-400">
-              🏢 {pendingTenant.name} ({pendingTenant.type})
-            </div>
-          </div>
-
-          {/* Code Dots indicators */}
-          <div className="flex justify-center gap-4 py-1">
-            {[0, 1, 2, 3].map((index) => {
-              const hasDigit = typedPin.length > index;
-              return (
-                <div
-                  key={index}
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black transition-all duration-200 ${
-                    hasDigit
-                      ? "bg-rose-500 text-white shadow-[0_4px_12px_rgba(239,68,68,0.4)] ring-2 ring-rose-500/30 text-xl scale-105"
-                      : "bg-slate-850 border border-slate-800 text-slate-500"
-                  }`}
-                >
-                  {hasDigit ? "●" : ""}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Numeric Pad Grid */}
-          <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 space-y-2.5">
-            <div className="grid grid-cols-3 gap-2">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => handlePinNumericPress(num)}
-                  style={{ touchAction: "manipulation" }}
-                  className="bg-slate-850 hover:bg-slate-800 text-white h-12 rounded-2xl text-lg font-black shadow flex items-center justify-center active:scale-95 transition-all outline-none border-none cursor-pointer"
-                >
-                  {num}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => handlePinNumericPress("CLEAR")}
-                style={{ touchAction: "manipulation" }}
-                className="bg-rose-950/40 hover:bg-rose-950/60 border border-rose-900/30 text-rose-300 h-12 rounded-2xl text-xs font-black shadow flex items-center justify-center active:scale-95 transition-all outline-none border-none cursor-pointer"
-              >
-                Limpiar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handlePinNumericPress("0")}
-                style={{ touchAction: "manipulation" }}
-                className="bg-slate-850 hover:bg-slate-800 text-white h-12 rounded-2xl text-lg font-black shadow flex items-center justify-center active:scale-95 transition-all outline-none border-none cursor-pointer"
-              >
-                0
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handlePinNumericPress("BACKSPACE")}
-                style={{ touchAction: "manipulation" }}
-                className="bg-slate-850 hover:bg-slate-800 text-slate-300 h-12 rounded-2xl text-[11px] font-black shadow flex items-center justify-center gap-1 active:scale-95 transition-all outline-none border-none cursor-pointer"
-              >
-                <IonIcon icon={backspaceOutline} style={{ fontSize: "14px" }} />
-                Borrar
-              </button>
-            </div>
-
             <button
-              type="button"
-              onClick={() => {
-                setShowTenantPinModal(false);
-                setPendingTenant(null);
-                setTypedPin("");
-              }}
-              style={{ touchAction: "manipulation" }}
-              className="w-full bg-slate-900 hover:bg-slate-805 text-rose-400 border border-rose-500/20 font-black text-xs py-3 rounded-2xl tracking-tight transition active:scale-95 shadow cursor-pointer border-none outline-none text-center"
+              onClick={() => setShowBluetoothConfigModal(false)}
+              className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition cursor-pointer"
             >
-              🚫 Cancelar Selección
+              ✕
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500 font-bold uppercase tracking-wider">
-            <span>🛡️</span> <span>SISTEMA DE SEGURIDAD MULTI-SUCURSAL</span>
+          {/* Selector de Pestañas */}
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1 text-xs font-black">
+            <button
+              type="button"
+              onClick={() => setConfigModalTab("printers")}
+              className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                configModalTab === "printers" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <span>🖨️ Áreas e Impresoras</span>
+              <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                {activeAreaKeys.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfigModalTab("categories")}
+              className={`flex-1 py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                configModalTab === "categories" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <span>🏷️ Categorías y Emojis</span>
+              <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                {productCategories.length}
+              </span>
+            </button>
+          </div>
+
+          {/* TAB 1: IMPRESORAS Y ÁREAS */}
+          {configModalTab === "printers" && (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-3 text-xs text-slate-700 space-y-1">
+                <div className="font-extrabold text-blue-900 flex items-center gap-1.5">
+                  <span>🔀 Impresoras Mixtas y Pitidos de Atención (4 Beeps)</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed font-semibold m-0">
+                  Asigna el modo de impresión (Windows, Bluetooth Nativo o RawBT) a cada área. Las impresoras Bluetooth emitirán 4 pitidos para alertar al personal.
+                </p>
+              </div>
+
+              {/* Lista de Áreas */}
+              <div className="space-y-3">
+                {activeAreaKeys.map((areaKey) => {
+                  const cfg = tenantPrinterConfig[areaKey] || { id: areaKey, name: areaKey, mode: "windows", printerName: areaKey, windowsPort: "3010" };
+                  const areaTitle = `${cfg.emoji || "🖨️"} ${cfg.name || areaKey.toUpperCase()}`;
+
+                  return (
+                    <div key={areaKey} className="border rounded-2xl p-4 space-y-3 bg-slate-50/70 border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                            {areaTitle}
+                          </span>
+                          {cfg.isCustom && (
+                            <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              Personalizada
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleTestPrinter(areaKey as any, cfg.printerName)}
+                            className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold px-3 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                          >
+                            📄 Probar
+                          </button>
+                          {cfg.isCustom && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteArea(areaKey)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold px-2.5 py-1 rounded-xl text-xs transition cursor-pointer"
+                              title="Eliminar Área"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-bold">
+                        <div>
+                          <label className="block text-[11px] text-slate-600 uppercase mb-1">
+                            Tipo de Conexión:
+                          </label>
+                          <select
+                            value={cfg.mode}
+                            onChange={(e) => updateAreaConfig(areaKey, "mode", e.target.value as PrinterMode)}
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                          >
+                            <option value="windows">🖥️ Puerto de Windows (Sentinel)</option>
+                            <option value="bluetooth">📱 Bluetooth Directo (Nativo GATT)</option>
+                            <option value="rawbt">📲 App RawBT (Android Intent)</option>
+                            <option value="disabled">🚫 Deshabilitado (No imprimir)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 uppercase mb-1">
+                            {cfg.mode === "windows" ? "Nombre / Impresora en Windows:" : "Nombre / Dispositivo Bluetooth:"}
+                          </label>
+                          {cfg.mode === "windows" && availableWindowsPrinters.length > 0 ? (
+                            <select
+                              value={cfg.printerName}
+                              onChange={(e) => updateAreaConfig(areaKey, "printerName", e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">-- Seleccionar Impresora --</option>
+                              {cfg.printerName && !availableWindowsPrinters.includes(cfg.printerName) && (
+                                <option value={cfg.printerName}>{cfg.printerName} (Actual)</option>
+                              )}
+                              {availableWindowsPrinters.map((p) => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={cfg.printerName}
+                              onChange={(e) => updateAreaConfig(areaKey, "printerName", e.target.value)}
+                              placeholder={`Ej. Impresora ${areaKey}`}
+                              className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {cfg.mode === "windows" && (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs font-bold">
+                          <span className="text-[11px] text-slate-600">Puerto del Sentinel en Windows:</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={cfg.windowsPort || "3010"}
+                              onChange={(e) => updateAreaConfig(areaKey, "windowsPort", e.target.value.replace(/\D/g, ""))}
+                              placeholder="3010"
+                              className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-center font-mono font-black text-slate-800"
+                            />
+                            <button
+                              type="button"
+                              onClick={fetchWindowsPrinters}
+                              className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold hover:bg-blue-100 cursor-pointer"
+                            >
+                              🔄 Buscar Impresoras
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {cfg.mode === "bluetooth" && (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs font-bold">
+                          <div className="flex items-center gap-1.5">
+                            {activeBtConnections[areaKey] ? (
+                              <span className="text-emerald-600 flex items-center gap-1">
+                                🟢 Conectado por Bluetooth {cfg.printerName ? `(${cfg.printerName})` : ""}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 flex items-center gap-1">
+                                🔴 No vinculado {cfg.printerName ? `(${cfg.printerName})` : ""}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleScanBluetoothDevice(areaKey as any)}
+                            disabled={isScanningBt}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] transition shadow-2xs disabled:opacity-50 cursor-pointer"
+                          >
+                            🔍 Buscar y Vincular BT
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Formulario Crear Nueva Área de Impresión */}
+              <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 space-y-2 text-xs">
+                <span className="font-extrabold text-indigo-900 flex items-center gap-1">
+                  ➕ Agregar Nueva Área de Impresión (ej. Comal 🫓)
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newAreaEmoji}
+                    onChange={(e) => setNewAreaEmoji(e.target.value)}
+                    placeholder="🫓"
+                    className="w-12 bg-white border border-indigo-200 rounded-xl p-2 text-center text-sm font-black text-slate-800"
+                    title="Emoji"
+                  />
+                  <input
+                    type="text"
+                    value={newAreaName}
+                    onChange={(e) => setNewAreaName(e.target.value)}
+                    placeholder="Nombre del Área (ej. Comal, Parrilla, Postres)"
+                    className="flex-1 bg-white border border-indigo-200 rounded-xl p-2 text-xs font-bold text-slate-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddArea}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2 rounded-xl text-xs shadow-xs cursor-pointer"
+                  >
+                    Crear Área
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CATEGORÍAS DE PRODUCTOS */}
+          {configModalTab === "categories" && (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3 text-xs text-slate-700 space-y-1">
+                <div className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                  <span>🏷️ Categorías de Menú y Puntos de Impresión</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed font-semibold m-0">
+                  Crea categorías dinámicas para tus productos (ej. Comal 🫓) con su emoji y conéctalas con su área de impresión correspondiente.
+                </p>
+              </div>
+
+              {/* Lista de Categorías */}
+              <div className="space-y-2.5">
+                {productCategories.map((cat) => (
+                  <div key={cat.id} className="border border-slate-200 rounded-2xl p-3 bg-white flex items-center justify-between shadow-2xs gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl bg-slate-100 w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 shadow-2xs">
+                        {cat.emoji || "🍽️"}
+                      </span>
+                      <div>
+                        <span className="text-xs font-black text-slate-800 block">
+                          {cat.name}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          Imprime en: {tenantPrinterConfig[cat.destination]?.name || cat.destination}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={cat.destination}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setProductCategories((prev) =>
+                            prev.map((c) => (c.id === cat.id ? { ...c, destination: val } : c))
+                          );
+                        }}
+                        className="bg-slate-50 border border-slate-200 rounded-xl p-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+                      >
+                        {activeAreaKeys.map((areaKey) => (
+                          <option key={areaKey} value={areaKey}>
+                            {tenantPrinterConfig[areaKey]?.emoji || "🖨️"} {tenantPrinterConfig[areaKey]?.name || areaKey}
+                          </option>
+                        ))}
+                      </select>
+
+                      {!["food", "drinks", "desserts"].includes(cat.id) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold px-2 py-1.5 rounded-xl text-xs transition cursor-pointer"
+                          title="Eliminar Categoría"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Formulario Crear Nueva Categoría */}
+              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-2 text-xs">
+                <span className="font-extrabold text-amber-900 flex items-center gap-1">
+                  ➕ Agregar Nueva Categoría de Producto (ej. Comal 🫓)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={newCatEmoji}
+                    onChange={(e) => setNewCatEmoji(e.target.value)}
+                    placeholder="🫓 Emoji"
+                    className="w-full bg-white border border-amber-200 rounded-xl p-2 text-center text-xs font-black text-slate-800"
+                  />
+                  <input
+                    type="text"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    placeholder="Nombre Categoría (ej. Comal)"
+                    className="w-full bg-white border border-amber-200 rounded-xl p-2 text-xs font-bold text-slate-800"
+                  />
+                  <select
+                    value={newCatDest}
+                    onChange={(e) => setNewCatDest(e.target.value)}
+                    className="w-full bg-white border border-amber-200 rounded-xl p-2 text-xs font-bold text-slate-800 cursor-pointer"
+                  >
+                    {activeAreaKeys.map((areaKey) => (
+                      <option key={areaKey} value={areaKey}>
+                        {tenantPrinterConfig[areaKey]?.emoji || "🖨️"} {tenantPrinterConfig[areaKey]?.name || areaKey}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCategory}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-2 rounded-xl text-xs shadow-xs cursor-pointer"
+                >
+                  ➕ Crear Categoría de Producto
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Botón de Guardado Principal por Tenant */}
+          <div className="border-t pt-4 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                handleSaveTenantPrinters(tenantPrinterConfig, productCategories);
+                setShowBluetoothConfigModal(false);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 px-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wide cursor-pointer"
+            >
+              <span>💾 GUARDAR IMPRESORAS Y CATEGORÍAS DE</span>
+              <span className="underline decoration-white/40 font-black">{tenantName}</span>
+            </button>
+            <p className="text-[10px] text-slate-400 text-center font-bold m-0">
+              Esta configuración se guardará permanentemente en Firestore para la empresa seleccionada y en el almacenamiento local.
+            </p>
           </div>
         </div>
-      </div>
+      </IonModal>
     );
   };
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isTotalsPinned, setIsTotalsPinned] = useState(false);
   const [selectedAccountForPayment, setSelectedAccountForPayment] =
     useState<ClosedAccount | null>(null);
 
@@ -7969,7 +8288,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       
       // Redirect based on role
       if (selectedLoginUser.role === "mesero") {
-        setAppMode("floorplan");
+        if (window.innerWidth >= 768) {
+          setAppMode("gestion_cuentas");
+        } else {
+          setAppMode("floorplan");
+          setMainTab("mesas");
+        }
       } else {
         setAppMode("corte-tabla");
       }
@@ -9363,22 +9687,238 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         {showTenantCrudModal && renderTenantCrudModal()}
         {showOwnerCrudModal && renderOwnerCrudModal()}
         {/* Device Requests Modal (Master Admin only) */}
-        <DeviceRequestsModal
-          showDeviceRequestsModal={showDeviceRequestsModal}
-          setShowDeviceRequestsModal={setShowDeviceRequestsModal}
-          allDeviceRequests={allDeviceRequests}
-          COMPANY_CATALOG={COMPANY_CATALOG}
-          updateDeviceRequest={updateDeviceRequest}
-        />
+        <IonModal
+          isOpen={showDeviceRequestsModal}
+          onDidDismiss={() => setShowDeviceRequestsModal(false)}
+          style={{
+            "--height": "100%",
+            "--width": "100%",
+            "--max-height": "90vh",
+            "--max-width": "700px",
+            "--border-radius": "24px",
+          }}
+        >
+          <IonHeader className="ion-no-border">
+            <IonToolbar style={{ "--background": "#fff", padding: "8px 16px" }}>
+              <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1e293b", paddingLeft: "0" }}>
+                🔔 Solicitudes de Dispositivos Externos
+              </IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setShowDeviceRequestsModal(false)} color="dark">
+                  <IonIcon icon={closeOutline} />
+                </IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+            <div className="space-y-4 max-w-3xl mx-auto pb-12">
+              <p className="text-sm text-slate-500 mb-6">Administra qué dispositivos tienen acceso a interactuar con una sucursal en específico.</p>
+              
+              {allDeviceRequests.length === 0 ? (
+                <div className="text-center p-8 bg-slate-100 rounded-2xl text-slate-500">
+                  No hay solicitudes de dispositivos pendientes o registradas.
+                </div>
+              ) : (
+                allDeviceRequests.map(req => (
+                  <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                          <i className="fa-solid fa-mobile-screen-button text-indigo-500"></i> {req.deviceName}
+                        </span>
+                        {req.status === "pending" && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Pendiente</span>}
+                        {req.status === "approved" && <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Aprobado</span>}
+                        {req.status === "rejected" && <span className="bg-red-100 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Rechazado</span>}
+                      </div>
+                      <div className="text-sm text-slate-600 mt-1">
+                        <strong>Rol Solicitado:</strong> {req.role}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        ID: {req.deviceId} | Creado: {new Date(req.requestTime).toLocaleString()}
+                      </div>
+                      {req.assignedTenantId && (
+                         <div className="text-xs mt-2 px-2 py-1 bg-slate-100 text-slate-600 rounded-md inline-block border border-slate-200">
+                           <strong>Asignado a:</strong> {COMPANY_CATALOG.find(c => c.id === req.assignedTenantId)?.name || req.assignedTenantId}
+                         </div>
+                      )}
+                    </div>
+                    {req.status === "pending" && (
+                      <div className="w-full md:w-auto p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                        <div className="text-xs font-bold text-slate-700">Asignar Configuración:</div>
+                        <select
+                          className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 outline-none"
+                          onChange={(e) => updateDeviceRequest(req.id, { assignedTenantId: e.target.value })}
+                          value={req.assignedTenantId || ""}
+                        >
+                          <option value="">Seleccionar Sucursal...</option>
+                          {COMPANY_CATALOG.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <div className="flex gap-2">
+                          <div className="w-1/2">
+                            <label className="text-[10px] text-slate-500">Hora Inicio</label>
+                            <input 
+                              type="time" 
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm outline-none" 
+                              value={req.scheduleStart || "14:00"} 
+                              onChange={(e) => updateDeviceRequest(req.id, { scheduleStart: e.target.value })}
+                            />
+                          </div>
+                          <div className="w-1/2">
+                            <label className="text-[10px] text-slate-500">Hora Fin</label>
+                            <input 
+                              type="time" 
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm outline-none" 
+                              value={req.scheduleEnd || "02:00"} 
+                              onChange={(e) => updateDeviceRequest(req.id, { scheduleEnd: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                           <button 
+                             onClick={() => {
+                                if (!req.assignedTenantId) {
+                                  alert("Selecciona una sucursal primero.");
+                                  return;
+                                }
+                                updateDeviceRequest(req.id, { 
+                                  status: "approved", 
+                                  pin: Math.floor(1000 + Math.random() * 9000).toString(),
+                                  scheduleStart: req.scheduleStart || "14:00",
+                                  scheduleEnd: req.scheduleEnd || "02:00"
+                                });
+                             }}
+                             className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2 rounded-lg"
+                           >Aprobar</button>
+                           <button 
+                             onClick={() => updateDeviceRequest(req.id, { status: "rejected" })}
+                             className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs py-2 rounded-lg border border-red-200"
+                           >Rechazar</button>
+                        </div>
+                      </div>
+                    )}
+                    {req.status === "approved" && (
+                       <button onClick={() => updateDeviceRequest(req.id, { status: "rejected" })} className="text-red-500 text-xs px-3 py-1 border border-red-200 rounded-lg hover:bg-red-50">Revocar Acceso</button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </IonContent>
+        </IonModal>
 
         
 
         {/* Modal informativo sobre Estructura Systemática de PINs de Acceso */}
-        <PinsStructureModal
-          showPinsStructureModal={showPinsStructureModal}
-          setShowPinsStructureModal={setShowPinsStructureModal}
-          COMPANY_CATALOG={COMPANY_CATALOG}
-        />
+        <IonModal
+          isOpen={showPinsStructureModal}
+          onDidDismiss={() => setShowPinsStructureModal(false)}
+          style={{
+            "--height": "100%",
+            "--width": "100%",
+            "--max-height": "95vh",
+            "--max-width": "900px",
+            "--border-radius": "24px",
+          }}
+        >
+          <IonHeader className="ion-no-border">
+            <IonToolbar style={{ "--background": "#1e1b4b", padding: "8px 16px" }}>
+              <IonTitle style={{ fontSize: "1.1rem", fontWeight: "900", color: "#ffffff", paddingLeft: "0" }}>
+                🔑 Estructura de PINs por Empresa (Sincronización MySQL) ⚡
+              </IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setShowPinsStructureModal(false)} style={{ "--color": "#ffffff" }}>
+                  <IonIcon icon={closeOutline} />
+                </IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="ion-padding" style={{ "--background": "#0f172a" }}>
+            <div className="space-y-6 text-white pb-12">
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+                <h3 className="text-sm font-black text-rose-400 uppercase tracking-widest">
+                  🔒 Reglas Sincronizadas del Algoritmo del Sistema
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Para fines de simplificación y sincronización continua en bases de datos aisladas con UUIDs únicos, cada sucursal/inquilino <span className="font-mono text-cyan-400">#X</span> (del 1 al 14) hereda un juego de claves en secuencia de un prefijo específico. ¡Esto permite a los dueños, cajeros y garroteros recordar fácilmente todas sus claves de acceso!
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs pt-2">
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span className="font-bold text-amber-400 block mb-1">👑 DUEÑO / PATRÓN</span>
+                    <code className="text-indigo-300">2026 + X</code>
+                    <span className="text-slate-500 block mt-1">(Ej: #1 = 2027, #2 = 2028)</span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span className="font-bold text-cyan-400 block mb-1">👔 GERENTE / ENCARGADO</span>
+                    <code className="text-indigo-300">1526 + X</code>
+                    <span className="text-slate-500 block mt-1">(Ej: #1 = 1527, #2 = 1528)</span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span className="font-bold text-violet-400 block mb-1">⚙️ SISTEMAS / TI</span>
+                    <code className="text-indigo-300">4020</code>
+                    <span className="text-slate-500 block mt-1">(Fijo para todas las sucursales)</span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span className="font-bold text-emerald-400 block mb-1">💵 CAJERO 1 / CAJERO 2</span>
+                    <code className="text-indigo-300">1026 + X / 1126 + X</code>
+                    <span className="text-slate-500 block mt-1">(Ej: #1 = 1027 / 1127)</span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 sm:col-span-2 md:col-span-3">
+                    <span className="font-bold text-rose-400 block mb-1">🤵 MESEROS (DEL 1 AL 3)</span>
+                    <code className="text-indigo-300">0126 + X (Mesero 1) • 0226 + X (Mesero 2) • 0326 + X (Mesero 3)</code>
+                    <span className="text-slate-500 block mt-1">(Ej: #1 = 0127, 0227, 0327)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950 text-slate-400 font-extrabold uppercase border-b border-slate-800">
+                    <tr>
+                      <th className="p-3"># Reg</th>
+                      <th className="p-3">Inquilino / Sucursal</th>
+                      <th className="p-3 text-amber-400">🤠 Patrón</th>
+                      <th className="p-3 text-cyan-400">👔 Gerente</th>
+                      <th className="p-3 text-emerald-400">💵 Cajero 1</th>
+                      <th className="p-3 text-teal-400">💳 Cajero 2</th>
+                      <th className="p-3 text-rose-400">🏃 Meseros (1 a 3)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 font-medium">
+                    {COMPANY_CATALOG.map((c) => {
+                      let parsedNum = parseInt(c.id.replace(/[^0-9]/g, ""), 10);
+                      if (isNaN(parsedNum) || parsedNum <= 0) parsedNum = 1;
+                      const num = (parsedNum % 100) || 1;
+                      const short = c.name
+                        .replace("Los Mas Buscados ", "")
+                        .replace("Los Sombrerudos ", "")
+                        .replace("Taquerias ", "")
+                        .replace("Tacos Roy ", "")
+                        .replace("Tacos y Retacos Roy ", "");
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-850/45 transition-all">
+                          <td className="p-3 font-mono text-slate-400 text-center">#{num}</td>
+                          <td className="p-3 font-bold">
+                            <span className="block text-white leading-tight">{short}</span>
+                            <span className="block text-[10px] text-slate-500">{c.sucursalDefault}</span>
+                          </td>
+                          <td className="p-3 font-mono font-bold text-amber-400">{(2026 + num)}</td>
+                          <td className="p-3 font-mono font-bold text-cyan-400">{(1526 + num)}</td>
+                          <td className="p-3 font-mono font-bold text-emerald-400">{(1026 + num)}</td>
+                          <td className="p-3 font-mono font-bold text-teal-400">{(1126 + num)}</td>
+                          <td className="p-3 font-mono font-bold text-rose-300">
+                            {(126 + num).toString().padStart(4, "0")} / {(226 + num).toString().padStart(4, "0")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </IonContent>
+        </IonModal>
 
         {/* Modal Gestor de Empresas (MySQL Model) */}
         <IonModal
@@ -9696,14 +10236,224 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         </IonModal>
 
         {/* Modal Configurar Sucursales (Filtros por Prefijo Roy/Sombrerudos) */}
-        <ConfigurePrefixModal
-          showConfigurePrefixModal={showConfigurePrefixModal}
-          setShowConfigurePrefixModal={setShowConfigurePrefixModal}
-          branchNamePrefix={branchNamePrefix}
-          setBranchNamePrefix={setBranchNamePrefix}
-          triggerAppNotification={triggerAppNotification}
-          COMPANY_CATALOG={COMPANY_CATALOG}
-        />
+        <IonModal
+          isOpen={showConfigurePrefixModal}
+          onDidDismiss={() => setShowConfigurePrefixModal(false)}
+          style={{
+            "--height": "auto",
+            "--width": "100%",
+            "--max-width": "500px",
+            "--border-radius": "24px",
+          }}
+        >
+          <IonHeader className="ion-no-border">
+            <IonToolbar style={{ "--background": "#d97706", color: "white" }}>
+              <IonTitle style={{ fontSize: "1.05rem", fontWeight: "900" }}>
+                🔧 Configurar Filtros de Sucursal
+              </IonTitle>
+              <IonButtons slot="end">
+                <IonButton
+                  onClick={() => setShowConfigurePrefixModal(false)}
+                  style={{ "--color": "white", fontWeight: "bold" }}
+                >
+                  Listo
+                </IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent
+            className="ion-padding"
+            style={{ "--background": "#fff" }}
+          >
+            <div className="space-y-4 text-left">
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-xs font-semibold text-amber-950">
+                <div className="flex items-center gap-1.5 font-black text-amber-900 mb-1">
+                  <span>🏢</span> Filtrado de Sucursal de Inicio
+                </div>
+                <p className="text-[11px] opacity-90 leading-relaxed font-bold">
+                  Agrupa y filtra tus sucursales según el nombre de la empresa
+                  para separar marcas de manera instantánea. Selecciona un
+                  acceso rápido o escribe tu propio prefijo personalizado.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-black text-slate-700">
+                  Filtro por Nombre / Prefijo:
+                </label>
+
+                {/* Custom input */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={branchNamePrefix === "TODAS" ? "" : branchNamePrefix}
+                    placeholder="Escribe para buscar (ej: Sombrerudos, Tacos Roy)..."
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const finalVal = val.trim() === "" ? "TODAS" : val;
+                      setBranchNamePrefix(finalVal);
+                      localStorage.setItem(
+                        "cocinet_branch_name_prefix",
+                        finalVal,
+                      );
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                  />
+                  {branchNamePrefix !== "TODAS" && (
+                    <button
+                      onClick={() => {
+                        setBranchNamePrefix("TODAS");
+                        localStorage.setItem(
+                          "cocinet_branch_name_prefix",
+                          "TODAS",
+                        );
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-extrabold text-xs bg-transparent border-none cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                {/* Match count indicator */}
+                <div className="text-[10px] text-slate-500 font-black flex items-center justify-between px-1 border-b border-slate-50 pb-2">
+                  <span>Coincidencia de Sucursales de Inicio:</span>
+                  <span className="text-amber-600 font-black">
+                    {
+                      COMPANY_CATALOG.filter((c) => {
+                        if (branchNamePrefix === "TODAS") return true;
+                        return c.name
+                          .toLowerCase()
+                          .startsWith(branchNamePrefix.toLowerCase().trim());
+                      }).length
+                    }{" "}
+                    de {COMPANY_CATALOG.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="space-y-1.5 pt-2">
+                <span className="block text-[10px] text-slate-400 font-black uppercase tracking-wider">
+                  Marcas Predefinidas:
+                </span>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBranchNamePrefix("TODAS");
+                      localStorage.setItem(
+                        "cocinet_branch_name_prefix",
+                        "TODAS",
+                      );
+                      triggerAppNotification(
+                        "🌐 Todas las Sucursales",
+                        "Se muestran todas las marcas y sucursales en el login.",
+                        "success",
+                      );
+                    }}
+                    className={`flex items-center justify-between px-4 py-3 rounded-2xl border transition-all text-xs text-left cursor-pointer font-bold ${
+                      branchNamePrefix === "TODAS"
+                        ? "bg-amber-500 border-transparent text-white font-black shadow-md shadow-amber-200"
+                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🌐</span>
+                      <div>
+                        <div className="font-extrabold">Todas las Marcas</div>
+                        <div className="text-[9.5px] opacity-80">
+                          Muestra la red completa de sucursales en el sistema.
+                        </div>
+                      </div>
+                    </div>
+                    {branchNamePrefix === "TODAS" && <span>✓</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBranchNamePrefix("Sombrerudos");
+                      localStorage.setItem(
+                        "cocinet_branch_name_prefix",
+                        "Sombrerudos",
+                      );
+                      triggerAppNotification(
+                        "🤠 Sombrerudos Seleccionado",
+                        "Filtrado automático por sucursales Sombrerudos.",
+                        "success",
+                      );
+                    }}
+                    className={`flex items-center justify-between px-4 py-3 rounded-2xl border transition-all text-xs text-left cursor-pointer font-bold ${
+                      branchNamePrefix.toLowerCase() === "sombrerudos"
+                        ? "bg-amber-500 border-transparent text-white font-black shadow-md shadow-amber-200"
+                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🤠</span>
+                      <div>
+                        <div className="font-extrabold">Sombrerudos</div>
+                        <div className="text-[9.5px] opacity-80">
+                          Solo sucursales que comienzan con Sombrerudos.
+                        </div>
+                      </div>
+                    </div>
+                    {branchNamePrefix.toLowerCase() === "sombrerudos" && (
+                      <span>✓</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBranchNamePrefix("Tacos Roy");
+                      localStorage.setItem(
+                        "cocinet_branch_name_prefix",
+                        "Tacos Roy",
+                      );
+                      triggerAppNotification(
+                        "🌮 Tacos Roy Seleccionado",
+                        "Filtrado automático de sucursales Tacos Roy.",
+                        "success",
+                      );
+                    }}
+                    className={`flex items-center justify-between px-4 py-3 rounded-2xl border transition-all text-xs text-left cursor-pointer font-bold ${
+                      branchNamePrefix.toLowerCase() === "tacos roy"
+                        ? "bg-amber-500 border-transparent text-white font-black shadow-md shadow-amber-200"
+                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🌮</span>
+                      <div>
+                        <div className="font-extrabold">Tacos Roy</div>
+                        <div className="text-[9.5px] opacity-80">
+                          Solo sucursales que comienzan con Tacos Roy.
+                        </div>
+                      </div>
+                    </div>
+                    {branchNamePrefix.toLowerCase() === "tacos roy" && (
+                      <span>✓</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Footer */}
+              <div className="pt-3 border-t border-slate-100 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigurePrefixModal(false)}
+                  className="w-full py-2.5 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md select-none cursor-pointer border-none"
+                  style={{ backgroundColor: "#d97706" }}
+                >
+                  Confirmar y Filtrar Sucursales 💾
+                </button>
+              </div>
+            </div>
+          </IonContent>
+        </IonModal>
 
         <IonContent
           style={{
@@ -10943,88 +11693,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
   };
 
-  const renderCancellationPinPad = (
-    currentPin: string,
-    setPin: (pin: string) => void,
-    onComplete: (pin: string) => void
-  ) => {
-    const handlePress = (key: string) => {
-      if (key === "CLEAR") {
-        setPin("");
-      } else if (key === "BACKSPACE") {
-        setPin(currentPin.slice(0, -1));
-      } else {
-        if (currentPin.length < 4) {
-          const nextPin = currentPin + key;
-          setPin(nextPin);
-          if (nextPin.length === 4) {
-            onComplete(nextPin);
-          }
-        }
-      }
-    };
-
-    return (
-      <div className="space-y-4 select-none">
-        {/* Code dots */}
-        <div className="flex justify-center gap-3 py-2">
-          {[0, 1, 2, 3].map((index) => {
-            const hasDigit = currentPin.length > index;
-            return (
-              <div
-                key={index}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                  hasDigit
-                    ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-500/30 scale-105"
-                    : "bg-slate-200 border border-slate-300 text-slate-400"
-                }`}
-              >
-                {hasDigit ? "●" : ""}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Grid */}
-        <div className="bg-slate-100 p-3 rounded-2xl border border-slate-200 space-y-1.5">
-          <div className="grid grid-cols-3 gap-1.5">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => handlePress(num)}
-                className="bg-white hover:bg-slate-50 active:scale-95 text-slate-800 font-black h-11 rounded-xl text-md shadow-sm border border-slate-200 cursor-pointer transition-all"
-              >
-                {num}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => handlePress("CLEAR")}
-              className="bg-red-50 hover:bg-red-100 active:scale-95 text-red-600 font-bold h-11 rounded-xl text-xs border border-red-200 cursor-pointer transition-all"
-            >
-              Limpiar
-            </button>
-            <button
-              key="0"
-              type="button"
-              onClick={() => handlePress("0")}
-              className="bg-white hover:bg-slate-50 active:scale-95 text-slate-800 font-black h-11 rounded-xl text-md shadow-sm border border-slate-200 cursor-pointer transition-all"
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePress("BACKSPACE")}
-              className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-600 font-bold h-11 rounded-xl text-xs border border-slate-200 cursor-pointer transition-all flex items-center justify-center"
-            >
-              Borrar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
   const [passwordTarget, setPasswordTarget] = useState<"discount" | "admin">(
     "admin",
   );
@@ -13722,7 +14390,37 @@ setCheckoutReturnMode(null);
     return (
       <>
         <div style={{ animation: "fadeIn 0.3s ease-out" }}>
+            {/* Pinned Totals Toggle */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+              <button 
+                onClick={() => setIsTotalsPinned(!isTotalsPinned)}
+                style={{
+                  background: isTotalsPinned ? "#3b82f6" : "#475569",
+                  color: "white",
+                  border: "none",
+                  padding: "4px 12px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                }}
+              >
+                {isTotalsPinned ? "📌 Ocultar Totales por Tipo" : "📌 Mostrar Totales por Tipo"}
+              </button>
+            </div>
             {/* Sales Summary Cards */}
+            <AnimatePresence>
+            {isTotalsPinned && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                style={{ overflow: "hidden" }}
+              >
             <div
               style={{
                 display: "grid",
@@ -13997,6 +14695,9 @@ setCheckoutReturnMode(null);
                 </div>
               </div>
             </div>
+            </motion.div>
+            )}
+            </AnimatePresence>
 
             {/* Filter Notice Banner if active */}
             {paymentMethodFilter !== "all" && (
@@ -14910,7 +15611,7 @@ setCheckoutReturnMode(null);
                               flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              fontSize: "1.5rem",
+                              fontSize: "1.2rem",
                               fontWeight: "900",
                               color: "white",
                               boxShadow: hasActiveOrders
@@ -16345,11 +17046,13 @@ Instrucciones:
             <div
               style={{
                 display: "flex",
-                overflowX: "auto",
+                flexWrap: window.innerWidth >= 768 ? "wrap" : "nowrap",
+                overflowX: window.innerWidth >= 768 ? "visible" : "auto",
+                whiteSpace: window.innerWidth >= 768 ? "normal" : "nowrap",
                 padding: "4px 8px",
                 gap: "8px",
               }}
-              className="no-scrollbar"
+              className={window.innerWidth >= 768 ? "" : "no-scrollbar"}
             >
               {subcategories.map((sub) => {
                 const categoryColor =
@@ -16447,14 +17150,15 @@ Instrucciones:
                 <div
                   style={{
                     display: "flex",
-                    overflowX: "auto",
+                    flexWrap: window.innerWidth >= 768 ? "wrap" : "nowrap",
+                    overflowX: window.innerWidth >= 768 ? "visible" : "auto",
+                    whiteSpace: window.innerWidth >= 768 ? "normal" : "nowrap",
                     padding: "8px 12px",
                     gap: "6px",
                     background: "#ffffff",
                     borderBottom: "1px solid #e2e8f0",
-                    whiteSpace: "nowrap",
                   }}
-                  className="no-scrollbar"
+                  className={window.innerWidth >= 768 ? "" : "no-scrollbar"}
                 >
                   {options.map((subgroup) => {
                     const isSelected = activeSubgroup === subgroup;
@@ -17238,9 +17942,17 @@ Instrucciones:
             }
 
             return (
-              <div className="py-2">
+              <div
+                className="py-2"
+                style={{
+                  display: window.innerWidth >= 768 ? "grid" : "block",
+                  gridTemplateColumns: window.innerWidth >= 768 ? "repeat(auto-fill, minmax(220px, 1fr))" : "none",
+                  gap: window.innerWidth >= 768 ? "8px" : "0",
+                  padding: window.innerWidth >= 768 ? "8px" : "8px",
+                }}
+              >
                 {menuSearchQuery.trim() !== "" && (
-                  <div className="mx-3 mb-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-900 text-xs font-bold flex items-center justify-between shadow-sm">
+                  <div className="mx-3 mb-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-900 text-xs font-bold flex items-center justify-between shadow-sm" style={{ gridColumn: "1 / -1" }}>
                     <span>⚡ Coincidencias globales en catálogo: "{menuSearchQuery}"</span>
                     <span className="bg-indigo-600 text-white px-2.5 py-0.5 rounded-full text-[11px] font-extrabold">
                       {displayProducts.length} producto(s)
@@ -17269,13 +17981,14 @@ Instrucciones:
                     <div
                       key={product.id}
                       style={{
-                        margin: "8px 12px",
+                        margin: window.innerWidth >= 768 ? "0" : "8px 12px",
                         padding: "10px 14px",
                         borderRadius: "16px",
                         background: "white",
                         boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
                         border: totalQty > 0 ? "2px solid #3b82f6" : "1px solid #e2e8f0",
                         display: "flex",
+                        flexWrap: "wrap",
                         alignItems: "center",
                         gap: "12px",
                         transition: "all 0.2s ease",
@@ -17392,7 +18105,7 @@ Instrucciones:
                       </div>
 
                       {/* 2. MIDDLE PRODUCT DETAILS */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: "120px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                           <span style={{ fontWeight: "900", fontSize: "1.05rem", color: "#0f172a", lineHeight: 1.2 }}>
                             {product.name}
@@ -17433,7 +18146,7 @@ Instrucciones:
 
                       {/* 3. RIGHT SECONDARY ACTIONS (Notes & Delete) */}
                       {totalQty > 0 && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, justifyContent: "flex-end", flexGrow: 1 }}>
                           <button
                             type="button"
                             onClick={() =>
@@ -21414,17 +22127,17 @@ setCheckoutReturnMode(null);
                   <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="space-y-1 text-left">
                       <div className="font-black text-sm text-indigo-900 flex items-center gap-2">
-                        🎨 Diseñar Plantilla de Tickets GDI & Servicio Windows
+                        💻 Descargar App para Windows (Punto de Venta Local)
                       </div>
                       <p className="text-xs text-indigo-700 max-w-xl">
-                        Personaliza la fuente de Windows, tamaño de letra (pt), márgenes de tus tickets y descarga los archivos de instalación del Sentinela de Windows.
+                        Personaliza el tamaño de letra (pt), márgenes de tus tickets y descarga el instalador de la App + Servicio de Impresión.
                       </p>
                     </div>
                     <button
                       onClick={() => setShowPrinterTemplateModal(true)}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shrink-0 cursor-pointer shadow-md transition-all"
                     >
-                      <span>🎨</span> Configurar Plantilla y Descargar Servicio
+                      <span>💻</span> Configurar Plantilla y Descargar App
                     </button>
                   </div>
                 </div>
@@ -25743,7 +26456,7 @@ setProductCrudModal({ isOpen: false, product: null });
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                   <span style={{ fontSize: "2rem" }}>🧠✨</span>
-                  <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: "800" }}>
+                  <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800" }}>
                     Notas de Personalización con Inteligencia Artificial
                   </h2>
                 </div>
@@ -26047,7 +26760,7 @@ setProductCrudModal({ isOpen: false, product: null });
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                   <span style={{ fontSize: "2rem" }}>🥞✨</span>
-                  <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: "800" }}>
+                  <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800" }}>
                     Separar Productos Comprimidos o Juntos
                   </h2>
                 </div>
@@ -31569,7 +32282,7 @@ setCheckoutReturnMode(null);
             "--background": "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
           }}
         >
-          <IonGrid style={{ height: "100%", margin: 0, padding: 0 }}>
+          <IonGrid style={{ height: "100%", margin: 0, padding: 0, zoom: window.innerWidth >= 768 ? 0.75 : 1 }}>
             <IonRow style={{ height: "100%" }}>
               
               {/* Mitad Izquierda: Mapa de Mesas o Menú */}
@@ -31582,28 +32295,25 @@ setCheckoutReturnMode(null);
                       animate={{ x: 0, opacity: 1 }}
                       exit={{ x: -300, opacity: 0 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      style={{ height: "100%", overflowY: "auto" }}
+                      style={{ height: "100%", overflowY: "auto", display: "flex", flexDirection: "column" }}
                     >
-                      <div style={{ marginBottom: "16px", padding: "12px", background: "rgba(255,255,255,0.05)", borderRadius: "12px" }}>
-                        <h2 style={{ color: "white", fontSize: "1.2rem", fontWeight: "bold", margin: 0 }}>📍 Mapa de Mesas</h2>
-                      </div>
                       {zones.map((zone) => (
-                        <div key={zone} className="ion-margin-bottom">
+                        <div key={zone} style={{ marginBottom: "8px" }}>
                           <IonText color="medium">
                             <h2
-                              className="ion-padding-start"
                               style={{
-                                fontSize: "0.8rem",
+                                fontSize: "0.7rem",
                                 fontWeight: "bold",
                                 textTransform: "uppercase",
-                                letterSpacing: "2px",
+                                letterSpacing: "1px",
                                 color: "#94a3b8",
+                                margin: "0 0 4px 8px"
                               }}
                             >
                               {zone}
                             </h2>
                           </IonText>
-                          <div style={{ display: "flex", flexWrap: "wrap", margin: "-4px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(12%, 1fr))", gap: "4px" }}>
                             {effectiveTables
                               .filter((t) => t.zone === zone)
                               .sort((a, b) => {
@@ -31616,39 +32326,48 @@ setCheckoutReturnMode(null);
                                 const hasActiveOrders = table.comandas.length > 0;
                                 const isSelected = selectedTableGestion?.id === table.id;
                                 
-                                const waiterNames = Array.from(
-                                  new Set(
-                                    table.comandas
-                                      .map((c: any) => c.createdBy?.name)
-                                      .filter(Boolean),
-                                  ),
-                                );
+                                const parsedCreators = table.comandas
+                                  .map((c: any) => c.createdBy?.name)
+                                  .filter(Boolean)
+                                  .map((n: string) => {
+                                    if (n.includes(":")) {
+                                      const parts = n.split(":");
+                                      return { role: parts[0].trim(), name: parts.slice(1).join(":").trim() };
+                                    }
+                                    return { role: "Mesero", name: n.trim() };
+                                  });
+                                  
+                                const uniqueRoles = Array.from(new Set(parsedCreators.map((c: any) => c.role)));
+                                const uniqueNames = Array.from(new Set(parsedCreators.map((c: any) => c.name)));
+                                
+                                const displayRole = uniqueRoles.length > 1 ? "Staff:" : `${uniqueRoles[0]}:`;
+                                const displayNames = uniqueNames.join(" & ");
 
                                 return (
                                   <div
                                     key={`${table.id}-${table.status}-${table.comandas?.length || 0}`}
                                     className="ion-text-center"
-                                    style={{ flex: "0 0 20%", maxWidth: "20%", padding: "8px 4px", minHeight: "125px" }}
+                                    style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "0", justifyContent: "center" }}
                                   >
                                     <div
                                       onClick={() => { setSelectedTableGestion(table); setSelectedTableId(table.id); }}
                                       style={{
-                                        width: "72px",
-                                        height: "72px",
+                                        width: "min(100%, 6.5vh)",
+                                        aspectRatio: "1/1",
                                         margin: "0 auto",
-                                        borderRadius: "24px",
+                                        borderRadius: "20%",
                                         display: "flex",
                                         flexDirection: "column",
                                         alignItems: "center",
                                         justifyContent: "center",
-                                        fontSize: "1.5rem",
+                                        fontSize: "1.2rem",
                                         fontWeight: "900",
                                         color: "white",
                                         position: "relative",
                                         boxShadow: isSelected ? "0 0 0 4px #3b82f6, 0 14px 28px rgba(59, 130, 246, 0.4)" : (hasActiveOrders ? "0 14px 28px rgba(225, 29, 72, 0.4)" : "0 8px 16px rgba(0,0,0,0.15)"),
                                         cursor: "pointer",
                                         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                                        border: isSelected ? "4px solid #60a5fa" : "4px solid rgba(255,255,255,0.4)",
+                                        border: isSelected ? "3px solid #60a5fa" : "2px solid rgba(255,255,255,0.4)",
                                         background: hasActiveOrders
                                           ? "linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)"
                                           : table.status === "payment_pending"
@@ -31658,8 +32377,34 @@ setCheckoutReturnMode(null);
                                               : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
                                       }}
                                     >
-                                      {table.label}
-                                      {hasActiveOrders && (
+                                      {(() => {
+                                          const z = (table.zone || "").toLowerCase();
+                                          const l = (table.label || "").toLowerCase();
+                                          
+                                          let iconClass = "fa-solid fa-utensils";
+                                          if (z.includes("llevar") || l.includes("llevar") || l.startsWith("p")) {
+                                            iconClass = "fa-solid fa-bag-shopping";
+                                          } else if (z.includes("domicilio") || l.includes("domicilio") || z.includes("reparto") || l.includes("reparto") || l.startsWith("d")) {
+                                            iconClass = "fa-solid fa-motorcycle";
+                                          }
+
+                                          return (
+                                            <>
+                                              <i className={iconClass} style={{ fontSize: "2.2vh", opacity: 0.9, marginBottom: "2px" }}></i>
+                                              <span style={{ 
+                                                zIndex: 1, 
+                                                fontSize: "1.2rem", 
+                                                fontWeight: "900", 
+                                                color: "#fde047",
+                                                lineHeight: "1",
+                                                textShadow: "0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.8)"
+                                              }}>
+                                                {table.label}
+                                              </span>
+                                            </>
+                                          );
+                                        })()}
+                                        {hasActiveOrders && (
                                         <div
                                           style={{
                                             position: "absolute",
@@ -31699,7 +32444,7 @@ setCheckoutReturnMode(null);
                                           textTransform: "uppercase",
                                         }}
                                       >
-                                        {waiterNames.length > 0 ? (
+                                        {displayNames.length > 0 ? (
                                           <>
                                             <span
                                               style={{
@@ -31708,10 +32453,7 @@ setCheckoutReturnMode(null);
                                                 fontWeight: "normal",
                                               }}
                                             >
-                                              🤵{" "}
-                                              {waiterNames.length > 1
-                                                ? "Meseros:"
-                                                : "Mesero:"}
+                                              🤵 {displayRole}
                                             </span>
                                             <span
                                               style={{
@@ -31725,9 +32467,9 @@ setCheckoutReturnMode(null);
                                                 borderRadius: "6px",
                                                 border: "1px solid #fecdd3",
                                               }}
-                                              title={waiterNames.join(" & ")}
+                                              title={displayNames}
                                             >
-                                              {waiterNames.join(" & ")}
+                                              {displayNames}
                                             </span>
                                           </>
                                         ) : (
@@ -31773,7 +32515,7 @@ setCheckoutReturnMode(null);
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                       className="embedded-menu-container"
-                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflow: "hidden", borderRadius: "16px", background: "#1e293b" }}
+                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflowY: "auto", overflowX: "hidden", borderRadius: "16px", background: "#1e293b" }}
                     >
                       {renderClosedAccountsList()}
                     </motion.div>
@@ -31785,7 +32527,7 @@ setCheckoutReturnMode(null);
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                       className="embedded-menu-container"
-                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflow: "hidden", borderRadius: "16px", background: "#1e293b" }}
+                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflowY: "auto", overflowX: "hidden", borderRadius: "16px", background: "#1e293b" }}
                     >
                       {renderReview()}
                     </motion.div>
@@ -31797,7 +32539,7 @@ setCheckoutReturnMode(null);
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
                       className="embedded-menu-container"
-                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflow: "hidden", borderRadius: "16px", background: "#1e293b" }}
+                      style={{ position: "absolute", top: 0, left: 16, right: 0, bottom: 0, overflowY: "auto", overflowX: "hidden", borderRadius: "16px", background: "#1e293b" }}
                     >
                       {renderTableDetails()}
                     </motion.div>
@@ -42452,19 +43194,10 @@ setCheckoutReturnMode(null);
         onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
         activeSessionOpenedAt={activeSessionForCorte?.openedAt}
       />
-      {isSwitchingTenant && renderSwitchingTenantOverlay()}
-      {showTenantPinModal && renderPinModalOverlay()}
+      {isSwitchingTenant && <SwitchTenantOverlay switchingTenantName={switchingTenantName} />}
+      {showTenantPinModal && <PinModalOverlay pendingTenant={pendingTenant} typedPin={typedPin} setTypedPin={setTypedPin} handlePinNumericPress={handlePinNumericPress} setShowTenantPinModal={setShowTenantPinModal} setPendingTenant={setPendingTenant} />}
       {showBranchSwitcherModal && renderBranchSwitcherModal()}
-      <BluetoothConfigModal
-          tenantName={tenantName}
-          showBluetoothConfigModal={showBluetoothConfigModal}
-          setShowBluetoothConfigModal={setShowBluetoothConfigModal}
-          productCategories={productCategories}
-          setProductCategories={setProductCategories}
-          tenantPrinterConfig={tenantPrinterConfig}
-          setTenantPrinterConfig={setTenantPrinterConfig}
-          triggerAppNotification={triggerAppNotification}
-        />
+      {showBluetoothConfigModal && renderBluetoothConfigModal()}
       {showDeliverySetupModal && renderDeliverySetupModal()}
       <PrinterTemplateModal
         isOpen={showPrinterTemplateModal}
@@ -42652,10 +43385,7 @@ setCheckoutReturnMode(null);
                   </div>
                 </div>
 
-                {renderCancellationPinPad(
-                  authorizationPin,
-                  setAuthorizationPin,
-                  async (pin) => {
+                <CancellationPinPad currentPin={authorizationPin} setPin={setAuthorizationPin} onComplete={async (pin) => {
                     const admin = validateAdminPin(pin);
                     if (admin) {
                       if (pendingCancellationTarget?.type === 'account') {
@@ -42676,8 +43406,7 @@ setCheckoutReturnMode(null);
                       alert("PIN de Administrador incorrecto ❌");
                       setAuthorizationPin("");
                     }
-                  }
-                )}
+                  }} />
               </div>
             </div>
           </IonModal>
@@ -42955,10 +43684,7 @@ setCheckoutReturnMode(null);
                     </p>
                   </div>
 
-                  {renderCancellationPinPad(
-                    itemCancelPin,
-                    setItemCancelPin,
-                    async (pin) => {
+                  <CancellationPinPad currentPin={itemCancelPin} setPin={setItemCancelPin} onComplete={async (pin) => {
                       const admin = validateAdminPin(pin);
                       if (admin) {
                         if (itemToCancel) {
@@ -42977,8 +43703,7 @@ setCheckoutReturnMode(null);
                         alert("⚠️ PIN incorrecto o usuario sin permisos de Administrador.");
                         setItemCancelPin("");
                       }
-                    }
-                  )}
+                    }} />
                 </div>
               )}
             </IonContent>
@@ -43097,10 +43822,7 @@ setCheckoutReturnMode(null);
                       </p>
                     </div>
 
-                    {renderCancellationPinPad(
-                      comandaCancelPin,
-                      setComandaCancelPin,
-                      async (pin) => {
+                    <CancellationPinPad currentPin={comandaCancelPin} setPin={setComandaCancelPin} onComplete={async (pin) => {
                         const adminUser = validateAdminPin(pin);
                         if (adminUser) {
                           if (comandaToCancel !== null) {
@@ -43117,8 +43839,7 @@ setCheckoutReturnMode(null);
                           alert("⚠️ PIN incorrecto o usuario sin permisos de Administrador.");
                           setComandaCancelPin("");
                         }
-                      }
-                    )}
+                      }} />
                   </div>
                 </div>
               )}
@@ -43524,222 +44245,11 @@ setCheckoutReturnMode(null);
         )}
       </AnimatePresence>
 
-      {/* Modal para solicitar Folio Interno de Comanda por Sucursal (Rápido POS) 📋 */}
-      <IonModal
-        isOpen={showFolioModal}
-        onDidDismiss={() => {
-          setShowFolioModal(false);
-          setFolioModalError(null);
-        }}
-        style={{ "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
-      >
-        <div className="p-6 bg-slate-900 text-white rounded-3xl max-w-md mx-auto shadow-2xl border border-slate-800 w-full">
-          <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-            <div>
-              <h2 className="text-xl font-black text-amber-400 flex items-center gap-2">
-                <span>📋</span> Captura de Folio Interno
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Sucursal: <strong className="text-slate-200">{selectedTenant?.name || "General"}</strong>
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setShowFolioModal(false);
-                setFolioModalError(null);
-              }}
-              className="text-slate-400 hover:text-white p-2 text-lg font-bold"
-            >
-              ✕
-            </button>
-          </div>
+      {/* FolioModal extracted */}
+      <FolioModal showFolioModal={showFolioModal} setShowFolioModal={setShowFolioModal} />
 
-          <div className="my-4 bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 text-xs flex justify-between items-center">
-            <span className="text-slate-400">Último folio registrado:</span>
-            <strong className="text-emerald-400 font-mono text-sm ml-1">
-              {suggestedLastFolio ? `#${suggestedLastFolio}` : "Sin folios previos"}
-            </strong>
-          </div>
-
-          {folioModalError && (
-            <div className="mb-4 p-3 bg-red-950/90 border border-red-500/80 text-red-200 text-xs rounded-xl flex items-start gap-2 font-medium">
-              <span className="text-base">⚠️</span>
-              <div className="flex-1">{folioModalError}</div>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
-              <div className="inline-block px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-bold mb-2">
-                {folioStep === 1 ? "Paso 1 de 2: Ingrese Folio" : "Paso 2 de 2: Confirme el Folio"}
-              </div>
-              <p className="text-sm font-semibold text-slate-300 mb-3">
-                {folioStep === 1
-                  ? "Escribe el folio interno y presiona ENTER ↵"
-                  : `Vuelve a escribir el folio y presiona ENTER ↵`}
-              </p>
-
-              <input
-                ref={folioInputRef}
-                type="text"
-                value={folioInputValue}
-                disabled={isGeneratingOrder}
-                onChange={(e) => {
-                  setFolioInputValue(e.target.value);
-                  if (folioModalError) setFolioModalError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (!isGeneratingOrder) handleFolioStepSubmit();
-                  }
-                }}
-                placeholder={folioStep === 1 ? "Ingresa folio (ej: 105)" : "Confirma el folio"}
-                className="w-full bg-slate-900 border-2 border-emerald-500 focus:border-amber-400 rounded-xl px-4 py-3 text-2xl text-center font-mono font-bold text-white outline-none transition-all placeholder:text-slate-600 placeholder:text-base disabled:opacity-50"
-                autoFocus
-              />
-              <span className="block text-[11px] text-slate-500 mt-2 font-medium">
-                ⏎ Presiona ENTER para {folioStep === 1 ? "continuar" : "enviar comanda"}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            <button
-              disabled={isGeneratingOrder}
-              onClick={() => {
-                setShowFolioModal(false);
-                setFolioModalError(null);
-              }}
-              className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all text-sm disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              disabled={isGeneratingOrder}
-              onClick={handleFolioStepSubmit}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <span>
-                {isGeneratingOrder
-                  ? "Procesando..."
-                  : folioStep === 1
-                    ? "Siguiente ➔"
-                    : "Confirmar y Enviar 🍳"}
-              </span>
-            </button>
-          </div>
-        </div>
-      </IonModal>
-
-      {/* Modal para solicitar Teléfono Celular de Referencia al requerir factura */}
-        <IonModal
-          isOpen={showInvoicePhoneModal}
-          onDidDismiss={() => {
-            setShowInvoicePhoneModal(false);
-            setPendingInvoiceTarget(null);
-          }}
-          style={{
-            "--height": "auto",
-            "--max-height": "90vh",
-            "--width": "92%",
-            "--max-width": "460px",
-            "--border-radius": "28px",
-            "--z-index": "99999",
-            "zIndex": 99999,
-          }}
-        >
-          <IonContent className="ion-padding" style={{ "--background": "#0f172a" }}>
-
-          <div className="flex flex-col bg-slate-900 text-white p-6 justify-between rounded-3xl">
-            <div>
-              <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-bold border border-amber-500/30">
-                    🧾
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Facturación</h2>
-                    <p className="text-xs text-slate-400">Celular de Referencia</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowInvoicePhoneModal(false);
-                    setPendingInvoiceTarget(null);
-                  }}
-                  className="w-9 h-9 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-lg hover:bg-slate-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-300 mb-4 leading-relaxed bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
-                Para registrar la solicitud de factura, ingrese el celular de referencia del cliente. <span className="font-bold text-amber-400">Por seguridad debe capturarlo 2 veces.</span>
-              </p>
-
-              {invoicePhoneError && (
-                <div className="mb-4 p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
-                  <span>{invoicePhoneError}</span>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    1. Teléfono Celular (10 dígitos)
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="Ej. 6671234567"
-                    value={inputInvoicePhone}
-                    onChange={(e) => setInputInvoicePhone(e.target.value.replace(/\D/g, ""))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
-                    autoFocus
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    2. Confirmar Teléfono Celular (Repetir)
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="Ej. 6671234567"
-                    value={inputInvoicePhoneConfirm}
-                    onChange={(e) => setInputInvoicePhoneConfirm(e.target.value.replace(/\D/g, ""))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest focus:outline-none focus:border-amber-500 transition"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInvoicePhoneModal(false);
-                  setPendingInvoiceTarget(null);
-                }}
-                className="flex-1 bg-slate-800 text-slate-300 font-bold py-3.5 rounded-xl hover:bg-slate-700 transition text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmInvoicePhone}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/30 transition text-sm"
-              >
-                Guardar y Requerir
-              </button>
-            </div>
-          </div>
-          </IonContent>
-
-        </IonModal>
+      {/* InvoicePhoneModal extracted */}
+      <InvoiceModal showInvoiceModal={showInvoicePhoneModal} setShowInvoiceModal={setShowInvoicePhoneModal} />
 
       <IonAlert
         isOpen={deleteConfirmation.isOpen}

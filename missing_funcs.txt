@@ -1,0 +1,83 @@
+const handleImportTenantMenu = async () => {
+    if (importInProgressRef.current) return;
+    if (!importSelectedTenantId) {
+      triggerAppNotification("Error ⚠️", "Por favor selecciona una sucursal origen.", "warning");
+      return;
+    }
+
+    const sourceTenant = COMPANY_CATALOG.find((c) => c.id === importSelectedTenantId);
+    const sourceTenantName = sourceTenant ? sourceTenant.name : importSelectedTenantId;
+
+    importInProgressRef.current = true;
+    setIsImportingTenantMenu(true);
+    try {
+      // 1. Delete destination products (and automatically back up under menu_backups collection!)
+      const destBranchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
+      await softDeleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
+
+      // 2. Fetch all products to get source products
+      const allProducts = await getAllProductsFromFirebase();
+      const sourceProductsRaw = allProducts.filter((p: any) => p.tenantId === importSelectedTenantId);
+
+      if (sourceProductsRaw.length === 0) {
+        triggerAppNotification("Advertencia ⚠️", "La sucursal origen seleccionada no contiene productos para importar.", "warning");
+        setIsImportingTenantMenu(false);
+        setImportConfirmStep(0);
+        return;
+      }
+
+      // De-duplicate source products by name and category to clean up any existing database duplicates
+      const seenKeys = new Set<string>();
+      const sourceProducts: any[] = [];
+      sourceProductsRaw.forEach((p: any) => {
+        if (!p.name) return;
+        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          sourceProducts.push(p);
+        }
+      });
+
+      // 3. Map to destination payload
+      const productsToInsert = sourceProducts.map((p: any) => {
+        const { id, uid, tenantId, sucursal, ...rest } = p;
+        const newRawId = `prod_${selectedTenant.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        return {
+          ...rest,
+          id: newRawId,
+          uid: newRawId,
+          tenantId: selectedTenant.id,
+          isDeleted: false,
+          sucursal: selectedTenant.name || selectedTenant.sucursalDefault || "Sucursal"
+        };
+      });
+
+      // 4. Save to Firebase
+      await bulkAddProductsToFirebase(productsToInsert);
+
+      // 5. Reset selection states and UI
+      setImportSelectedTenantId("");
+      setManageMenuTab(null);
+      setImportConfirmStep(0);
+
+      // Compute exact quantities per category
+      const foodCount = productsToInsert.filter((p: any) => p.category === "food").length;
+      const drinksCount = productsToInsert.filter((p: any) => p.category === "drinks").length;
+      const dessertsCount = productsToInsert.filter((p: any) => p.category === "desserts").length;
+
+      triggerAppNotification(
+        "¡Éxito! 📥",
+        `Se han importado exitosamente ${productsToInsert.length} productos desde "${sourceTenantName}" a la sucursal actual:
+        🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Error al importar menú de otra sucursal:", error);
+      triggerAppNotification("Error ❌", error.message || "Ocurrió un error inesperado durante la importación.", "warning");
+    } finally {
+      setIsImportingTenantMenu(false);
+      importInProgressRef.current = false;
+    }
+  };
+
+  
