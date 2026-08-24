@@ -12975,7 +12975,7 @@ Instrucciones:
           handleSwitchBranch={handleSwitchBranch}
         />
       <BluetoothConfigModal
-          tenantName={tenantName}
+          tenantName={selectedTenant?.name || ""}
           showBluetoothConfigModal={showBluetoothConfigModal}
           setShowBluetoothConfigModal={setShowBluetoothConfigModal}
           productCategories={productCategories}
