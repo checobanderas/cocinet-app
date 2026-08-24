@@ -12966,7 +12966,7 @@ Instrucciones:
           companiesConfig={companiesConfig}
           customOwners={customOwners}
           currentUser={currentUser}
-          ownerKey={ownerKey}
+          ownerKey={activeOwnerFilter}
           selectedTenant={selectedTenant}
           restrictedOwnerKey={restrictedOwnerKey}
           isSystemsMode={isSystemsMode}
