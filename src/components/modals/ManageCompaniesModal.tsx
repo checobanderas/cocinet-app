@@ -93,9 +93,9 @@ export const ManageCompaniesModal: React.FC<ManageCompaniesModalProps> = ({
 
               {/* Company rows list */}
               <div className="space-y-3 font-sans">
-                {COMPANY_CATALOG.filter((c) => {
-                  if (!searchCompanyQuery.trim()) return true;
-                  const query = searchCompanyQuery.toLowerCase();
+                {COMPANY_CATALOG.filter((c: any) => {
+                  if (!(searchCompanyQuery || '').trim()) return true;
+                  const query = (searchCompanyQuery || '').toLowerCase();
                   return (
                     c.name.toLowerCase().includes(query) ||
                     c.rfc.toLowerCase().includes(query)

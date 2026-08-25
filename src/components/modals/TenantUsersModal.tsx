@@ -41,7 +41,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       ];
       const index = avatars.indexOf(currentAvatar);
       const nextIndex = (index + 1) % avatars.length;
-      handleCellChange(userId, "avatar", avatars[nextIndex], modalTenant.id);
+      handleCellChange(userId, "avatar", avatars[nextIndex], modalTenant?.id);
     };
 
     return (
@@ -59,7 +59,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         <IonHeader className="ion-no-border">
           <IonToolbar style={{ "--background": "#fff", padding: "8px 16px" }}>
             <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1e293b", paddingLeft: "0" }}>
-              👥 Accesos y PINs: {modalTenant.name}
+              👥 Accesos y PINs: {modalTenant?.name || ''}
             </IonTitle>
             <IonButtons slot="end">
               <IonButton onClick={() => setShowTenantUsersModal(false)} color="dark">

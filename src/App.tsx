@@ -1062,6 +1062,16 @@ export default function App() {
               return false;
             };
             if (!hasCustom()) {
+              <LoginView
+                triggerAppNotification={triggerAppNotification}
+                users={users}
+                executeTenantTransfer={executeTenantTransfer}
+                resetTenantForm={resetTenantForm}
+                setCompaniesConfig={setCompaniesConfig}
+                searchCompanyQuery={searchCompanyQuery}
+                setSearchCompanyQuery={setSearchCompanyQuery}
+                setSelectedTenant={setSelectedTenant}
+              />
               setShowChangePinModal(true);
             }
 
@@ -7401,6 +7411,10 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       users={users}
           executeTenantTransfer={executeTenantTransfer}
           resetTenantForm={resetTenantForm}
+          setCompaniesConfig={setCompaniesConfig}
+          searchCompanyQuery={searchCompanyQuery}
+          setSearchCompanyQuery={setSearchCompanyQuery}
+          setSelectedTenant={setSelectedTenant}
       
     />
   );;
@@ -13029,6 +13043,7 @@ Instrucciones:
       <BranchSwitcherModal
           showBranchSwitcherModal={showBranchSwitcherModal}
           setShowBranchSwitcherModal={setShowBranchSwitcherModal}
+          COMPANY_CATALOG={COMPANY_CATALOG}
           companiesConfig={companiesConfig}
           customOwners={customOwners}
           currentUser={currentUser}
@@ -13093,8 +13108,46 @@ Instrucciones:
           {appMode === "gestion_cuentas" && renderGestionCuentas()}
 
           {renderSidebar()}
-          <PaymentModal />
-          <NumpadModal />
+          <PaymentModal
+          showPaymentModal={showPaymentModal}
+          setShowPaymentModal={setShowPaymentModal}
+          selectedTable={selectedTable}
+          selectedAccountForPayment={selectedAccountForPayment}
+          paymentMethod={paymentMethod}
+          setPaymentMethod={setPaymentMethod}
+          paymentAmountReceived={paymentAmountReceived}
+          setPaymentAmountReceived={setPaymentAmountReceived}
+          paymentDiscountType={paymentDiscountType}
+          setPaymentDiscountType={setPaymentDiscountType}
+          paymentDiscountValue={paymentDiscountValue}
+          setPaymentDiscountValue={setPaymentDiscountValue}
+          paymentDiscountTarget={paymentDiscountTarget}
+          setPaymentDiscountTarget={setPaymentDiscountTarget}
+          paymentTipTarget={paymentTipTarget}
+          setPaymentTipTarget={setPaymentTipTarget}
+          paymentTipValue={paymentTipValue}
+          setPaymentTipValue={setPaymentTipValue}
+          paymentCardType={paymentCardType}
+          setPaymentCardType={setPaymentCardType}
+          paymentCardLastFour={paymentCardLastFour}
+          setPaymentCardLastFour={setPaymentCardLastFour}
+          confirmPayment={confirmPayment}
+          showNumpad={showNumpad}
+          setShowNumpad={setShowNumpad}
+          numpadValue={numpadValue}
+          setNumpadValue={setNumpadValue}
+          numpadTarget={numpadTarget}
+          numpadTotal={numpadTotal}
+          isNumpadValueFresh={isNumpadValueFresh}
+          setIsNumpadValueFresh={setIsNumpadValueFresh}
+          handleNumpadConfirm={handleNumpadConfirm}
+          modalDiscountAmount={modalDiscountAmount}
+          openNumpad={openNumpad}
+        />
+          <NumpadModal
+          showNumpadModal={showNumpadModal}
+          setShowNumpadModal={setShowNumpadModal}
+        />
           <ProductCrudModal
           productCrudModal={productCrudModal}
           setProductCrudModal={setProductCrudModal}

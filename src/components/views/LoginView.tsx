@@ -137,6 +137,12 @@ interface LoginViewProps {
   users: any;
   executeTenantTransfer: any;
   resetTenantForm: any;
+  companiesConfig: any;
+  setCompaniesConfig: any;
+  searchCompanyQuery: any;
+  setSearchCompanyQuery: any;
+  selectedTenant: any;
+  setSelectedTenant: any;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -262,7 +268,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setCompanyCatalog,
   dependentBranches,
   logoUrl,
-  logoToUse
+  logoToUse,
+  setCompaniesConfig,
+  searchCompanyQuery,
+  setSearchCompanyQuery,
+  setSelectedTenant,
 }) => {
 return (
       <IonPage>
@@ -373,6 +383,13 @@ return (
           COMPANY_CATALOG={COMPANY_CATALOG}
           setCompanyCatalog={setCompanyCatalog}
           triggerAppNotification={triggerAppNotification}
+          companiesConfig={companiesConfig}
+          setCompaniesConfig={setCompaniesConfig}
+          searchCompanyQuery={searchCompanyQuery}
+          setSearchCompanyQuery={setSearchCompanyQuery}
+          selectedTenant={selectedTenant}
+          setSelectedTenant={setSelectedTenant}
+          item={null}
         />
 
         {/* Modal Configurar Sucursales (Filtros por Prefijo Roy/Sombrerudos) */}
