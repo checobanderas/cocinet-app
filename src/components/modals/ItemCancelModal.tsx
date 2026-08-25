@@ -1,15 +1,26 @@
 import React from 'react';
-import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonInput, IonItem, IonLabel, IonModal, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface ItemCancelModalProps {
   itemToCancel: any;
   setItemToCancel: (v: any) => void;
+  accountCancellationOtherReason: any;
+  handleCancelItem: any;
+  handleMarkItemForCancellation: any;
+  itemCancelPin: any;
+  itemCancelReason: any;
+  renderCancellationPinPad: any;
+  setAccountCancellationOtherReason: any;
+  setItemCancelPin: any;
+  setItemCancelReason: any;
+  validateAdminPin: any;
 }
 
 export const ItemCancelModal: React.FC<ItemCancelModalProps> = ({
   itemToCancel,
-  setItemToCancel
+  setItemToCancel,
+  accountCancellationOtherReason, handleCancelItem, handleMarkItemForCancellation, itemCancelPin, itemCancelReason, renderCancellationPinPad, setAccountCancellationOtherReason, setItemCancelPin, setItemCancelReason, validateAdminPin
 }) => {
   return (
           <IonModal

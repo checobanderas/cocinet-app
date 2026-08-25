@@ -1,3 +1,5 @@
+import { getProductInventoryStatus } from '../../utils/appHelpers';
+import { ComensalPreview } from '../modals/ComensalPreview';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonContent, IonFooter, IonHeader, IonIcon, IonLabel, IonPage, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
@@ -38,6 +40,13 @@ interface MenuViewProps {
   showComensalesBar: any;
   showVoiceToast: any;
   voiceToastMessage: any;
+  addToCart: any;
+  getComensalColor: any;
+  openItemNoteModal: any;
+  startVoiceRecognition: any;
+  totalItems: any;
+  totalPrice: any;
+  updateQuantity: any;
 }
 
 export const MenuView: React.FC<MenuViewProps> = ({
@@ -74,7 +83,8 @@ export const MenuView: React.FC<MenuViewProps> = ({
   showComensalPreview,
   showComensalesBar,
   showVoiceToast,
-  voiceToastMessage
+  voiceToastMessage,
+  addToCart, getComensalColor, openItemNoteModal, startVoiceRecognition, totalItems, totalPrice, updateQuantity
 }) => {
 const subcategories = Array.from(
       new Set(

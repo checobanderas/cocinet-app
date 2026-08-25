@@ -1,3 +1,4 @@
+import { getFormattedProductName } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonIcon, IonText } from '@ionic/react';
@@ -6,11 +7,14 @@ import { addOutline, chatbubbleEllipsesOutline, removeOutline, trashOutline } fr
 interface ReviewItemViewProps {
   item: any;
   idx: any;
+  openItemNoteModal: any;
+  updateQuantity: any;
 }
 
 export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
   idx,
-  item
+  item,
+  openItemNoteModal, updateQuantity
 }) => {
   return (
 <div

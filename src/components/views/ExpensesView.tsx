@@ -1,9 +1,14 @@
+import { ExpenseModal } from '../modals/ExpenseModal';
+import { getOperatingDay } from '../../utils/appHelpers';
+import { addExpenseToFirebase, deleteExpenseFromFirebase, updateExpenseInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 
 
 interface ExpensesViewProps {
+  expenseFormData: any;
+  setExpenseFormData: any;
   cashierSessions: any;
   currentUser: any;
   expenseActiveTab: any;
@@ -34,6 +39,7 @@ interface ExpensesViewProps {
   showExpenseFilter: any;
   showExpenseModal: any;
   triggerAppNotification: any;
+  sessionId: any;
 }
 
 export const ExpensesView: React.FC<ExpensesViewProps> = ({
@@ -66,7 +72,10 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   setShowMenuToast,
   showExpenseFilter,
   showExpenseModal,
-  triggerAppNotification
+  triggerAppNotification,
+  sessionId,
+  expenseFormData,
+  setExpenseFormData
 }) => {
 // Save or Edit handler
     const handleSaveExpense = async (e: React.FormEvent) => {

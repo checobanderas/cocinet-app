@@ -10,6 +10,8 @@ interface DeviceRequestsModalProps {
   allDeviceRequests: any[]; // using any[] to avoid strict type issues if DeviceRequest isn't perfectly exported
   COMPANY_CATALOG: CompanyTenant[];
   updateDeviceRequest: (id: string, data: any) => void;
+  deviceId: any;
+  pending: any;
 }
 
 export const DeviceRequestsModal: React.FC<DeviceRequestsModalProps> = ({
@@ -18,6 +20,7 @@ export const DeviceRequestsModal: React.FC<DeviceRequestsModalProps> = ({
   allDeviceRequests,
   COMPANY_CATALOG,
   updateDeviceRequest,
+  deviceId, pending
 }) => {
   return (
     <IonModal

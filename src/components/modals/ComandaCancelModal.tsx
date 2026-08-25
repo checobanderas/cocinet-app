@@ -1,15 +1,24 @@
 import React from 'react';
-import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonInput, IonItem, IonLabel, IonModal, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface ComandaCancelModalProps {
   comandaToCancel: any;
   setComandaToCancel: (v: any) => void;
+  cancelEntireComanda: any;
+  comandaCancelPin: any;
+  comandaCancelReason: any;
+  handleMarkEntireComandaForCancellation: any;
+  renderCancellationPinPad: any;
+  setComandaCancelPin: any;
+  setComandaCancelReason: any;
+  validateAdminPin: any;
 }
 
 export const ComandaCancelModal: React.FC<ComandaCancelModalProps> = ({
   comandaToCancel,
-  setComandaToCancel
+  setComandaToCancel,
+  cancelEntireComanda, comandaCancelPin, comandaCancelReason, handleMarkEntireComandaForCancellation, renderCancellationPinPad, setComandaCancelPin, setComandaCancelReason, validateAdminPin
 }) => {
   return (
           <IonModal

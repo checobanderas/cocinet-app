@@ -1,9 +1,22 @@
+import { getTenantUsers } from '../../utils/appHelpers';
+import { ConfigurePrefixModal } from '../modals/ConfigurePrefixModal';
+import { ManageCompaniesModal } from '../modals/ManageCompaniesModal';
+import { PinsStructureModal } from '../modals/PinsStructureModal';
+import { addDeviceRequest, saveCompanyConfigInFirebase, updateDeviceRequest } from '../../utils/firestore';
+import { DeviceRequestsModal } from '../modals/DeviceRequestsModal';
+import { OwnerCrudModal } from '../modals/OwnerCrudModal';
+import { TenantCrudModal } from '../modals/TenantCrudModal';
+import { TenantUsersModal } from '../modals/TenantUsersModal';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 import { logoToUse, logoUrl } from 'ionicons/icons';
 
 interface LoginViewProps {
+  setCompanyCatalog: any;
+  dependentBranches: any;
+  logoUrl: any;
+  logoToUse: any;
   COMPANY_CATALOG: any;
   activeOwnerFilter: any;
   allDeviceRequests: any;
@@ -122,6 +135,8 @@ interface LoginViewProps {
   transferTargetOwnerKey: any;
   triggerAppNotification: any;
   users: any;
+  executeTenantTransfer: any;
+  resetTenantForm: any;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -242,7 +257,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
   transferStep,
   transferTargetOwnerKey,
   triggerAppNotification,
-  users
+  users,
+  executeTenantTransfer, resetTenantForm,
+  setCompanyCatalog,
+  dependentBranches,
+  logoUrl,
+  logoToUse
 }) => {
 return (
       <IonPage>

@@ -1,3 +1,4 @@
+import { addCashMovementToFirebase, addPurchaseToFirebase, getMexicoISOString } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, saveOutline, trashOutline, printOutline } from 'ionicons/icons';
@@ -6,11 +7,23 @@ interface SupplierPurchaseModalProps {
   showSupplierPurchaseModal: boolean;
   setShowSupplierPurchaseModal: (v: boolean) => void;
   // you might need more props
+  cashierSessions: any;
+  currentUser: any;
+  inventory: any;
+  selectedScheduleSupplier: any;
+  sessionId: any;
+  setSelectedScheduleSupplier: any;
+  setSupplierPurchaseIsPaid: any;
+  setSupplierPurchaseItems: any;
+  supplierPurchaseIsPaid: any;
+  supplierPurchaseItems: any;
+  triggerAppNotification: any;
 }
 
 export const SupplierPurchaseModal: React.FC<SupplierPurchaseModalProps> = ({
   showSupplierPurchaseModal,
-  setShowSupplierPurchaseModal
+  setShowSupplierPurchaseModal,
+  cashierSessions, currentUser, inventory, selectedScheduleSupplier, sessionId, setSelectedScheduleSupplier, setSupplierPurchaseIsPaid, setSupplierPurchaseItems, supplierPurchaseIsPaid, supplierPurchaseItems, triggerAppNotification
 }) => {
   return (
           <IonModal

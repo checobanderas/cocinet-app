@@ -3,15 +3,29 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline, printOutline } from 'ionicons/icons';
 
 interface PrintPreviewModalProps {
+  theoreticalBalance: any;
+  totalInflowsAmt: any;
+  instantDifference: any;
+  instantPhysicalTotal: any;
   showPrintPreviewModal: boolean;
   setShowPrintPreviewModal: (v: boolean) => void;
   printPreviewContent: string;
+  corteData: any;
+  currentUser: any;
+  mexicoTime: any;
+  purchases: any;
+  totalOutflowsAmt: any;
 }
 
 export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   showPrintPreviewModal,
   setShowPrintPreviewModal,
-  printPreviewContent
+  printPreviewContent,
+  corteData, currentUser, mexicoTime, purchases, totalOutflowsAmt,
+  theoreticalBalance,
+  totalInflowsAmt,
+  instantDifference,
+  instantPhysicalTotal
 }) => {
   return (
           <IonModal

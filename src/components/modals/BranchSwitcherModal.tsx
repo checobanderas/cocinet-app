@@ -1,8 +1,11 @@
+import { APIProvider, AdvancedMarker, GoogleMap, Pin } from '@vis.gl/react-google-maps';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
 import { closeOutline } from 'ionicons/icons';
 
 interface BranchSwitcherModalProps {
+  GoogleMap: any;
+  COMPANY_CATALOG: any;
   showBranchSwitcherModal: boolean;
   setShowBranchSwitcherModal: (v: boolean) => void;
   companiesConfig: any[];
@@ -15,6 +18,7 @@ interface BranchSwitcherModalProps {
   isSistemas: boolean;
   activeOwnerFilter: string;
   handleSwitchBranch: (ownerKey: string, tenantId: string) => void;
+  MAPS_API_KEY: any;
 }
 
 export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
@@ -29,7 +33,10 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
   isSystemsMode,
   isSistemas,
   activeOwnerFilter,
-  handleSwitchBranch
+  handleSwitchBranch,
+  MAPS_API_KEY,
+  COMPANY_CATALOG,
+  GoogleMap
 }) => {
 
 

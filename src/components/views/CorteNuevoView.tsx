@@ -1,9 +1,11 @@
+import { DashboardView } from '../views/DashboardView';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 
 
 interface CorteNuevoViewProps {
+  nullconstrenderCorteNuevo: any;
   arq100: any;
   arq1000: any;
   arq20: any;
@@ -144,7 +146,8 @@ export const CorteNuevoView: React.FC<CorteNuevoViewProps> = ({
   suppliers,
   syncStatus,
   triggerAppNotification,
-  users
+  users,
+  nullconstrenderCorteNuevo
 }) => {
   return (
 <DashboardView

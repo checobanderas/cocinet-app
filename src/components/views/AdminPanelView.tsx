@@ -1,3 +1,6 @@
+import { CorteModal } from '../modals/CorteModal';
+import DatabaseDeveloperPanel from '../DatabaseDeveloperPanel';
+import { addPedidoToPrinter, addTenantToFirebase, deletePedidoFromPrinter, saveCompanyConfigInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButton, IonContent, IonIcon, IonPage } from '@ionic/react';
@@ -85,6 +88,14 @@ interface AdminPanelViewProps {
   triggerAppNotification: any;
   users: any;
   websocketSyncLog: any;
+  cancelEntireComanda: any;
+  cancelled: any;
+  corteData: any;
+  generateCorteTicketText: any;
+  generatePrecorteTicketText: any;
+  sanitizeBusinessName: any;
+  sanitizeEmail: any;
+  topSold: any;
 }
 
 export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
@@ -168,7 +179,8 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   ticketTelefono,
   triggerAppNotification,
   users,
-  websocketSyncLog
+  websocketSyncLog,
+  cancelEntireComanda, cancelled, corteData, generateCorteTicketText, generatePrecorteTicketText, sanitizeBusinessName, sanitizeEmail, topSold
 }) => {
 const pendingItemsList: any[] = [];
     tables.forEach((t) => {

@@ -1,9 +1,18 @@
+import { ArqKeyboardModal } from '../modals/ArqKeyboardModal';
+import { ReceiptPreviewModal } from '../modals/ReceiptPreviewModal';
+import { getMexicoISOString } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, eyeOutline, syncOutline, trashOutline } from 'ionicons/icons';
 
 interface CorteExpressViewProps {
+  arqKeyboardValue: any;
+  setArqKeyboardTarget: any;
+  handleArqKeyboardDone: any;
+  arqKeyboardTarget: any;
+  receiptPreviewContent: any;
+  setArqKeyboardValue: any;
   activeExpressDenom: any;
   companyConfig: any;
   corteFilterUserId: any;
@@ -42,6 +51,11 @@ interface CorteExpressViewProps {
   showReceiptPreviewModal: any;
   triggerAppNotification: any;
   users: any;
+  corteData: any;
+  estimated: any;
+  filteredCashMovementsForCorte: any;
+  filteredExpensesForCorte: any;
+  generateCorteExpressTicketText: any;
 }
 
 export const CorteExpressView: React.FC<CorteExpressViewProps> = ({
@@ -82,7 +96,14 @@ export const CorteExpressView: React.FC<CorteExpressViewProps> = ({
   showArqKeyboardModal,
   showReceiptPreviewModal,
   triggerAppNotification,
-  users
+  users,
+  corteData, estimated, filteredCashMovementsForCorte, filteredExpensesForCorte, generateCorteExpressTicketText,
+  arqKeyboardValue,
+  setArqKeyboardTarget,
+  handleArqKeyboardDone,
+  arqKeyboardTarget,
+  receiptPreviewContent,
+  setArqKeyboardValue
 }) => {
 if (currentUser?.role === "mesero") {
       return (

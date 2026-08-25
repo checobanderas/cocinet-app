@@ -1,3 +1,4 @@
+import { addTenantToFirebase, getMexicoISOString, saveCompaniesConfigToFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput, IonList } from '@ionic/react';
 import { closeOutline, addCircleOutline, trashOutline, saveOutline, createOutline } from 'ionicons/icons';
@@ -11,6 +12,13 @@ interface ManageCompaniesModalProps {
   COMPANY_CATALOG: any;
   setCompanyCatalog: (v: any) => void;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
+  companiesConfig: any;
+  item: any;
+  searchCompanyQuery: any;
+  selectedTenant: any;
+  setCompaniesConfig: any;
+  setSearchCompanyQuery: any;
+  setSelectedTenant: any;
 }
 
 export const ManageCompaniesModal: React.FC<ManageCompaniesModalProps> = ({
@@ -20,7 +28,8 @@ export const ManageCompaniesModal: React.FC<ManageCompaniesModalProps> = ({
   users,
   COMPANY_CATALOG,
   setCompanyCatalog,
-  triggerAppNotification
+  triggerAppNotification,
+  companiesConfig, item, searchCompanyQuery, selectedTenant, setCompaniesConfig, setSearchCompanyQuery, setSelectedTenant
 }) => {
   return (
         <IonModal

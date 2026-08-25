@@ -1,5 +1,5 @@
 import React from 'react';
-import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
+import { IonButton, IonButtons, IonCard, IonCardContent, IonContent, IonHeader, IonIcon, IonModal, IonSegment, IonSegmentButton, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, backspaceOutline } from 'ionicons/icons';
 
 interface PaymentModalProps {
@@ -37,6 +37,8 @@ interface PaymentModalProps {
   isNumpadValueFresh: boolean;
   setIsNumpadValueFresh: (v: boolean) => void;
   handleNumpadConfirm: () => void;
+  modalDiscountAmount: any;
+  openNumpad: any;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -63,7 +65,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   paymentCardLastFour,
   setPaymentCardLastFour,
   confirmPayment,
-  
   showNumpad,
   setShowNumpad,
   numpadValue,
@@ -72,7 +73,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   numpadTotal,
   isNumpadValueFresh,
   setIsNumpadValueFresh,
-  handleNumpadConfirm
+  handleNumpadConfirm,
+  modalDiscountAmount, openNumpad
 }) => {
   const renderPaymentModal = () => { 
     return ( 

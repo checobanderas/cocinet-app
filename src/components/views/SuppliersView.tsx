@@ -1,3 +1,5 @@
+import { SupplierModal } from '../modals/SupplierModal';
+import { addSupplierToFirebase, deleteSupplierFromFirebase, updateSupplierInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonIcon, IonPage } from '@ionic/react';

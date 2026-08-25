@@ -3,15 +3,24 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface CustomerModalProps {
+  handleSaveCustomer: any;
   customerModal: any;
   setCustomerModal: (v: any) => void;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
+  customerModalAddresses: any;
+  newAddressInput: any;
+  newAddressRefInput: any;
+  setCustomerModalAddresses: any;
+  setNewAddressInput: any;
+  setNewAddressRefInput: any;
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({
   customerModal,
   setCustomerModal,
-  triggerAppNotification
+  triggerAppNotification,
+  customerModalAddresses, newAddressInput, newAddressRefInput, setCustomerModalAddresses, setNewAddressInput, setNewAddressRefInput,
+  handleSaveCustomer
 }) => {
   return (
           <IonModal

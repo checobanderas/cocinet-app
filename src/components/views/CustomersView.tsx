@@ -1,3 +1,5 @@
+import { CustomerModal } from '../modals/CustomerModal';
+import { addCustomerToFirebase, deleteCustomerFromFirebase, updateCustomerInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonIcon, IonPage } from '@ionic/react';

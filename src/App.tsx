@@ -5841,6 +5841,7 @@ export default function App() {
           setSelectedDeliveryClient={setSelectedDeliveryClient}
           setShowDeliverySetupModal={setShowDeliverySetupModal}
           showDeliverySetupModal={showDeliverySetupModal}
+          filteredCustomers={filteredCustomers}
         />
     );
   };
@@ -7398,6 +7399,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       transferTargetOwnerKey={transferTargetOwnerKey}
       triggerAppNotification={triggerAppNotification}
       users={users}
+          executeTenantTransfer={executeTenantTransfer}
+          resetTenantForm={resetTenantForm}
       
     />
   );;
@@ -10182,6 +10185,9 @@ setCheckoutReturnMode(null);
       setTempPaymentCardType={setTempPaymentCardType}
       setTempPaymentMethod={setTempPaymentMethod}
       triggerAppNotification={triggerAppNotification}
+          historyForCuentasTab={historyForCuentasTab}
+          markAsPaid={markAsPaid}
+          reprintAccount={reprintAccount}
       
     />
   );;
@@ -10198,6 +10204,12 @@ setCheckoutReturnMode(null);
       selectedTenant={selectedTenant}
       setMainTab={setMainTab}
       tables={tables}
+          effectiveTables={effectiveTables}
+          getComandaDestinations={getComandaDestinations}
+          getComensalColor={getComensalColor}
+          printComanda={printComanda}
+          startVoiceRecognition={startVoiceRecognition}
+          zones={zones}
       
     />
   );;
@@ -10964,6 +10976,13 @@ Instrucciones:
       showComensalesBar={showComensalesBar}
       showVoiceToast={showVoiceToast}
       voiceToastMessage={voiceToastMessage}
+          addToCart={addToCart}
+          getComensalColor={getComensalColor}
+          openItemNoteModal={openItemNoteModal}
+          startVoiceRecognition={startVoiceRecognition}
+          totalItems={totalItems}
+          totalPrice={totalPrice}
+          updateQuantity={updateQuantity}
       
     />
   );;
@@ -10991,9 +11010,9 @@ Instrucciones:
   };
 
   const renderReviewItem = (item: CartItem, idx?: number) => (
-    <ReviewItemView
-
-      item={item} idx={idx}
+    <ReviewItemView idx={idx}
+          openItemNoteModal={openItemNoteModal}
+          updateQuantity={updateQuantity}
     />
   );;
 
@@ -11005,8 +11024,8 @@ Instrucciones:
       selectedTable={selectedTable}
       setItemsSelectedForCancellation={setItemsSelectedForCancellation}
       setPendingCancellationTarget={setPendingCancellationTarget}
-      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal}
-      item={item} showDeletefalse={showDeletefalse} folio={folio} index={index}
+      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal} folio={folio} index={index}
+          getComensalColor={getComensalColor}
     />
   );;
 
@@ -11028,6 +11047,8 @@ Instrucciones:
       setGeneralNotes={setGeneralNotes}
       setReviewComensal={setReviewComensal}
       setSelectedTableGestion={setSelectedTableGestion}
+          generateOrder={generateOrder}
+          getComensalColor={getComensalColor}
       
     />
   );;
@@ -11076,6 +11097,11 @@ Instrucciones:
       setShowTransferTableModal={setShowTransferTableModal}
       setTransferTargetTableId={setTransferTargetTableId}
       triggerAppNotification={triggerAppNotification}
+          cancelEntireComanda={cancelEntireComanda}
+          getComandaDestinations={getComandaDestinations}
+          getComensalColor={getComensalColor}
+          printComanda={printComanda}
+          printTicket={printTicket}
       
     />
   );;
@@ -11122,6 +11148,8 @@ Instrucciones:
       showDiscountInput={showDiscountInput}
       showPaymentOptions={showPaymentOptions}
       showTipInput={showTipInput}
+          finalizePayment={finalizePayment}
+          openNumpad={openNumpad}
       
     />
   );;
@@ -11228,6 +11256,12 @@ Instrucciones:
       triggerAppNotification={triggerAppNotification}
       users={users}
       websocketSyncLog={websocketSyncLog}
+          cancelEntireComanda={cancelEntireComanda}
+          corteData={corteData}
+          generateCorteTicketText={generateCorteTicketText}
+          generatePrecorteTicketText={generatePrecorteTicketText}
+          sanitizeBusinessName={sanitizeBusinessName}
+          sanitizeEmail={sanitizeEmail}
       
     />
   );;
@@ -11425,6 +11459,22 @@ Instrucciones:
       splitSelectedProductId={splitSelectedProductId}
       treeDragOverTargetKey={treeDragOverTargetKey}
       triggerAppNotification={triggerAppNotification}
+          analyzeMenuImage={analyzeMenuImage}
+          applyBulkCaseToggle={applyBulkCaseToggle}
+          applyBulkSubcategory={applyBulkSubcategory}
+          applyBulkSubgroup={applyBulkSubgroup}
+          collapseAllTreeNodes={collapseAllTreeNodes}
+          expandAllTreeNodes={expandAllTreeNodes}
+          loadAutoFormattedList={loadAutoFormattedList}
+          moveSelectedDown={moveSelectedDown}
+          moveSelectedToBottom={moveSelectedToBottom}
+          moveSelectedToTop={moveSelectedToTop}
+          moveSelectedUp={moveSelectedUp}
+          parseSplitProducts={parseSplitProducts}
+          saveRelationChanges={saveRelationChanges}
+          toggleTextCase={toggleTextCase}
+          toggleTreeSectionCollapse={toggleTreeSectionCollapse}
+          toggleTreeSubgroupCollapse={toggleTreeSubgroupCollapse}
       
     />
   );;
@@ -12364,6 +12414,7 @@ Instrucciones:
       showBluetoothConfigModal={showBluetoothConfigModal}
       showSidebar={showSidebar}
       suppliers={suppliers}
+          activeOwnerBranchesCount={activeOwnerBranchesCount}
       
     />
   );;
@@ -12518,6 +12569,9 @@ Instrucciones:
       selectedTenant={selectedTenant}
       setSelectedTableGestion={setSelectedTableGestion}
       setSelectedTableId={setSelectedTableId}
+          effectiveTables={effectiveTables}
+          startVoiceRecognition={startVoiceRecognition}
+          zones={zones}
       
     />
   );;
@@ -12675,6 +12729,12 @@ Instrucciones:
       ticketBusinessName={ticketBusinessName}
       ticketSucursal={ticketSucursal}
       triggerAppNotification={triggerAppNotification}
+          activeSessionForCorte={activeSessionForCorte}
+          filteredCashMovementsForCorte={filteredCashMovementsForCorte}
+          filteredExpensesForCorte={filteredExpensesForCorte}
+          filteredHistoryForCorte={filteredHistoryForCorte}
+          filteredPurchasesForCorte={filteredPurchasesForCorte}
+          validateOwnerKey={validateOwnerKey}
       
     />
   );;
@@ -12708,6 +12768,7 @@ Instrucciones:
       setShowMultiTurnModal={setShowMultiTurnModal}
       setShowSidebar={setShowSidebar}
       showMultiTurnModal={showMultiTurnModal}
+          reprintAccount={reprintAccount}
       
     />
   );;
@@ -12757,6 +12818,7 @@ Instrucciones:
       showCorteXCopiedToast={showCorteXCopiedToast}
       ticketBusinessName={ticketBusinessName}
       ticketSucursal={ticketSucursal}
+          saveCorteXFondoApertura={saveCorteXFondoApertura}
       
     />
   );;
@@ -12824,6 +12886,10 @@ Instrucciones:
       showReceiptPreviewModal={showReceiptPreviewModal}
       triggerAppNotification={triggerAppNotification}
       users={users}
+          corteData={corteData}
+          filteredCashMovementsForCorte={filteredCashMovementsForCorte}
+          filteredExpensesForCorte={filteredExpensesForCorte}
+          generateCorteExpressTicketText={generateCorteExpressTicketText}
       
     />
   );;
@@ -12973,6 +13039,7 @@ Instrucciones:
           isSistemas={currentUser?.id?.endsWith('-sistemas') || false}
           activeOwnerFilter={activeOwnerFilter}
           handleSwitchBranch={handleSwitchBranch}
+          MAPS_API_KEY={MAPS_API_KEY}
         />
       <BluetoothConfigModal
           tenantName={selectedTenant?.name || ""}
@@ -12983,6 +13050,13 @@ Instrucciones:
           tenantPrinterConfig={tenantPrinterConfig}
           setTenantPrinterConfig={setTenantPrinterConfig}
           triggerAppNotification={triggerAppNotification}
+          activeBtConnections={activeBtConnections}
+          availableWindowsPrinters={availableWindowsPrinters}
+          fetchWindowsPrinters={fetchWindowsPrinters}
+          handleSaveTenantPrinters={handleSaveTenantPrinters}
+          handleScanBluetoothDevice={handleScanBluetoothDevice}
+          handleTestPrinter={handleTestPrinter}
+          isScanningBt={isScanningBt}
         />
       {showDeliverySetupModal && renderDeliverySetupModal()}
       <PrinterTemplateModal
@@ -13019,8 +13093,8 @@ Instrucciones:
           {appMode === "gestion_cuentas" && renderGestionCuentas()}
 
           {renderSidebar()}
-          {renderPaymentModal()}
-          {renderNumpadModal()}
+          <PaymentModal />
+          <NumpadModal />
           <ProductCrudModal
           productCrudModal={productCrudModal}
           setProductCrudModal={setProductCrudModal}
@@ -13029,9 +13103,7 @@ Instrucciones:
           setCrudQuickNotes={setCrudQuickNotes}
           newCrudQuickNoteText={newCrudQuickNoteText}
           setNewCrudQuickNoteText={setNewCrudQuickNoteText}
-          ownerBranches={ownerBranches}
           tenantPrinterConfig={tenantPrinterConfig}
-          allProducts={allProducts}
           productCategories={productCategories}
           generateUUID={generateUUID}
           getMexicoISOString={getMexicoISOString}
@@ -13039,20 +13111,40 @@ Instrucciones:
           updateProductInFirebase={updateProductInFirebase}
           getAllProductsFromFirebase={getAllProductsFromFirebase}
           triggerAppNotification={triggerAppNotification}
+          existingSubcategories={existingSubcategories}
+          existingSubgroups={existingSubgroups}
+          setRelationMatches={setRelationMatches}
         />
 
           {/* Bulk Item Cancellation Reason Modal */}
 <BulkItemCancellationReasonModal
           showBulkItemCancellationReasonModal={showBulkItemCancellationReasonModal}
           setShowBulkItemCancellationReasonModal={setShowBulkItemCancellationReasonModal}
+          bulkItemCancellationOtherReason={bulkItemCancellationOtherReason}
+          bulkItemCancellationReason={bulkItemCancellationReason}
+          currentUser={currentUser}
+          itemsSelectedForCancellation={itemsSelectedForCancellation}
+          selectedTable={selectedTable}
+          selectedTenant={selectedTenant}
+          setBulkItemCancellationOtherReason={setBulkItemCancellationOtherReason}
+          setBulkItemCancellationReason={setBulkItemCancellationReason}
+          setItemsSelectedForCancellation={setItemsSelectedForCancellation}
+          triggerAppNotification={triggerAppNotification}
         />
 
           {/* Authorization Modal for Pending Cancellations */}
 <AuthorizeCancellationModal
           showAuthorizeCancellationModal={showAuthorizeCancellationModal}
           setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal}
-          authorizePasswordValue={authorizePasswordValue}
-          setAuthorizePasswordValue={setAuthorizePasswordValue}
+          authorizationPin={authorizationPin}
+          handleAuthorizeAccountCancellation={handleAuthorizeAccountCancellation}
+          pendingCancellationTarget={pendingCancellationTarget}
+          renderCancellationPinPad={renderCancellationPinPad}
+          selectedTable={selectedTable}
+          setAuthorizationPin={setAuthorizationPin}
+          setPendingCancellationTarget={setPendingCancellationTarget}
+          triggerAppNotification={triggerAppNotification}
+          validateAdminPin={validateAdminPin}
         />
 
           {/* Recipe Add Modal */}
@@ -13075,6 +13167,13 @@ Instrucciones:
 <ItemNoteModal
           itemToNote={itemToNote}
           setItemToNote={setItemToNote}
+          isListeningNote={isListeningNote}
+          isOnline={isOnline}
+          noteProduct={noteProduct}
+          saveItemNote={saveItemNote}
+          setTempNote={setTempNote}
+          tempNote={tempNote}
+          toggleNoteVoiceRecognition={toggleNoteVoiceRecognition}
         />
             );
           })()}
@@ -13083,18 +13182,44 @@ Instrucciones:
 <ItemCancelModal
           itemToCancel={itemToCancel}
           setItemToCancel={setItemToCancel}
+          accountCancellationOtherReason={accountCancellationOtherReason}
+          handleCancelItem={handleCancelItem}
+          handleMarkItemForCancellation={handleMarkItemForCancellation}
+          itemCancelPin={itemCancelPin}
+          itemCancelReason={itemCancelReason}
+          renderCancellationPinPad={renderCancellationPinPad}
+          setAccountCancellationOtherReason={setAccountCancellationOtherReason}
+          setItemCancelPin={setItemCancelPin}
+          setItemCancelReason={setItemCancelReason}
+          validateAdminPin={validateAdminPin}
         />
 
           {/* Comanda Cancellation Modal */}
 <ComandaCancelModal
           comandaToCancel={comandaToCancel}
           setComandaToCancel={setComandaToCancel}
+          cancelEntireComanda={cancelEntireComanda}
+          comandaCancelPin={comandaCancelPin}
+          comandaCancelReason={comandaCancelReason}
+          handleMarkEntireComandaForCancellation={handleMarkEntireComandaForCancellation}
+          renderCancellationPinPad={renderCancellationPinPad}
+          setComandaCancelPin={setComandaCancelPin}
+          setComandaCancelReason={setComandaCancelReason}
+          validateAdminPin={validateAdminPin}
         />
 
           {/* Closed Account Cancellation Modal */}
 <AccountCancellationModal
           showAccountCancellationModal={showAccountCancellationModal}
           setShowAccountCancellationModal={setShowAccountCancellationModal}
+          accountCancellationOtherReason={accountCancellationOtherReason}
+          accountCancellationReason={accountCancellationReason}
+          handleMarkAccountForCancellation={handleMarkAccountForCancellation}
+          selectedAccountForCancellation={selectedAccountForCancellation}
+          setAccountCancellationOtherReason={setAccountCancellationOtherReason}
+          setAccountCancellationPin={setAccountCancellationPin}
+          setAccountCancellationReason={setAccountCancellationReason}
+          setSelectedAccountForCancellation={setSelectedAccountForCancellation}
         />
         </>
       )}
@@ -13102,6 +13227,15 @@ Instrucciones:
 <EditPaymentModal
           isEditPaymentModalOpen={isEditPaymentModalOpen}
           setIsEditPaymentModalOpen={setIsEditPaymentModalOpen}
+          accountToEditPayment={accountToEditPayment}
+          handleUpdatePaymentMethod={handleUpdatePaymentMethod}
+          setAccountToEditPayment={setAccountToEditPayment}
+          setTempCardLastFour={setTempCardLastFour}
+          setTempPaymentCardType={setTempPaymentCardType}
+          setTempPaymentMethod={setTempPaymentMethod}
+          tempCardLastFour={tempCardLastFour}
+          tempPaymentCardType={tempPaymentCardType}
+          tempPaymentMethod={tempPaymentMethod}
         />
 
       <DailyReportModal 
@@ -13322,9 +13456,13 @@ Instrucciones:
 <InvoicePhoneModal
           showInvoicePhoneModal={showInvoicePhoneModal}
           setShowInvoicePhoneModal={setShowInvoicePhoneModal}
-          invoicePhoneNumber={invoicePhoneNumber}
-          setInvoicePhoneNumber={setInvoicePhoneNumber}
-          handleSendInvoiceByWhatsApp={handleSendInvoiceByWhatsApp}
+          handleConfirmInvoicePhone={handleConfirmInvoicePhone}
+          inputInvoicePhone={inputInvoicePhone}
+          inputInvoicePhoneConfirm={inputInvoicePhoneConfirm}
+          invoicePhoneError={invoicePhoneError}
+          setInputInvoicePhone={setInputInvoicePhone}
+          setInputInvoicePhoneConfirm={setInputInvoicePhoneConfirm}
+          setPendingInvoiceTarget={setPendingInvoiceTarget}
         />
 
       <IonAlert

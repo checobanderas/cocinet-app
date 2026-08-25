@@ -1,3 +1,4 @@
+import { addProductToFirebase, createMenuBackup, deleteMenuBackupFromFirebase, deleteProductFromFirebase, exportFullDatabaseJson, generateUUID, getAllMenuBackupsFromFirebase, getAllProductsFromFirebase, getMexicoISOString, importFullDatabaseJson, migrateBackupsTenant, migrateProductsTenant, restoreMenuBackupInFirebase, updateProductInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonContent, IonIcon, IonPage, IonSpinner, IonText } from '@ionic/react';
@@ -111,6 +112,22 @@ interface ManageMenuViewProps {
   splitSelectedProductId: any;
   treeDragOverTargetKey: any;
   triggerAppNotification: any;
+  analyzeMenuImage: any;
+  applyBulkCaseToggle: any;
+  applyBulkSubcategory: any;
+  applyBulkSubgroup: any;
+  collapseAllTreeNodes: any;
+  expandAllTreeNodes: any;
+  loadAutoFormattedList: any;
+  moveSelectedDown: any;
+  moveSelectedToBottom: any;
+  moveSelectedToTop: any;
+  moveSelectedUp: any;
+  parseSplitProducts: any;
+  saveRelationChanges: any;
+  toggleTextCase: any;
+  toggleTreeSectionCollapse: any;
+  toggleTreeSubgroupCollapse: any;
 }
 
 export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
@@ -220,7 +237,8 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
   splitProposedItems,
   splitSelectedProductId,
   treeDragOverTargetKey,
-  triggerAppNotification
+  triggerAppNotification,
+  analyzeMenuImage, applyBulkCaseToggle, applyBulkSubcategory, applyBulkSubgroup, collapseAllTreeNodes, expandAllTreeNodes, loadAutoFormattedList, moveSelectedDown, moveSelectedToBottom, moveSelectedToTop, moveSelectedUp, parseSplitProducts, saveRelationChanges, toggleTextCase, toggleTreeSectionCollapse, toggleTreeSubgroupCollapse
 }) => {
 const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
     if (!hasAccess) {

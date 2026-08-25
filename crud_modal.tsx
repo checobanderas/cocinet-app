@@ -1,3 +1,5 @@
+import { IonModal } from '@ionic/react';
+import { addProductToFirebase, bulkAddProductsToFirebase, generateUUID, getAllProductsFromFirebase, getMexicoISOString, softDeleteAllProductsFromFirebase, updateProductInFirebase } from 'utils/firestore';
 const renderProductCrudModal = () => {
     const isEditing = !!productCrudModal.product;
     const p = productCrudModal.product;
@@ -72,7 +74,29 @@ const renderProductCrudModal = () => {
               for (const tId of selectedTenants) {
                  const matchedProduct = allProducts.find((prod: any) => prod.tenantId === tId && prod.name.trim().toLowerCase() === name.trim().toLowerCase());
                  if (matchedProduct) {
-                   tenantsToUpdate.push({ tId, matchedProduct });
+                   tenantsToUpdate.push({
+  tId, matchedProduct,
+  importSelectedTenantId,
+  triggerAppNotification,
+  setImportConfirmStep,
+  newCrudQuickNoteText,
+  importInProgressRef,
+  COMPANY_CATALOG,
+  setCrudQuickNotes,
+  setRelationMatches,
+  crudSelectedCategory,
+  productCategories,
+  setImportSelectedTenantId,
+  products,
+  productCrudModal,
+  crudQuickNotes,
+  selectedTenant,
+  tenantPrinterConfig,
+  setProductCrudModal,
+  setNewCrudQuickNoteText,
+  setIsImportingTenantMenu,
+  setManageMenuTab
+});
                  } else {
                    tenantsToAdd.push(tId);
                  }

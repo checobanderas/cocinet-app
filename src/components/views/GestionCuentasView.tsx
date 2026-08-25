@@ -16,6 +16,9 @@ interface GestionCuentasViewProps {
   selectedTenant: any;
   setSelectedTableGestion: any;
   setSelectedTableId: any;
+  effectiveTables: any;
+  startVoiceRecognition: any;
+  zones: any;
 }
 
 export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
@@ -30,7 +33,8 @@ export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
   selectedTableGestion,
   selectedTenant,
   setSelectedTableGestion,
-  setSelectedTableId
+  setSelectedTableId,
+  effectiveTables, startVoiceRecognition, zones
 }) => {
 return (
       <IonPage>

@@ -1,3 +1,4 @@
+import { markComandaItemsForCancellationInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, saveOutline } from 'ionicons/icons';
@@ -5,11 +6,23 @@ import { closeOutline, saveOutline } from 'ionicons/icons';
 interface BulkItemCancellationReasonModalProps {
   showBulkItemCancellationReasonModal: boolean;
   setShowBulkItemCancellationReasonModal: (v: boolean) => void;
+  bulkItemCancellationOtherReason: any;
+  bulkItemCancellationReason: any;
+  currentUser: any;
+  itemsSelectedForCancellation: any;
+  pending: any;
+  selectedTable: any;
+  selectedTenant: any;
+  setBulkItemCancellationOtherReason: any;
+  setBulkItemCancellationReason: any;
+  setItemsSelectedForCancellation: any;
+  triggerAppNotification: any;
 }
 
 export const BulkItemCancellationReasonModal: React.FC<BulkItemCancellationReasonModalProps> = ({
   showBulkItemCancellationReasonModal,
-  setShowBulkItemCancellationReasonModal
+  setShowBulkItemCancellationReasonModal,
+  bulkItemCancellationOtherReason, bulkItemCancellationReason, currentUser, itemsSelectedForCancellation, pending, selectedTable, selectedTenant, setBulkItemCancellationOtherReason, setBulkItemCancellationReason, setItemsSelectedForCancellation, triggerAppNotification
 }) => {
   return (
           <IonModal

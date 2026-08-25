@@ -1,9 +1,12 @@
+import { getMexicoISOString } from '../../utils/firestore';
+import { getProductReportName, getProductSortScore } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 import { logoUrl } from 'ionicons/icons';
 
 interface CorteXViewProps {
+  logoUrl: any;
   cashMovements: any;
   companyConfig: any;
   corteXArqB100: any;
@@ -47,6 +50,7 @@ interface CorteXViewProps {
   showCorteXCopiedToast: any;
   ticketBusinessName: any;
   ticketSucursal: any;
+  saveCorteXFondoApertura: any;
 }
 
 export const CorteXView: React.FC<CorteXViewProps> = ({
@@ -92,7 +96,9 @@ export const CorteXView: React.FC<CorteXViewProps> = ({
   setShowCorteXCopiedToast,
   showCorteXCopiedToast,
   ticketBusinessName,
-  ticketSucursal
+  ticketSucursal,
+  saveCorteXFondoApertura,
+  logoUrl
 }) => {
 if (currentUser?.role === "mesero") {
       return (

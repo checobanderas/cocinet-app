@@ -1,15 +1,29 @@
+import { addTenantToFirebase, getMexicoISOString, updateCashierSessionInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, saveOutline } from 'ionicons/icons';
+import { backspaceOutline, closeOutline, saveOutline } from 'ionicons/icons';
 
 interface EditFondoModalProps {
+  sessionToRender: any;
   showEditFondoModal: boolean;
   setShowEditFondoModal: (v: boolean) => void;
+  corteTablaSessionSelected: any;
+  dotacionInicial: any;
+  editFondoValue: any;
+  selectedTenant: any;
+  setCashierSessions: any;
+  setCorteTablaSessionSelected: any;
+  setCorteXFondoApertura: any;
+  setEditFondoValue: any;
+  setSelectedTenant: any;
+  triggerAppNotification: any;
 }
 
 export const EditFondoModal: React.FC<EditFondoModalProps> = ({
   showEditFondoModal,
-  setShowEditFondoModal
+  setShowEditFondoModal,
+  corteTablaSessionSelected, dotacionInicial, editFondoValue, selectedTenant, setCashierSessions, setCorteTablaSessionSelected, setCorteXFondoApertura, setEditFondoValue, setSelectedTenant, triggerAppNotification,
+  sessionToRender
 }) => {
   return (
         <IonModal

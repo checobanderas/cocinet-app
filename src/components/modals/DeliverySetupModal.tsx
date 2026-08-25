@@ -34,6 +34,7 @@ interface DeliverySetupModalProps {
   setSelectedDeliveryClient: any;
   setShowDeliverySetupModal: any;
   showDeliverySetupModal: any;
+  filteredCustomers: any;
 }
 
 export const DeliverySetupModal: React.FC<DeliverySetupModalProps> = ({
@@ -67,7 +68,8 @@ export const DeliverySetupModal: React.FC<DeliverySetupModalProps> = ({
   setSelectedDeliveryAddress,
   setSelectedDeliveryClient,
   setShowDeliverySetupModal,
-  showDeliverySetupModal
+  showDeliverySetupModal,
+  filteredCustomers
 }) => {
   return (
       <IonModal

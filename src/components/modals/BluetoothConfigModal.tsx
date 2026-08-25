@@ -1,9 +1,11 @@
+import { PrinterMode } from '../../utils/printer';
 import React, { useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonIcon, IonContent } from '@ionic/react';
 import { closeOutline } from 'ionicons/icons';
 import { ProductCategorySetting, AreaPrinterSetting } from '../../utils/appHelpers';
 
 interface BluetoothConfigModalProps {
+  AreaPrinterSetting: any;
   tenantName: string;
   showBluetoothConfigModal: boolean;
   setShowBluetoothConfigModal: (v: boolean) => void;
@@ -12,6 +14,14 @@ interface BluetoothConfigModalProps {
   tenantPrinterConfig: Record<string, AreaPrinterSetting>;
   setTenantPrinterConfig: React.Dispatch<React.SetStateAction<Record<string, AreaPrinterSetting>>>;
   triggerAppNotification: (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info') => void;
+  activeBtConnections: any;
+  availableWindowsPrinters: any;
+  fetchWindowsPrinters: any;
+  handleSaveTenantPrinters: any;
+  handleScanBluetoothDevice: any;
+  handleTestPrinter: any;
+  isScanningBt: any;
+  printers: any;
 }
 
 export const BluetoothConfigModal: React.FC<BluetoothConfigModalProps> = ({
@@ -22,7 +32,9 @@ export const BluetoothConfigModal: React.FC<BluetoothConfigModalProps> = ({
   setProductCategories,
   tenantPrinterConfig,
   setTenantPrinterConfig,
-  triggerAppNotification
+  triggerAppNotification,
+  activeBtConnections, availableWindowsPrinters, fetchWindowsPrinters, handleSaveTenantPrinters, handleScanBluetoothDevice, handleTestPrinter, isScanningBt, printers,
+  AreaPrinterSetting
 }) => {
   const [newAreaName, setNewAreaName] = useState<string>('');
   const [newAreaEmoji, setNewAreaEmoji] = useState<string>('');

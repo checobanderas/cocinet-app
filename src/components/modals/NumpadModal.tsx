@@ -10,7 +10,7 @@ interface NumpadModalProps {
 
 export const NumpadModal: React.FC<NumpadModalProps> = ({
   showNumpadModal,
-  setShowNumpadModal,
+  setShowNumpadModal
 }) => {
   if (!showNumpadModal) return null;
 

@@ -4,6 +4,7 @@ import { IonIcon } from '@ionic/react';
 import { closeOutline, logoToUse, restaurantOutline } from 'ionicons/icons';
 
 interface SidebarViewProps {
+  logoToUse: any;
   adminViewOnlyCorte: any;
   appMode: any;
   checkoutReturnMode: any;
@@ -29,6 +30,7 @@ interface SidebarViewProps {
   showBluetoothConfigModal: any;
   showSidebar: any;
   suppliers: any;
+  activeOwnerBranchesCount: any;
 }
 
 export const SidebarView: React.FC<SidebarViewProps> = ({
@@ -56,7 +58,9 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
   setShowSidebar,
   showBluetoothConfigModal,
   showSidebar,
-  suppliers
+  suppliers,
+  activeOwnerBranchesCount,
+  logoToUse
 }) => {
 return (
       <AnimatePresence>

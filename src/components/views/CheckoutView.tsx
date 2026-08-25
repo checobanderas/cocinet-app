@@ -44,6 +44,8 @@ interface CheckoutViewProps {
   showDiscountInput: any;
   showPaymentOptions: any;
   showTipInput: any;
+  finalizePayment: any;
+  openNumpad: any;
 }
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
@@ -86,7 +88,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   setShowTipInput,
   showDiscountInput,
   showPaymentOptions,
-  showTipInput
+  showTipInput,
+  finalizePayment, openNumpad
 }) => {
 if (currentUser?.role === "mesero") {
       return (

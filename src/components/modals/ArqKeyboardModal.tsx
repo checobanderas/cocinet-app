@@ -3,6 +3,7 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline, backspaceOutline, checkmarkOutline } from 'ionicons/icons';
 
 interface ArqKeyboardModalProps {
+  handleExpressNumericPress: any;
   showArqKeyboardModal: boolean;
   setShowArqKeyboardModal: (v: boolean) => void;
   arqKeyboardTarget: any;
@@ -10,6 +11,18 @@ interface ArqKeyboardModalProps {
   arqKeyboardValue: any;
   setArqKeyboardValue: (v: any) => void;
   handleArqKeyboardDone: () => void;
+  activeExpressDenom: any;
+  expressArq100: any;
+  expressArq1000: any;
+  expressArq20: any;
+  expressArq200: any;
+  expressArq50: any;
+  expressArq500: any;
+  expressArqM05: any;
+  expressArqM1: any;
+  expressArqM10: any;
+  expressArqM2: any;
+  expressArqM5: any;
 }
 
 export const ArqKeyboardModal: React.FC<ArqKeyboardModalProps> = ({
@@ -19,7 +32,9 @@ export const ArqKeyboardModal: React.FC<ArqKeyboardModalProps> = ({
   setArqKeyboardTarget,
   arqKeyboardValue,
   setArqKeyboardValue,
-  handleArqKeyboardDone
+  handleArqKeyboardDone,
+  activeExpressDenom, expressArq100, expressArq1000, expressArq20, expressArq200, expressArq50, expressArq500, expressArqM05, expressArqM1, expressArqM10, expressArqM2, expressArqM5,
+  handleExpressNumericPress
 }) => {
   return (
           <IonModal

@@ -1,15 +1,34 @@
+import { deleteTenantBackupSnapshot, exportTenantDataJson, getMexicoISOString, restoreTenantBackupSnapshot, saveTenantBackupSnapshot } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, cloudDownloadOutline } from 'ionicons/icons';
 
 interface TenantBackupConfirmProps {
+  COMPANY_CATALOG: any;
   tenantBackupConfirm: any;
   setTenantBackupConfirm: (v: any) => void;
+  isTenantBackupLoading: any;
+  selectedTenant: any;
+  setIsTenantBackupLoading: any;
+  setTenantBackupDate: any;
+  setTenantBackupMode: any;
+  setTenantBackupMoveTarget: any;
+  setTenantBackupNote: any;
+  setTenantBackupProgress: any;
+  tenantBackupDate: any;
+  tenantBackupMode: any;
+  tenantBackupMoveTarget: any;
+  tenantBackupNote: any;
+  tenantBackupProgress: any;
+  tenantBackupSnapshots: any;
+  triggerAppNotification: any;
 }
 
 export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
   tenantBackupConfirm,
-  setTenantBackupConfirm
+  setTenantBackupConfirm,
+  isTenantBackupLoading, selectedTenant, setIsTenantBackupLoading, setTenantBackupDate, setTenantBackupMode, setTenantBackupMoveTarget, setTenantBackupNote, setTenantBackupProgress, tenantBackupDate, tenantBackupMode, tenantBackupMoveTarget, tenantBackupNote, tenantBackupProgress, tenantBackupSnapshots, triggerAppNotification,
+  COMPANY_CATALOG
 }) => {
   return (
           <IonModal

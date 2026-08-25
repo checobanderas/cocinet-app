@@ -1,3 +1,4 @@
+import { deleteCurrentCorteInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, alertCircleOutline } from 'ionicons/icons';
@@ -5,11 +6,20 @@ import { closeOutline, alertCircleOutline } from 'ionicons/icons';
 interface SystemsChoiceAlertProps {
   showSystemsChoiceAlert: boolean;
   setShowSystemsChoiceAlert: (v: boolean) => void;
+  selectedTenant: any;
+  setCashMovements: any;
+  setCashierSessions: any;
+  setExpenses: any;
+  setHistory: any;
+  setShowDeleteAllHistoryConfirm: any;
+  setTables: any;
+  triggerAppNotification: any;
 }
 
 export const SystemsChoiceAlert: React.FC<SystemsChoiceAlertProps> = ({
   showSystemsChoiceAlert,
-  setShowSystemsChoiceAlert
+  setShowSystemsChoiceAlert,
+  selectedTenant, setCashMovements, setCashierSessions, setExpenses, setHistory, setShowDeleteAllHistoryConfirm, setTables, triggerAppNotification
 }) => {
   return (
           <IonModal

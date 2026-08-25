@@ -1,15 +1,41 @@
+import { getFormattedProductName } from '../../utils/appHelpers';
 import React from 'react';
-import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, saveOutline, logoWhatsapp } from 'ionicons/icons';
+import { IonButton, IonButtons, IonContent, IonFooter, IonHeader, IonIcon, IonInput, IonItem, IonLabel, IonList, IonModal, IonSpinner, IonText, IonTitle, IonToolbar } from '@ionic/react';
+import { addOutline, cardOutline, chatbubbleEllipsesOutline, closeOutline, logoWhatsapp, micOutline, removeOutline, restaurantOutline, saveOutline, stopCircleOutline, syncOutline, trashOutline } from 'ionicons/icons';
 
 interface ComensalPreviewProps {
   showComensalPreview: boolean;
   setShowComensalPreview: (v: boolean) => void;
+  cart: any;
+  currentComensal: any;
+  currentUser: any;
+  generateOrder: any;
+  getComensalColor: any;
+  isGeneratingOrder: any;
+  isListening: any;
+  isOnline: any;
+  isProcessingVoice: any;
+  openItemNoteModal: any;
+  selectedTable: any;
+  setAppMode: any;
+  setCheckoutFallbackItems: any;
+  setCurrentComensal: any;
+  setPaymentAmountReceived: any;
+  setPaymentDiscountValue: any;
+  setPaymentMethod: any;
+  setPaymentTipValue: any;
+  setRequiresInvoice: any;
+  setShowDiscountInput: any;
+  setShowPaymentOptions: any;
+  setShowTipInput: any;
+  startVoiceRecognition: any;
+  updateQuantity: any;
 }
 
 export const ComensalPreview: React.FC<ComensalPreviewProps> = ({
   showComensalPreview,
-  setShowComensalPreview
+  setShowComensalPreview,
+  cart, currentComensal, currentUser, generateOrder, getComensalColor, isGeneratingOrder, isListening, isOnline, isProcessingVoice, openItemNoteModal, selectedTable, setAppMode, setCheckoutFallbackItems, setCurrentComensal, setPaymentAmountReceived, setPaymentDiscountValue, setPaymentMethod, setPaymentTipValue, setRequiresInvoice, setShowDiscountInput, setShowPaymentOptions, setShowTipInput, startVoiceRecognition, updateQuantity
 }) => {
   return (
         <IonModal

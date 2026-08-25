@@ -3,12 +3,27 @@ import { IonModal, IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonB
 import { closeOutline, downloadOutline } from 'ionicons/icons';
 
 interface MultiTurnModalProps {
+  totalCashSum: any;
+  totalCardSum: any;
+  handleExportMultiTurnWhatsApp: any;
+  enhancedMultiTurnRecords: any;
+  totalTransferSum: any;
+  totalMultiTurnSum: any;
+  handleExportMultiTurnExcel: any;
+  sortedShiftKeys: any;
   showMultiTurnModal: boolean;
   setShowMultiTurnModal: (v: boolean) => void;
   multiTurnData: any;
   selectedMultiTurnDate: string;
   setSelectedMultiTurnDate: (v: string) => void;
   handleExportMultiTurnCSV?: () => void;
+  multiTurnEndDate: any;
+  multiTurnPreviewReady: any;
+  multiTurnStartDate: any;
+  selectedTenant: any;
+  setMultiTurnEndDate: any;
+  setMultiTurnPreviewReady: any;
+  setMultiTurnStartDate: any;
 }
 
 export const MultiTurnModal: React.FC<MultiTurnModalProps> = ({
@@ -17,7 +32,16 @@ export const MultiTurnModal: React.FC<MultiTurnModalProps> = ({
   multiTurnData,
   selectedMultiTurnDate,
   setSelectedMultiTurnDate,
-  handleExportMultiTurnCSV
+  handleExportMultiTurnCSV,
+  multiTurnEndDate, multiTurnPreviewReady, multiTurnStartDate, selectedTenant, setMultiTurnEndDate, setMultiTurnPreviewReady, setMultiTurnStartDate,
+  totalCashSum,
+  totalCardSum,
+  handleExportMultiTurnWhatsApp,
+  enhancedMultiTurnRecords,
+  totalTransferSum,
+  totalMultiTurnSum,
+  handleExportMultiTurnExcel,
+  sortedShiftKeys
 }) => {
   const renderMultiTurnModal = () => (
       <IonModal

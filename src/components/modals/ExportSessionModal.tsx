@@ -1,15 +1,26 @@
+import { getCompanyCatalog } from '../../utils/appHelpers';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, downloadOutline } from 'ionicons/icons';
+import { closeOutline, downloadOutline, syncOutline } from 'ionicons/icons';
 
 interface ExportSessionModalProps {
+  handleExecuteExportTenantCorte: any;
   exportSessionModal: any;
   setExportSessionModal: (v: any) => void;
+  exportModalStep: any;
+  exportTargetTenantId: any;
+  isExportingSession: any;
+  selectedTenant: any;
+  setExportModalStep: any;
+  setExportTargetTenantId: any;
+  triggerAppNotification: any;
 }
 
 export const ExportSessionModal: React.FC<ExportSessionModalProps> = ({
   exportSessionModal,
-  setExportSessionModal
+  setExportSessionModal,
+  exportModalStep, exportTargetTenantId, isExportingSession, selectedTenant, setExportModalStep, setExportTargetTenantId, triggerAppNotification,
+  handleExecuteExportTenantCorte
 }) => {
   return (
           <IonModal

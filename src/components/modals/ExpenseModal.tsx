@@ -3,12 +3,23 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline, trashOutline } from 'ionicons/icons';
 
 interface ExpenseModalProps {
+  handleSaveExpense: any;
   showExpenseModal: boolean;
   setShowExpenseModal: (v: boolean) => void;
   // Let's add any props passed in
   expenseFormData: any;
   setExpenseFormData: (v: any) => void;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
+  expenseAmount: any;
+  expenseCategory: any;
+  expenseConcept: any;
+  expenseReference: any;
+  selectedExpenseForEdit: any;
+  setExpenseAmount: any;
+  setExpenseCategory: any;
+  setExpenseConcept: any;
+  setExpenseReference: any;
+  setSelectedExpenseForEdit: any;
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
@@ -16,7 +27,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   setShowExpenseModal,
   expenseFormData,
   setExpenseFormData,
-  triggerAppNotification
+  triggerAppNotification,
+  expenseAmount, expenseCategory, expenseConcept, expenseReference, selectedExpenseForEdit, setExpenseAmount, setExpenseCategory, setExpenseConcept, setExpenseReference, setSelectedExpenseForEdit,
+  handleSaveExpense
 }) => {
   return (
           <IonModal

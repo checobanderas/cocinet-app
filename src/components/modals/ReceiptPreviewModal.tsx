@@ -7,12 +7,17 @@ interface ReceiptPreviewModalProps {
   setShowReceiptPreviewModal: (v: boolean) => void;
   // Let's add any props passed in
   receiptPreviewContent: string;
+  companyConfig: any;
+  generateCorteExpressTicketText: any;
+  setMenuToastMessage: any;
+  setShowMenuToast: any;
 }
 
 export const ReceiptPreviewModal: React.FC<ReceiptPreviewModalProps> = ({
   showReceiptPreviewModal,
   setShowReceiptPreviewModal,
-  receiptPreviewContent
+  receiptPreviewContent,
+  companyConfig, generateCorteExpressTicketText, setMenuToastMessage, setShowMenuToast
 }) => {
   return (
           <IonModal

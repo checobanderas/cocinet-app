@@ -1,15 +1,60 @@
+import { updateCashierSessionInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, printOutline } from 'ionicons/icons';
 
 interface TablaArqueoModalProps {
+  diferenciaCaja: any;
+  tablaArqueoTotalBilletes: any;
+  estimatedCashInBox: any;
+  tablaArqueoTotalMonedas: any;
+  tablaArqueoTotal: any;
+  sessionToRender: any;
   showTablaArqueoModal: boolean;
   setShowTablaArqueoModal: (v: boolean) => void;
+  activeTablaDenom: any;
+  arqueoBilletes: any;
+  arqueoMonedas: any;
+  arqueoTotal: any;
+  estimatedCash: any;
+  setActiveTablaDenom: any;
+  setShowTablaKeypadOverlay: any;
+  setTablaArq100: any;
+  setTablaArq1000: any;
+  setTablaArq20: any;
+  setTablaArq200: any;
+  setTablaArq50: any;
+  setTablaArq500: any;
+  setTablaArqM05: any;
+  setTablaArqM1: any;
+  setTablaArqM10: any;
+  setTablaArqM2: any;
+  setTablaArqM5: any;
+  showTablaKeypadOverlay: any;
+  tablaArq100: any;
+  tablaArq1000: any;
+  tablaArq20: any;
+  tablaArq200: any;
+  tablaArq50: any;
+  tablaArq500: any;
+  tablaArqM05: any;
+  tablaArqM1: any;
+  tablaArqM10: any;
+  tablaArqM2: any;
+  tablaArqM5: any;
+  triggerAppNotification: any;
 }
 
 export const TablaArqueoModal: React.FC<TablaArqueoModalProps> = ({
   showTablaArqueoModal,
-  setShowTablaArqueoModal
+  setShowTablaArqueoModal,
+  activeTablaDenom, arqueoBilletes, arqueoMonedas, arqueoTotal, estimatedCash, setActiveTablaDenom, setShowTablaKeypadOverlay, setTablaArq100, setTablaArq1000, setTablaArq20, setTablaArq200, setTablaArq50, setTablaArq500, setTablaArqM05, setTablaArqM1, setTablaArqM10, setTablaArqM2, setTablaArqM5, showTablaKeypadOverlay, tablaArq100, tablaArq1000, tablaArq20, tablaArq200, tablaArq50, tablaArq500, tablaArqM05, tablaArqM1, tablaArqM10, tablaArqM2, tablaArqM5, triggerAppNotification,
+  diferenciaCaja,
+  tablaArqueoTotalBilletes,
+  estimatedCashInBox,
+  tablaArqueoTotalMonedas,
+  tablaArqueoTotal,
+  sessionToRender
 }) => {
   return (
           <IonModal

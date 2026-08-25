@@ -1,9 +1,15 @@
+import { PrintPreviewModal } from '../modals/PrintPreviewModal';
+import { SupplierPurchaseModal } from '../modals/SupplierPurchaseModal';
+import { GastoRegisterModal } from '../modals/GastoRegisterModal';
+import { ArqueoFormModal } from '../modals/ArqueoFormModal';
+import { addArqueoToFirebase, addCashMovementToFirebase, getMexicoISOString } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, cloudDoneOutline, menuOutline, refreshOutline } from 'ionicons/icons';
 
 interface DashboardViewProps {
+  printPreviewContent: any;
   arq100: any;
   arq1000: any;
   arq20: any;
@@ -74,6 +80,10 @@ interface DashboardViewProps {
   triggerAppNotification: any;
   users: any;
   nullconstrenderCorteNuevo: any;
+  corteData: any;
+  filteredCashMovementsForCorte: any;
+  filteredExpensesForCorte: any;
+  sessionId: any;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -146,7 +156,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   suppliers,
   syncStatus,
   triggerAppNotification,
-  users
+  users,
+  corteData, filteredCashMovementsForCorte, filteredExpensesForCorte, sessionId,
+  printPreviewContent
 }) => {
 if (currentUser?.role === "mesero") {
       return (

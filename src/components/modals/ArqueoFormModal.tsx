@@ -3,13 +3,44 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface ArqueoFormModalProps {
+  theoreticalBalance: any;
+  instantPhysicalTotal: any;
+  handleSaveArqueo: any;
+  instantDifference: any;
   showArqueoFormModal: boolean;
   setShowArqueoFormModal: (v: boolean) => void;
+  arq100: any;
+  arq1000: any;
+  arq20: any;
+  arq200: any;
+  arq50: any;
+  arq500: any;
+  arqM05: any;
+  arqM1: any;
+  arqM10: any;
+  arqM2: any;
+  arqM5: any;
+  setArq100: any;
+  setArq1000: any;
+  setArq20: any;
+  setArq200: any;
+  setArq50: any;
+  setArq500: any;
+  setArqM05: any;
+  setArqM1: any;
+  setArqM10: any;
+  setArqM2: any;
+  setArqM5: any;
 }
 
 export const ArqueoFormModal: React.FC<ArqueoFormModalProps> = ({
   showArqueoFormModal,
-  setShowArqueoFormModal
+  setShowArqueoFormModal,
+  arq100, arq1000, arq20, arq200, arq50, arq500, arqM05, arqM1, arqM10, arqM2, arqM5, setArq100, setArq1000, setArq20, setArq200, setArq50, setArq500, setArqM05, setArqM1, setArqM10, setArqM2, setArqM5,
+  theoreticalBalance,
+  instantPhysicalTotal,
+  handleSaveArqueo,
+  instantDifference
 }) => {
   return (
           <IonModal

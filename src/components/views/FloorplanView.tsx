@@ -1,3 +1,4 @@
+import { getFormattedProductName } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAccordion, IonAccordionGroup, IonBadge, IonButton, IonCol, IonContent, IonFooter, IonGrid, IonHeader, IonIcon, IonItem, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
@@ -14,6 +15,12 @@ interface FloorplanViewProps {
   selectedTenant: any;
   setMainTab: any;
   tables: any;
+  effectiveTables: any;
+  getComandaDestinations: any;
+  getComensalColor: any;
+  printComanda: any;
+  startVoiceRecognition: any;
+  zones: any;
 }
 
 export const FloorplanView: React.FC<FloorplanViewProps> = ({
@@ -26,7 +33,8 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
   renderMaterialHeader,
   selectedTenant,
   setMainTab,
-  tables
+  tables,
+  effectiveTables, getComandaDestinations, getComensalColor, printComanda, startVoiceRecognition, zones
 }) => {
   return (
 <IonPage>

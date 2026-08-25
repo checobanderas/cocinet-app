@@ -1,9 +1,16 @@
+import { MultiTurnModal } from '../modals/MultiTurnModal';
+import { CorteCuentasFolioRecord, saveCorteFolioRecordToFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 
 
 interface CorteTabla2ViewProps {
+  multiTurnData: any;
+  handleExportMultiTurnCSV: any;
+  setSelectedMultiTurnDate: any;
+  selectedMultiTurnDate: any;
+  ClosedAccount: any;
   corte2FolioAnterior: any;
   corte2MontoObjetivo: any;
   corte2Records: any;
@@ -31,6 +38,11 @@ interface CorteTabla2ViewProps {
   setShowMultiTurnModal: any;
   setShowSidebar: any;
   showMultiTurnModal: any;
+  account: any;
+  cancelled: any;
+  reprintAccount: any;
+  saved: any;
+  sorted: any;
 }
 
 export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
@@ -60,7 +72,13 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
   setShowMenuToast,
   setShowMultiTurnModal,
   setShowSidebar,
-  showMultiTurnModal
+  showMultiTurnModal,
+  account, cancelled, reprintAccount, saved, sorted,
+  multiTurnData,
+  handleExportMultiTurnCSV,
+  setSelectedMultiTurnDate,
+  selectedMultiTurnDate,
+  ClosedAccount
 }) => {
 // Role check: Only allowed for non-cajero and non-mesero
     if (["cajero", "mesero"].includes(currentUser?.role || "")) {

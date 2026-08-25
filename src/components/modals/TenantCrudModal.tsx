@@ -49,6 +49,8 @@ interface TenantCrudModalProps {
   handleDeleteTenant: () => Promise<void>;
   executeTenantTransfer: () => Promise<void>;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
+  setSelectedTenant: any;
+  setShowBluetoothConfigModal: any;
 }
 
 export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
@@ -96,7 +98,8 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   handleSaveTenant,
   handleDeleteTenant,
   executeTenantTransfer,
-  triggerAppNotification
+  triggerAppNotification,
+  setSelectedTenant, setShowBluetoothConfigModal
 }) => {
 
     // Get all Matrices for "Asociar a Matriz" dropdown

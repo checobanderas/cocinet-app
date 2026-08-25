@@ -1,9 +1,11 @@
+import { getFormattedProductName } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonBadge, IonButton, IonIcon, IonText } from '@ionic/react';
 import { chatbubbleEllipsesOutline, checkmarkOutline, closeCircleOutline, refreshOutline, shieldCheckmarkOutline } from 'ionicons/icons';
 
 interface PrecuentaItemViewProps {
+  showDelete: any;
   cancellationReason: any;
   handleRevertItemCancellation: any;
   itemsSelectedForCancellation: any;
@@ -15,6 +17,7 @@ interface PrecuentaItemViewProps {
   showDeletefalse: any;
   folio: any;
   index: any;
+  getComensalColor: any;
 }
 
 export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
@@ -28,7 +31,9 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
   setItemsSelectedForCancellation,
   setPendingCancellationTarget,
   setShowAuthorizeCancellationModal,
-  showDeletefalse
+  showDeletefalse,
+  getComensalColor,
+  showDelete
 }) => {
 const isCancelled = item.isCancelled;
     const isPendingCancellation = item.isPendingCancellation;

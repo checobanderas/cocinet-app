@@ -3,6 +3,7 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface SupplierModalProps {
+  handleSaveSupplier: any;
   supplierModal: any;
   setSupplierModal: (v: any) => void;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
@@ -11,7 +12,8 @@ interface SupplierModalProps {
 export const SupplierModal: React.FC<SupplierModalProps> = ({
   supplierModal,
   setSupplierModal,
-  triggerAppNotification
+  triggerAppNotification,
+  handleSaveSupplier
 }) => {
   return (
           <IonModal

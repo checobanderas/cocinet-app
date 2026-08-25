@@ -12,7 +12,7 @@ interface PinsStructureModalProps {
 export const PinsStructureModal: React.FC<PinsStructureModalProps> = ({
   showPinsStructureModal,
   setShowPinsStructureModal,
-  COMPANY_CATALOG,
+  COMPANY_CATALOG
 }) => {
   return (
     <IonModal

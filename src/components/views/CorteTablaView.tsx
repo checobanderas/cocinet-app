@@ -1,9 +1,19 @@
+import { TenantBackupConfirm } from '../modals/TenantBackupConfirm';
+import { SystemsChoiceAlert } from '../modals/SystemsChoiceAlert';
+import { TablaArqueoModal } from '../modals/TablaArqueoModal';
+import { EditFondoModal } from '../modals/EditFondoModal';
+import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
+import { ExportSessionModal } from '../modals/ExportSessionModal';
+import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase } from '../../utils/firestore';
+import { getCompanyCatalog } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, chevronDownOutline, chevronUpOutline, downloadOutline, gridOutline, logoWhatsapp, menuOutline, statsChartOutline, swapHorizontalOutline, syncOutline, trashOutline } from 'ionicons/icons';
 
 interface CorteTablaViewProps {
+  corteData: any;
+  CashierSession: any;
   appMode: any;
   cashMovements: any;
   cashierSessions: any;
@@ -80,6 +90,23 @@ interface CorteTablaViewProps {
   ticketBusinessName: any;
   ticketSucursal: any;
   triggerAppNotification: any;
+  activeSessionForCorte: any;
+  arqueoBilletes: any;
+  arqueoMonedas: any;
+  arqueoTotal: any;
+  cancelled: any;
+  doc: any;
+  estimatedCash: any;
+  filteredCashMovementsForCorte: any;
+  filteredExpensesForCorte: any;
+  filteredHistoryForCorte: any;
+  filteredPurchasesForCorte: any;
+  grouped: any;
+  isValidated: any;
+  sessionId: any;
+  targetTenantId: any;
+  validateOwnerKey: any;
+  validatedBy: any;
 }
 
 export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
@@ -158,7 +185,10 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   tenantBackupConfirm,
   ticketBusinessName,
   ticketSucursal,
-  triggerAppNotification
+  triggerAppNotification,
+  activeSessionForCorte, arqueoBilletes, arqueoMonedas, arqueoTotal, cancelled, doc, estimatedCash, filteredCashMovementsForCorte, filteredExpensesForCorte, filteredHistoryForCorte, filteredPurchasesForCorte, grouped, isValidated, sessionId, targetTenantId, validateOwnerKey, validatedBy,
+  corteData,
+  CashierSession
 }) => {
 if (currentUser?.role === "mesero") {
       return (

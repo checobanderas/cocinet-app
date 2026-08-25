@@ -1,3 +1,4 @@
+import { updateInvoiceRequirementInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonBadge, IonButton, IonIcon } from '@ionic/react';
@@ -34,6 +35,10 @@ interface ClosedAccountsListViewProps {
   setTempPaymentCardType: any;
   setTempPaymentMethod: any;
   triggerAppNotification: any;
+  cancelled: any;
+  historyForCuentasTab: any;
+  markAsPaid: any;
+  reprintAccount: any;
 }
 
 export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
@@ -66,7 +71,8 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   setTempCardLastFour,
   setTempPaymentCardType,
   setTempPaymentMethod,
-  triggerAppNotification
+  triggerAppNotification,
+  cancelled, historyForCuentasTab, markAsPaid, reprintAccount
 }) => {
 return (
       <>

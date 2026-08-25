@@ -1,3 +1,4 @@
+import { finalizeComandaItemsCancellationInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, checkmarkOutline, keyOutline } from 'ionicons/icons';
@@ -7,13 +8,25 @@ interface AuthorizeCancellationModalProps {
   setShowAuthorizeCancellationModal: (v: boolean) => void;
   authorizePasswordValue: any;
   setAuthorizePasswordValue: (v: any) => void;
+  account: any;
+  authorizationPin: any;
+  handleAuthorizeAccountCancellation: any;
+  item: any;
+  pendingCancellationTarget: any;
+  renderCancellationPinPad: any;
+  selectedTable: any;
+  setAuthorizationPin: any;
+  setPendingCancellationTarget: any;
+  triggerAppNotification: any;
+  validateAdminPin: any;
 }
 
 export const AuthorizeCancellationModal: React.FC<AuthorizeCancellationModalProps> = ({
   showAuthorizeCancellationModal,
   setShowAuthorizeCancellationModal,
   authorizePasswordValue,
-  setAuthorizePasswordValue
+  setAuthorizePasswordValue,
+  account, authorizationPin, handleAuthorizeAccountCancellation, item, pendingCancellationTarget, renderCancellationPinPad, selectedTable, setAuthorizationPin, setPendingCancellationTarget, triggerAppNotification, validateAdminPin
 }) => {
   return (
           <IonModal

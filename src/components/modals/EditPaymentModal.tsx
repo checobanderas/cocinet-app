@@ -1,15 +1,26 @@
+import { motion } from 'motion/react';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, saveOutline } from 'ionicons/icons';
+import { cardOutline, cashOutline, closeOutline, saveOutline, swapHorizontalOutline, walletOutline } from 'ionicons/icons';
 
 interface EditPaymentModalProps {
   isEditPaymentModalOpen: boolean;
   setIsEditPaymentModalOpen: (v: boolean) => void;
+  accountToEditPayment: any;
+  handleUpdatePaymentMethod: any;
+  setAccountToEditPayment: any;
+  setTempCardLastFour: any;
+  setTempPaymentCardType: any;
+  setTempPaymentMethod: any;
+  tempCardLastFour: any;
+  tempPaymentCardType: any;
+  tempPaymentMethod: any;
 }
 
 export const EditPaymentModal: React.FC<EditPaymentModalProps> = ({
   isEditPaymentModalOpen,
-  setIsEditPaymentModalOpen
+  setIsEditPaymentModalOpen,
+  accountToEditPayment, handleUpdatePaymentMethod, setAccountToEditPayment, setTempCardLastFour, setTempPaymentCardType, setTempPaymentMethod, tempCardLastFour, tempPaymentCardType, tempPaymentMethod
 }) => {
   return (
       <IonModal

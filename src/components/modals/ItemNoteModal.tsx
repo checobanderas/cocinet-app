@@ -1,15 +1,23 @@
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, saveOutline, trashOutline } from 'ionicons/icons';
+import { closeOutline, micOutline, saveOutline, stopCircleOutline, trashOutline } from 'ionicons/icons';
 
 interface ItemNoteModalProps {
   itemToNote: any;
   setItemToNote: (v: any) => void;
+  isListeningNote: any;
+  isOnline: any;
+  noteProduct: any;
+  saveItemNote: any;
+  setTempNote: any;
+  tempNote: any;
+  toggleNoteVoiceRecognition: any;
 }
 
 export const ItemNoteModal: React.FC<ItemNoteModalProps> = ({
   itemToNote,
-  setItemToNote
+  setItemToNote,
+  isListeningNote, isOnline, noteProduct, saveItemNote, setTempNote, tempNote, toggleNoteVoiceRecognition
 }) => {
   return (
               <IonModal

@@ -8,7 +8,7 @@ interface InvoiceModalProps {
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   showInvoiceModal,
-  setShowInvoiceModal,
+  setShowInvoiceModal
 }) => {
   if (!showInvoiceModal) return null;
 

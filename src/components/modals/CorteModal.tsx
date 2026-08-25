@@ -1,17 +1,24 @@
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
-import { closeOutline, saveOutline } from 'ionicons/icons';
+import { closeOutline, cloudUploadOutline, lockClosedOutline, printOutline, saveOutline } from 'ionicons/icons';
 
 interface CorteModalProps {
   showCorteModal: boolean;
   setShowCorteModal: (v: boolean) => void;
   corteData: any;
+  efectivoCount: any;
+  handleDownloadCorteReport: any;
+  handlePrintCorte: any;
+  setEfectivoCount: any;
+  setShowResetSalesConfirm: any;
+  totalArqueo: any;
 }
 
 export const CorteModal: React.FC<CorteModalProps> = ({
   showCorteModal,
   setShowCorteModal,
-  corteData
+  corteData,
+  efectivoCount, handleDownloadCorteReport, handlePrintCorte, setEfectivoCount, setShowResetSalesConfirm, totalArqueo
 }) => {
   return (
           <IonModal

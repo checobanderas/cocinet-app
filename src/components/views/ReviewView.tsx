@@ -20,6 +20,8 @@ interface ReviewViewProps {
   setGeneralNotes: any;
   setReviewComensal: any;
   setSelectedTableGestion: any;
+  generateOrder: any;
+  getComensalColor: any;
 }
 
 export const ReviewView: React.FC<ReviewViewProps> = ({
@@ -38,7 +40,8 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
   setConfirmRestart,
   setGeneralNotes,
   setReviewComensal,
-  setSelectedTableGestion
+  setSelectedTableGestion,
+  generateOrder, getComensalColor
 }) => {
 const totalPrice = cart.reduce(
       (sum, item) => sum + item.quantity * item.product.price,

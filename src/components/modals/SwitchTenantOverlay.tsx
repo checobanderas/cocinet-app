@@ -5,7 +5,9 @@ interface SwitchTenantOverlayProps {
   switchingTenantName: string | null;
 }
 
-export const SwitchTenantOverlay: React.FC<SwitchTenantOverlayProps> = ({ switchingTenantName }) => {
+export const SwitchTenantOverlay: React.FC<SwitchTenantOverlayProps> = ({
+  switchingTenantName
+}) => {
   return (
     <div
       style={{

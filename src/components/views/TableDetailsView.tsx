@@ -46,6 +46,11 @@ interface TableDetailsViewProps {
   setShowTransferTableModal: any;
   setTransferTargetTableId: any;
   triggerAppNotification: any;
+  cancelEntireComanda: any;
+  getComandaDestinations: any;
+  getComensalColor: any;
+  printComanda: any;
+  printTicket: any;
 }
 
 export const TableDetailsView: React.FC<TableDetailsViewProps> = ({
@@ -90,7 +95,8 @@ export const TableDetailsView: React.FC<TableDetailsViewProps> = ({
   setShowTipInput,
   setShowTransferTableModal,
   setTransferTargetTableId,
-  triggerAppNotification
+  triggerAppNotification,
+  cancelEntireComanda, getComandaDestinations, getComensalColor, printComanda, printTicket
 }) => {
 const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
     const tableTotal =

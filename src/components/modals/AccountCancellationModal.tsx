@@ -1,15 +1,24 @@
 import React from 'react';
-import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonInput, IonItem, IonLabel, IonModal, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, saveOutline } from 'ionicons/icons';
 
 interface AccountCancellationModalProps {
   showAccountCancellationModal: boolean;
   setShowAccountCancellationModal: (v: boolean) => void;
+  accountCancellationOtherReason: any;
+  accountCancellationReason: any;
+  handleMarkAccountForCancellation: any;
+  selectedAccountForCancellation: any;
+  setAccountCancellationOtherReason: any;
+  setAccountCancellationPin: any;
+  setAccountCancellationReason: any;
+  setSelectedAccountForCancellation: any;
 }
 
 export const AccountCancellationModal: React.FC<AccountCancellationModalProps> = ({
   showAccountCancellationModal,
-  setShowAccountCancellationModal
+  setShowAccountCancellationModal,
+  accountCancellationOtherReason, accountCancellationReason, handleMarkAccountForCancellation, selectedAccountForCancellation, setAccountCancellationOtherReason, setAccountCancellationPin, setAccountCancellationReason, setSelectedAccountForCancellation
 }) => {
   return (
           <IonModal

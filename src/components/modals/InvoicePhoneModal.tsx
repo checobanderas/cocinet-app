@@ -8,6 +8,13 @@ interface InvoicePhoneModalProps {
   invoicePhoneNumber: any;
   setInvoicePhoneNumber: (v: any) => void;
   handleSendInvoiceByWhatsApp: () => void;
+  handleConfirmInvoicePhone: any;
+  inputInvoicePhone: any;
+  inputInvoicePhoneConfirm: any;
+  invoicePhoneError: any;
+  setInputInvoicePhone: any;
+  setInputInvoicePhoneConfirm: any;
+  setPendingInvoiceTarget: any;
 }
 
 export const InvoicePhoneModal: React.FC<InvoicePhoneModalProps> = ({
@@ -15,7 +22,8 @@ export const InvoicePhoneModal: React.FC<InvoicePhoneModalProps> = ({
   setShowInvoicePhoneModal,
   invoicePhoneNumber,
   setInvoicePhoneNumber,
-  handleSendInvoiceByWhatsApp
+  handleSendInvoiceByWhatsApp,
+  handleConfirmInvoicePhone, inputInvoicePhone, inputInvoicePhoneConfirm, invoicePhoneError, setInputInvoicePhone, setInputInvoicePhoneConfirm, setPendingInvoiceTarget
 }) => {
   return (
         <IonModal

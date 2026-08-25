@@ -1,3 +1,4 @@
+import { addCashMovementToFirebase, getMexicoISOString } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, saveOutline } from 'ionicons/icons';
@@ -5,11 +6,28 @@ import { closeOutline, saveOutline } from 'ionicons/icons';
 interface GastoRegisterModalProps {
   showGastoRegisterModal: boolean;
   setShowGastoRegisterModal: (v: boolean) => void;
+  cashierSessions: any;
+  currentUser: any;
+  gastoCategory: any;
+  gastoDescription: any;
+  gastoItemName: any;
+  gastoItemPrice: any;
+  gastoItemQty: any;
+  gastoItems: any;
+  sessionId: any;
+  setGastoCategory: any;
+  setGastoDescription: any;
+  setGastoItemName: any;
+  setGastoItemPrice: any;
+  setGastoItemQty: any;
+  setGastoItems: any;
+  triggerAppNotification: any;
 }
 
 export const GastoRegisterModal: React.FC<GastoRegisterModalProps> = ({
   showGastoRegisterModal,
-  setShowGastoRegisterModal
+  setShowGastoRegisterModal,
+  cashierSessions, currentUser, gastoCategory, gastoDescription, gastoItemName, gastoItemPrice, gastoItemQty, gastoItems, sessionId, setGastoCategory, setGastoDescription, setGastoItemName, setGastoItemPrice, setGastoItemQty, setGastoItems, triggerAppNotification
 }) => {
   return (
           <IonModal

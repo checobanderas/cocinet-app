@@ -136,4 +136,7 @@ export const PinModalOverlay: React.FC<PinModalOverlayProps> = ({
         </div>
       </div>
     );
+  };
+
+  return renderPinModalOverlay();
 };
