@@ -181,8 +181,8 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
       }
     }
 
-    const folioAnterior = corte2FolioAnterior !== undefined && corte2FolioAnterior !== 0
-      ? corte2FolioAnterior
+    const folioAnterior = (corte2FolioAnterior !== undefined && corte2FolioAnterior !== null && corte2FolioAnterior !== "")
+      ? Number(corte2FolioAnterior)
       : calculatedFolioAnterior;
 
     const montoObjetivo = corte2MontoObjetivo || (existingRecord ? existingRecord.montoObjetivo : 0);
@@ -626,7 +626,7 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                       onChange={(e) => {
                         setCorte2SelectedDate(e.target.value);
                         setCorte2SelectedAccountIds([]);
-                        setCorte2FolioAnterior(0);
+                        setCorte2FolioAnterior(null);
                         setCorte2MontoObjetivo(0);
                       }}
                       className="bg-white text-amber-900 font-black text-sm px-3 py-2 rounded-xl border-2 border-stone-300 outline-none cursor-pointer shadow-sm focus:border-amber-500"
@@ -670,7 +670,10 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                     type="number"
                     min="0"
                     value={folioAnterior}
-                    onChange={(e) => setCorte2FolioAnterior(Number(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCorte2FolioAnterior(val === "" ? 0 : Number(val));
+                    }}
                     className="bg-white border-2 border-stone-300 text-amber-800 font-black text-xl px-3 py-2 rounded-xl outline-none focus:border-amber-500 transition shadow-inner"
                     placeholder="0"
                   />

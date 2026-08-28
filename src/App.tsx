@@ -5030,7 +5030,7 @@ export default function App() {
   // Estados para Historial de Cortes 2 (Folio Cuentas / Nivelación)
   const [corte2Records, setCorte2Records] = useState<CorteCuentasFolioRecord[]>([]);
   const [corte2SelectedDate, setCorte2SelectedDate] = useState<string>("");
-  const [corte2FolioAnterior, setCorte2FolioAnterior] = useState<number>(0);
+  const [corte2FolioAnterior, setCorte2FolioAnterior] = useState<number | null>(null);
   const [corte2MontoObjetivo, setCorte2MontoObjetivo] = useState<number>(0);
   const [corte2SelectedAccountIds, setCorte2SelectedAccountIds] = useState<string[]>([]);
   
