@@ -96,6 +96,9 @@ interface AdminPanelViewProps {
   sanitizeBusinessName: any;
   sanitizeEmail: any;
   topSold: any;
+  efectivoCount: any;
+  setEfectivoCount: any;
+  totalArqueo: any;
 }
 
 export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
@@ -180,7 +183,8 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   triggerAppNotification,
   users,
   websocketSyncLog,
-  cancelEntireComanda, cancelled, corteData, generateCorteTicketText, generatePrecorteTicketText, sanitizeBusinessName, sanitizeEmail, topSold
+  cancelEntireComanda, cancelled, corteData, generateCorteTicketText, generatePrecorteTicketText, sanitizeBusinessName, sanitizeEmail, topSold,
+  efectivoCount, setEfectivoCount, totalArqueo
 }) => {
 const pendingItemsList: any[] = [];
     tables.forEach((t) => {
@@ -889,6 +893,8 @@ setCheckoutReturnMode(null);
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
                   </div>
+
+                  {/* ESCALA GESTOR CUENTAS block removed */}
 
                   <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="space-y-1 text-left">
@@ -1600,6 +1606,12 @@ setCheckoutReturnMode(null);
           showCorteModal={showCorteModal}
           setShowCorteModal={setShowCorteModal}
           corteData={corteData}
+          efectivoCount={efectivoCount}
+          setEfectivoCount={setEfectivoCount}
+          handleDownloadCorteReport={handleDownloadCorteReport}
+          handlePrintCorte={handlePrintCorte}
+          setShowResetSalesConfirm={setShowResetSalesConfirm}
+          totalArqueo={totalArqueo}
         />
           <IonAlert
             isOpen={showResetSalesConfirm}

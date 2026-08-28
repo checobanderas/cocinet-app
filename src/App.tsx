@@ -1,8 +1,10 @@
+import { numeroALetras } from './utils/formatters';
 import { DailyReportModal } from "./components/DailyReportModal";
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
 import { PrinterTemplateModal } from "./components/PrinterTemplateModal";
+import { NumpadModal } from "./components/modals/NumpadModal";
 import {
   User,
   Product,
@@ -1880,7 +1882,9 @@ export default function App() {
           } catch (e) {}
         }
 
-        setCompanyConfig({
+        setCompanyConfig((prev) => ({
+          ...prev,
+          ...data,
           businessName: b,
           rfc: r,
           sucursal: s,
@@ -1892,7 +1896,7 @@ export default function App() {
           lugarExpedicion: lug,
           telefono: tel,
           email: eml,
-        });
+        }));
 
         setSystemUseRawBt(u);
         setTicketBusinessName(b);
@@ -2617,6 +2621,11 @@ export default function App() {
   const [formTenantLng, setFormTenantLng] = useState<number | "">("");
   const [formTenantLogoUrl, setFormTenantLogoUrl] = useState("");
   const [formTenantRequireInternalFolio, setFormTenantRequireInternalFolio] = useState<boolean>(false);
+  const [formTenantAllowEfectivo, setFormTenantAllowEfectivo] = useState<boolean>(true);
+  const [formTenantAllowTarjeta, setFormTenantAllowTarjeta] = useState<boolean>(true);
+  const [formTenantAllowTransferencia, setFormTenantAllowTransferencia] = useState<boolean>(true);
+  const [formTenantAllowLupay, setFormTenantAllowLupay] = useState<boolean>(true);
+  const [formTenantRequireCardDigits, setFormTenantRequireCardDigits] = useState<boolean>(true);
 
   // Tenant Transfer States (Traspaso de Inquilino inline)
   const [transferStep, setTransferStep] = useState<0 | 1 | 2>(0);
@@ -2639,6 +2648,11 @@ export default function App() {
     setFormTenantLng("");
     setFormTenantLogoUrl("");
     setFormTenantRequireInternalFolio(false);
+    setFormTenantAllowEfectivo(true);
+    setFormTenantAllowTarjeta(true);
+    setFormTenantAllowTransferencia(true);
+    setFormTenantAllowLupay(true);
+    setFormTenantRequireCardDigits(true);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(true);
@@ -2660,6 +2674,11 @@ export default function App() {
     setFormTenantLng(tenant.lng ?? "");
     setFormTenantLogoUrl(tenant.logoUrl || "");
     setFormTenantRequireInternalFolio(tenant.requireInternalFolio === true);
+    setFormTenantAllowEfectivo(tenant.allowEfectivo !== false);
+    setFormTenantAllowTarjeta(tenant.allowTarjeta !== false);
+    setFormTenantAllowTransferencia(tenant.allowTransferencia !== false);
+    setFormTenantAllowLupay(tenant.allowLupay !== false);
+    setFormTenantRequireCardDigits(tenant.requireCardDigits !== false);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(tenant.type === "Matriz");
@@ -2690,6 +2709,11 @@ export default function App() {
       lng: formTenantLng !== "" ? Number(formTenantLng) : editingTenant.lng,
       logoUrl: formTenantLogoUrl || editingTenant.logoUrl,
       requireInternalFolio: formTenantRequireInternalFolio,
+      allowEfectivo: formTenantAllowEfectivo,
+      allowTarjeta: formTenantAllowTarjeta,
+      allowTransferencia: formTenantAllowTransferencia,
+      allowLupay: formTenantAllowLupay,
+      requireCardDigits: formTenantRequireCardDigits,
       updatedAt: getMexicoISOString(),
     };
 
@@ -2744,15 +2768,7 @@ export default function App() {
 
   const handleSaveTenant = async () => {
     if (!formTenantName.trim()) {
-      alert("Por favor ingresa el nombre de la empresa.");
-      return;
-    }
-    if (!formTenantRfc.trim()) {
-      alert("Por favor ingresa el RFC.");
-      return;
-    }
-    if (!formTenantSucursal.trim()) {
-      alert("Por favor ingresa el nombre de la sucursal.");
+      triggerAppNotification("⚠️ Nombre Requerido", "Debes indicar el nombre de la sucursal/empresa.", "warning");
       return;
     }
 
@@ -2795,6 +2811,11 @@ export default function App() {
       lng: formTenantLng !== "" ? Number(formTenantLng) : undefined,
       logoUrl: formTenantLogoUrl || "",
       requireInternalFolio: formTenantRequireInternalFolio,
+      allowEfectivo: formTenantAllowEfectivo,
+      allowTarjeta: formTenantAllowTarjeta,
+      allowTransferencia: formTenantAllowTransferencia,
+      allowLupay: formTenantAllowLupay,
+      requireCardDigits: formTenantRequireCardDigits,
       createdAt: editingTenant?.createdAt || getMexicoISOString(),
       updatedAt: getMexicoISOString(),
     };
@@ -4620,6 +4641,8 @@ export default function App() {
         if (propinaVal > 0) job.printLine(`PROPINA: $${propinaVal.toFixed(2)}`);
         
         job.bold(true).printLine(`TOTAL: $${totalVal.toFixed(2)}`).bold(false);
+        job.printLine(" ");
+        job.center().printLine(`(${numeroALetras(totalVal)})`).left();
 
         const getPaymentLabel = (p: any) => {
           const m = (p.paymentMethod || p.metodoPago || p.payment_method || p.formaPago || p.tipoPago || "").toString().toLowerCase().trim();
@@ -4661,10 +4684,11 @@ export default function App() {
       }
 
       job.feed(3).cut();
-      job.execute();
+      await job.execute();
       console.log(`[WindowsAutoPrint] Sent print job for ${pedido.tipo} #${pedido.folio}`);
     } catch (err) {
       console.error("[WindowsAutoPrint] Error preparing or sending print job:", err);
+      throw err;
     }
   };
 
@@ -6120,6 +6144,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     data: any;
   } | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showNumpadModal, setShowNumpadModal] = useState(false);
   const [showEditFondoModal, setShowEditFondoModal] = useState(false);
   const [editFondoValue, setEditFondoValue] = useState("");
 
@@ -7322,6 +7347,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       formTenantOwnerKey={formTenantOwnerKey}
       formTenantPropietario={formTenantPropietario}
       formTenantRequireInternalFolio={formTenantRequireInternalFolio}
+      formTenantAllowEfectivo={formTenantAllowEfectivo}
+      setFormTenantAllowEfectivo={setFormTenantAllowEfectivo}
+      formTenantAllowTarjeta={formTenantAllowTarjeta}
+      setFormTenantAllowTarjeta={setFormTenantAllowTarjeta}
+      formTenantAllowTransferencia={formTenantAllowTransferencia}
+      setFormTenantAllowTransferencia={setFormTenantAllowTransferencia}
+      formTenantAllowLupay={formTenantAllowLupay}
+      setFormTenantAllowLupay={setFormTenantAllowLupay}
+      formTenantRequireCardDigits={formTenantRequireCardDigits}
+      setFormTenantRequireCardDigits={setFormTenantRequireCardDigits}
       formTenantRfc={formTenantRfc}
       formTenantSucursal={formTenantSucursal}
       formTenantType={formTenantType}
@@ -7420,28 +7455,39 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   );;
 
   const validateAdminPin = (enteredPin: string): User | null => {
-    // 1. Search for matching admin in the current branch users
-    let admin = users.find((u) => u.pin === enteredPin && u.role === "admin");
-    if (admin) return admin;
-
-    // 2. Search through ALL users of ALL sucursales
-    for (const company of COMPANY_CATALOG) {
-      const companyUsers = getTenantUsers(company.id);
-      const u = companyUsers.find((x) => x.pin === enteredPin && x.role === "admin");
-      if (u) return u;
-    }
-
-    // 3. Systems master or standard admin PIN fallback if any
+    // 1. Master/Sistemas Pins (Global allowed)
     if (enteredPin === "4020" || enteredPin === "2052" || enteredPin === "2026") {
       const firstAdmin = users.find((u) => u.role === "admin") || {
         id: "admin-master",
-        name: enteredPin === "4020" ? "Sistemas Bypass ⚙️" : "Admin Maestro 👑",
+        name: enteredPin === "4020" ? "Sistemas Bypass 🛠️" : "Admin Maestro 👑",
         role: "admin" as UserRole,
         pin: enteredPin,
         avatar: "fa-solid fa-laptop-code",
         tenantId: selectedTenant?.id || "",
       };
       return firstAdmin;
+    }
+
+    // 2. Search for matching admin in the current branch users (Local Tenant)
+    // Cajeros y meseros NO pueden autorizar. Cualquier otro rol superior local (admin, gerente, etc.) SÍ puede.
+    let localAdmin = users.find((u) => u.pin === enteredPin && u.role !== "mesero" && u.role !== "cajero");
+    if (localAdmin) return localAdmin;
+
+    // 3. Search through ALL users of ALL sucursales (Cross-Tenant)
+    // Los administradores o gerentes de otras sucursales NO pueden cancelar aquí.
+    // SOLO se permite si son de nivel Propietario o Sistemas.
+    for (const company of COMPANY_CATALOG) {
+      if (company.id === selectedTenant?.id) continue;
+      const companyUsers = getTenantUsers(company.id);
+      const crossTenantUser = companyUsers.find((x) => x.pin === enteredPin);
+      if (crossTenantUser) {
+        const isSistemas = crossTenantUser.id.endsWith("-sistemas") || crossTenantUser.name.toLowerCase().includes("sistemas");
+        const isPropietario = crossTenantUser.id.endsWith("-admin") || crossTenantUser.role === "owner" || (crossTenantUser.role as any) === "supervisor";
+        
+        if (isSistemas || isPropietario) {
+          return crossTenantUser;
+        }
+      }
     }
 
     return null;
@@ -7615,8 +7661,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   }, [tables, selectedTenant?.id]);
 
   const selectedTable = useMemo(() => {
-    return effectiveTables.find((t) => t.id === selectedTableId);
-  }, [effectiveTables, selectedTableId]);
+    return effectiveTables.find((t) => t.id === selectedTableId) || selectedTableGestion;
+  }, [effectiveTables, selectedTableId, selectedTableGestion]);
 
   useEffect(() => {
     const subs = Array.from(
@@ -8493,12 +8539,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       return;
     }
 
-    if (paymentMethod === "card" && !paymentCardType) {
-      alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
-      const el = document.getElementById("card-type-selection-container");
-      if (el) el.scrollIntoView({ behavior: "smooth" });
-      return;
-    }
+    // if (paymentMethod === "card" && !paymentCardType) {
+    //   alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
+    //   const el = document.getElementById("card-type-selection-container");
+    //   if (el) el.scrollIntoView({ behavior: "smooth" });
+    //   return;
+    // }
 
     if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
@@ -9251,10 +9297,10 @@ setCheckoutReturnMode(null);
   };
 
   const confirmPayment = async (account: ClosedAccount) => {
-    if (paymentMethod === "card" && !paymentCardType) {
-      alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
-      return;
-    }
+    // if (paymentMethod === "card" && !paymentCardType) {
+    //   alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
+    //   return;
+    // }
 
     if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
@@ -9351,8 +9397,13 @@ setCheckoutReturnMode(null);
     if (!accountToEditPayment) return;
     console.log("Updating payment method for account:", accountToEditPayment.id, tempPaymentMethod);
 
-    if ((tempPaymentMethod === "card" || tempPaymentMethod === "transfer") && (!tempCardLastFour || tempCardLastFour.length < 4)) {
+    if ((tempPaymentMethod === "card" || tempPaymentMethod === "transfer") && selectedTenant?.requireCardDigits !== false && (!tempCardLastFour || tempCardLastFour.length < 4)) {
       triggerAppNotification("⚠️ Error", "Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos.", "warning");
+      return;
+    }
+
+    if (tempPaymentMethod === "card" && accountToEditPayment?.requiresInvoice && !tempPaymentCardType) {
+      triggerAppNotification("⚠️ Error", "Para pagos con Tarjeta con Factura, es obligatorio especificar Crédito o Débito.", "warning");
       return;
     }
 
@@ -9524,6 +9575,8 @@ setCheckoutReturnMode(null);
         .bold(true)
         .printLine(`TOTAL: $${account.total.toFixed(2)}`)
         .bold(false);
+      job.printLine(" ");
+      job.center().printLine(`(${numeroALetras(account.total)})`).left();
 
       const payLabel = getPaymentLabel(account);
       if (payLabel) {
@@ -9904,6 +9957,9 @@ setCheckoutReturnMode(null);
         .bold(true)
         .printLine(`TOTAL: $${currentTotal.toFixed(2)}`)
         .bold(false);
+      
+      job.printLine(" ");
+      job.center().printLine(`(${numeroALetras(currentTotal)})`).left();
 
       if (explicitPaymentMethod || (table as any).isPaid) {
         const payMethodToUse = explicitPaymentMethod || (table as any).paymentMethod || activePayMethod;
@@ -11024,24 +11080,30 @@ Instrucciones:
   };
 
   const renderReviewItem = (item: CartItem, idx?: number) => (
-    <ReviewItemView idx={idx}
+    <ReviewItemView 
+          idx={idx}
+          item={item}
           openItemNoteModal={openItemNoteModal}
           updateQuantity={updateQuantity}
     />
-  );;
+  );
 
-  const renderPrecuentaItem = (     item: CartItem,     showDelete = false,     folio?: number,     index?: number,   ) => (
+  const renderPrecuentaItem = (item: CartItem, showDelete = false, folio?: number, index?: number) => (
     <PrecuentaItemView
+      item={item}
+      showDelete={showDelete}
       cancellationReason={cancellationReason}
       handleRevertItemCancellation={handleRevertItemCancellation}
       itemsSelectedForCancellation={itemsSelectedForCancellation}
       selectedTable={selectedTable}
       setItemsSelectedForCancellation={setItemsSelectedForCancellation}
       setPendingCancellationTarget={setPendingCancellationTarget}
-      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal} folio={folio} index={index}
-          getComensalColor={getComensalColor}
+      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal} 
+      folio={folio} 
+      index={index}
+      getComensalColor={getComensalColor}
     />
-  );;
+  );
 
   const renderReview = () => (
     <ReviewView
@@ -11122,6 +11184,7 @@ Instrucciones:
 
   const renderCheckout = () => (
     <CheckoutView
+      selectedTenant={selectedTenant}
       cancellationReason={cancellationReason}
       checkoutFallbackItems={checkoutFallbackItems}
       currentUser={currentUser}
@@ -11276,6 +11339,9 @@ Instrucciones:
           generatePrecorteTicketText={generatePrecorteTicketText}
           sanitizeBusinessName={sanitizeBusinessName}
           sanitizeEmail={sanitizeEmail}
+          efectivoCount={efectivoCount}
+          setEfectivoCount={setEfectivoCount}
+          totalArqueo={totalArqueo}
       
     />
   );;
@@ -12583,9 +12649,26 @@ Instrucciones:
       selectedTenant={selectedTenant}
       setSelectedTableGestion={setSelectedTableGestion}
       setSelectedTableId={setSelectedTableId}
-          effectiveTables={effectiveTables}
-          startVoiceRecognition={startVoiceRecognition}
-          zones={zones}
+      effectiveTables={effectiveTables}
+      startVoiceRecognition={startVoiceRecognition}
+      zones={zones}
+      scaleLeft={companyConfig?.gestionCuentasLeftScale || 1}
+      scaleRight={companyConfig?.gestionCuentasRightScale || 1}
+          onScaleChange={(side, val) => {
+            if (!selectedTenant?.id) return;
+            const key = side === 'left' ? 'gestionCuentasLeftScale' : 'gestionCuentasRightScale';
+            const updated = { ...companyConfig, [key]: parseFloat(val.toFixed(2)) };
+            setCompanyConfig(updated);
+            saveCompanyConfigInFirebase(selectedTenant.id, updated).catch(console.error);
+          }}
+          companyConfig={companyConfig}
+          currentUser={currentUser}
+          updateCompanyConfig={(updates: any) => {
+            if (!selectedTenant?.id) return;
+            const updated = { ...companyConfig, ...updates };
+            setCompanyConfig(updated);
+            saveCompanyConfigInFirebase(selectedTenant.id, updated).catch(console.error);
+          }}
       
     />
   );;
@@ -12743,13 +12826,28 @@ Instrucciones:
       ticketBusinessName={ticketBusinessName}
       ticketSucursal={ticketSucursal}
       triggerAppNotification={triggerAppNotification}
+          corteData={corteData}
           activeSessionForCorte={activeSessionForCorte}
           filteredCashMovementsForCorte={filteredCashMovementsForCorte}
           filteredExpensesForCorte={filteredExpensesForCorte}
           filteredHistoryForCorte={filteredHistoryForCorte}
           filteredPurchasesForCorte={filteredPurchasesForCorte}
           validateOwnerKey={validateOwnerKey}
-      
+          activeTablaDenom={activeTablaDenom}
+          setActiveTablaDenom={setActiveTablaDenom}
+          showTablaKeypadOverlay={showTablaKeypadOverlay}
+          setShowTablaKeypadOverlay={setShowTablaKeypadOverlay}
+          setTablaArq100={setTablaArq100}
+          setTablaArq1000={setTablaArq1000}
+          setTablaArq20={setTablaArq20}
+          setTablaArq200={setTablaArq200}
+          setTablaArq50={setTablaArq50}
+          setTablaArq500={setTablaArq500}
+          setTablaArqM05={setTablaArqM05}
+          setTablaArqM1={setTablaArqM1}
+          setTablaArqM10={setTablaArqM10}
+          setTablaArqM2={setTablaArqM2}
+          setTablaArqM5={setTablaArqM5}
     />
   );;
 
@@ -12763,6 +12861,7 @@ Instrucciones:
       currentUser={currentUser}
       handleSendWhatsAppInvoice={handleSendWhatsAppInvoice}
       history={history}
+      historyLoaded={historyLoaded}
       invoicePhone={invoicePhone}
       multiTurnEndDate={multiTurnEndDate}
       multiTurnStartDate={multiTurnStartDate}
@@ -12776,6 +12875,7 @@ Instrucciones:
       setMenuToastMessage={setMenuToastMessage}
       setMultiTurnEndDate={setMultiTurnEndDate}
       setMultiTurnPreviewReady={setMultiTurnPreviewReady}
+      multiTurnPreviewReady={multiTurnPreviewReady}
       setMultiTurnStartDate={setMultiTurnStartDate}
       setProductSalesMap={setProductSalesMap}
       setShowMenuToast={setShowMenuToast}
@@ -13023,6 +13123,37 @@ Instrucciones:
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Evitar auto-repeat si se deja presionada la tecla F10
+      if (e.key === "F10" && !e.repeat) {
+        e.preventDefault();
+        // Solo si no estamos escuchando ni procesando, iniciamos
+        if (!isListening && !isStartingVoiceRef.current && !isProcessingVoice) {
+          startVoiceRecognition();
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "F10") {
+        e.preventDefault();
+        // Si estamos escuchando, lo detenemos simulando un segundo clic (toggle)
+        if (isListening) {
+          startVoiceRecognition();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [isListening, isProcessingVoice, startVoiceRecognition]);
+
   return (
     <IonApp>
       <InstallPWA />
@@ -13113,6 +13244,7 @@ Instrucciones:
           setShowPaymentModal={setShowPaymentModal}
           selectedTable={selectedTable}
           selectedAccountForPayment={selectedAccountForPayment}
+          selectedTenant={selectedTenant}
           paymentMethod={paymentMethod}
           setPaymentMethod={setPaymentMethod}
           paymentAmountReceived={paymentAmountReceived}
@@ -13167,6 +13299,11 @@ Instrucciones:
           existingSubcategories={existingSubcategories}
           existingSubgroups={existingSubgroups}
           setRelationMatches={setRelationMatches}
+          COMPANY_CATALOG={COMPANY_CATALOG}
+          ownerBranches={COMPANY_CATALOG.filter(c => c.ownerKey === (currentUser?.ownerKey || (currentUser?.id || "").replace("-admin", "")))}
+          allProducts={products}
+          existing={null}
+          tid={null}
         />
 
           {/* Bulk Item Cancellation Reason Modal */}
@@ -13281,6 +13418,7 @@ Instrucciones:
           isEditPaymentModalOpen={isEditPaymentModalOpen}
           setIsEditPaymentModalOpen={setIsEditPaymentModalOpen}
           accountToEditPayment={accountToEditPayment}
+          selectedTenant={selectedTenant}
           handleUpdatePaymentMethod={handleUpdatePaymentMethod}
           setAccountToEditPayment={setAccountToEditPayment}
           setTempCardLastFour={setTempCardLastFour}

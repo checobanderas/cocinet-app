@@ -51,6 +51,7 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('firebase') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('firestore') ||
+    url.port === '3010' ||
     url.pathname.includes('/api/') ||
     event.request.url.includes('socket.io') ||
     (url.protocol !== 'http:' && url.protocol !== 'https:')
@@ -79,6 +80,8 @@ self.addEventListener('fetch', (event) => {
           if (event.request.mode === 'navigate') {
             return caches.match('/');
           }
+          // Explicitly return a fallback response to prevent 'undefined' promise rejection errors
+          return new Response('Network error or offline', { status: 503, statusText: 'Service Unavailable' });
         });
       })
   );

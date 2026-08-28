@@ -1,0 +1,23 @@
+{
+    "PRINTER_MAP": {
+        "cuentas": "CUENTAS",
+        "cocina": "COCINA",
+        "barra": "BARRA"
+    },
+    "PRINTER_PAPER_SIZES": {
+        "cuentas": "80mm",
+        "cocina": "80mm",
+        "barra": "80mm"
+    },
+    "LOGO_PATH": "logo.png",
+    "FONT_NAME": "Segoe UI",
+    "FONT_SIZE_PT": 11.0,
+    "HEADER_FONT_SIZE_PT": 16.0,
+    "ITEM_FONT_SIZE_PT": 11.0,
+    "TOTAL_FONT_SIZE_PT": 15.0,
+    "MARGIN_LEFT_PX": 10,
+    "MARGIN_RIGHT_PX": 25,
+    "LINE_SPACING": 4,
+    "SHOW_DIVIDER": true,
+    "BACKUP_FOLDER": "C:\\buzon\\respaldos"
+}

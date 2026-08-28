@@ -39,6 +39,16 @@ interface TenantCrudModalProps {
   setFormTenantAccentColor: (v: string) => void;
   formTenantRequireInternalFolio: boolean;
   setFormTenantRequireInternalFolio: (v: boolean) => void;
+  formTenantAllowEfectivo: boolean;
+  setFormTenantAllowEfectivo: (v: boolean) => void;
+  formTenantAllowTarjeta: boolean;
+  setFormTenantAllowTarjeta: (v: boolean) => void;
+  formTenantAllowTransferencia: boolean;
+  setFormTenantAllowTransferencia: (v: boolean) => void;
+  formTenantAllowLupay: boolean;
+  setFormTenantAllowLupay: (v: boolean) => void;
+  formTenantRequireCardDigits: boolean;
+  setFormTenantRequireCardDigits: (v: boolean) => void;
   transferStep: number;
   setTransferStep: (v: number) => void;
   transferTargetOwnerKey: string;
@@ -89,6 +99,16 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   setFormTenantAccentColor,
   formTenantRequireInternalFolio,
   setFormTenantRequireInternalFolio,
+  formTenantAllowEfectivo,
+  setFormTenantAllowEfectivo,
+  formTenantAllowTarjeta,
+  setFormTenantAllowTarjeta,
+  formTenantAllowTransferencia,
+  setFormTenantAllowTransferencia,
+  formTenantAllowLupay,
+  setFormTenantAllowLupay,
+  formTenantRequireCardDigits,
+  setFormTenantRequireCardDigits,
   transferStep,
   setTransferStep,
   transferTargetOwnerKey,
@@ -517,6 +537,76 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                     <p className="text-[9.5px] text-slate-400 font-bold leading-normal m-0">
                       Sube una imagen para los tickets impresos de la cuenta y del corte 🖨️
                     </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuración de Métodos de Pago */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 space-y-4">
+                <div className="border-b border-slate-200 pb-2 mb-2">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    💳 Métodos de Pago Permitidos en Punto de Venta
+                  </label>
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
+                    Selecciona qué métodos de pago estarán disponibles para cobro en esta sucursal.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between bg-white border border-slate-200 p-2.5 rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase">💵 Efectivo</span>
+                    <input
+                      type="checkbox"
+                      checked={formTenantAllowEfectivo}
+                      onChange={(e) => setFormTenantAllowEfectivo(e.target.checked)}
+                      className="w-5 h-5 accent-indigo-600 rounded cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-white border border-slate-200 p-2.5 rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase">💳 Tarjeta</span>
+                    <input
+                      type="checkbox"
+                      checked={formTenantAllowTarjeta}
+                      onChange={(e) => setFormTenantAllowTarjeta(e.target.checked)}
+                      className="w-5 h-5 accent-indigo-600 rounded cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-white border border-slate-200 p-2.5 rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase">📲 Transferencia</span>
+                    <input
+                      type="checkbox"
+                      checked={formTenantAllowTransferencia}
+                      onChange={(e) => setFormTenantAllowTransferencia(e.target.checked)}
+                      className="w-5 h-5 accent-indigo-600 rounded cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-white border border-slate-200 p-2.5 rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase">⚡ Lúpay</span>
+                    <input
+                      type="checkbox"
+                      checked={formTenantAllowLupay}
+                      onChange={(e) => setFormTenantAllowLupay(e.target.checked)}
+                      className="w-5 h-5 accent-indigo-600 rounded cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200 pt-3 mt-3">
+                  <div className="flex items-center justify-between">
+                    <div className="pr-3">
+                      <label className="block text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer">
+                        Exigir 4 Dígitos
+                      </label>
+                      <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        Forzar la captura de los últimos 4 dígitos al cobrar con Tarjeta o Transferencia. Si se desactiva, los dígitos serán opcionales.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formTenantRequireCardDigits}
+                      onChange={(e) => setFormTenantRequireCardDigits(e.target.checked)}
+                      className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
+                    />
                   </div>
                 </div>
               </div>

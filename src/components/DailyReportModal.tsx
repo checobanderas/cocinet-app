@@ -178,7 +178,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
         });
       });
     });
-    return Object.values(summary).sort((a, b) => {
+    return Object.values(summary).filter(p => !p.name.includes("---")).sort((a, b) => {
       const scoreA = getProductSortScore(a.product);
       const scoreB = getProductSortScore(b.product);
       if (scoreA !== scoreB) return scoreA - scoreB;
@@ -201,7 +201,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       product: any;
     }>> = {};
 
-    (products || []).forEach(prod => {
+    (products || []).filter((p: any) => !(p.name || "").includes("---")).forEach(prod => {
       const groupKey = (prod.subgroup || prod.subcategory || "OTROS").toUpperCase().trim();
       if (!groups[groupKey]) {
         groups[groupKey] = [];

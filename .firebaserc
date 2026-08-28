@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "cocinet-app"
+  },
+  "targets": {
+    "cocinet-app": {
+      "hosting": {
+        "produccion": [
+          "cocinet-app"
+        ],
+        "pruebas": [
+          "cocinet-prueba"
+        ]
+      }
+    }
   }
 }

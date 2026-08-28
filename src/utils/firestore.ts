@@ -2743,16 +2743,17 @@ export async function deleteMenuBackupFromFirebase(id: string) {
 
 export async function restoreMenuBackupInFirebase(
   tenantId: string,
-  backupProducts: any[] | any
+  backupProducts: any[] | any,
+  onProgress?: (msg: string) => void
 ) {
   let productsToRestore = backupProducts;
   if (!Array.isArray(backupProducts) || (backupProducts as any)?.isChunked) {
     productsToRestore = await fetchMenuBackupProducts(backupProducts);
   }
 
-  const batch = writeBatch(db);
-  
-  // 1. Delete current products of this tenant (EXCLUDING any backup documents)
+  // 1. Collect all operations
+  const operations: { type: "delete" | "set", ref: any, data?: any }[] = [];
+
   const q = query(
     collection(db, "products"),
     where("tenantId", "==", tenantId)
@@ -2762,25 +2763,52 @@ export async function restoreMenuBackupInFirebase(
     const data = d.data();
     const isBackup = data.isBackup || d.id.startsWith("bk_");
     if (!isBackup) {
-      batch.delete(d.ref);
+      operations.push({ 
+        type: "set", 
+        ref: d.ref, 
+        data: { ...data, isDeleted: true, updatedAt: getMexicoISOString() } 
+      });
     }
   });
 
-  // 2. Restore backup products
+  // 2. Add restore operations
   (productsToRestore || []).forEach((p: any) => {
     const rawId = p.id || `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const id = rawId.startsWith(`prod_${tenantId}_`) ? rawId : `prod_${tenantId}_${rawId}`;
     const ref = doc(db, "products", id);
-    batch.set(ref, {
-      ...p,
-      id,
-      uid: id,
-      tenantId,
-      updatedAt: getMexicoISOString()
+    operations.push({
+      type: "set",
+      ref,
+      data: {
+        ...p,
+        id,
+        uid: id,
+        tenantId,
+        updatedAt: getMexicoISOString()
+      }
     });
   });
 
-  await batch.commit();
+  // 3. Commit in chunks of 400
+  const chunkSize = 400;
+  let processed = 0;
+  for (let i = 0; i < operations.length; i += chunkSize) {
+    const chunk = operations.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    chunk.forEach(op => {
+      if (op.type === "delete") {
+        batch.delete(op.ref);
+      } else {
+        batch.set(op.ref, op.data);
+      }
+    });
+    
+    processed += chunk.length;
+    if (onProgress) {
+      onProgress(`Procesando ${processed} de ${operations.length} registros...`);
+    }
+    await runWrite(batch.commit());
+  }
 }
 
 export async function getAllProductsFromFirebase(): Promise<any[]> {

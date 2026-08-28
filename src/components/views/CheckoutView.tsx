@@ -8,6 +8,7 @@ interface CheckoutViewProps {
   checkoutFallbackItems: any;
   currentUser: any;
   invoicePhone: any;
+  selectedTenant: any;
   isProcessingPayment: any;
   paymentAmountReceived: any;
   paymentCardLastFour: any;
@@ -53,6 +54,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   checkoutFallbackItems,
   currentUser,
   invoicePhone,
+  selectedTenant,
   isProcessingPayment,
   paymentAmountReceived,
   paymentCardLastFour,
@@ -706,26 +708,34 @@ if (currentUser?.role === "mesero") {
                             }}
                             style={{ marginBottom: "16px" }}
                           >
-                            <IonSegmentButton value="cash">
-                              <IonIcon icon={cashOutline} />
-                              <IonLabel style={{ fontSize: "11px" }}>Efectivo</IonLabel>
-                            </IonSegmentButton>
-                            <IonSegmentButton value="lupay">
-                              <IonIcon icon={flashOutline} />
-                              <IonLabel style={{ fontSize: "11px" }}>Lúpay</IonLabel>
-                            </IonSegmentButton>
-                            <IonSegmentButton value="card">
-                              <IonIcon icon={cardOutline} />
-                              <IonLabel style={{ fontSize: "11px" }}>Tarjeta</IonLabel>
-                            </IonSegmentButton>
-                            <IonSegmentButton value="transfer">
-                              <IonIcon icon={swapHorizontalOutline} />
-                              <IonLabel style={{ fontSize: "11px" }}>Transf.</IonLabel>
-                            </IonSegmentButton>
+                            {selectedTenant?.allowEfectivo !== false && (
+                              <IonSegmentButton value="cash">
+                                <IonIcon icon={cashOutline} />
+                                <IonLabel style={{ fontSize: "11px" }}>Efectivo</IonLabel>
+                              </IonSegmentButton>
+                            )}
+                            {selectedTenant?.allowLupay !== false && (
+                              <IonSegmentButton value="lupay">
+                                <IonIcon icon={flashOutline} />
+                                <IonLabel style={{ fontSize: "11px" }}>Lúpay</IonLabel>
+                              </IonSegmentButton>
+                            )}
+                            {selectedTenant?.allowTarjeta !== false && (
+                              <IonSegmentButton value="card">
+                                <IonIcon icon={cardOutline} />
+                                <IonLabel style={{ fontSize: "11px" }}>Tarjeta</IonLabel>
+                              </IonSegmentButton>
+                            )}
+                            {selectedTenant?.allowTransferencia !== false && (
+                              <IonSegmentButton value="transfer">
+                                <IonIcon icon={swapHorizontalOutline} />
+                                <IonLabel style={{ fontSize: "11px" }}>Transf.</IonLabel>
+                              </IonSegmentButton>
+                            )}
                           </IonSegment>
 
                           {/* Debit / Credit card subtype selection */}
-                          {paymentMethod === "card" && (
+                          {false && paymentMethod === "card" && requiresInvoice && (
                             <div
                               id="card-type-selection-container"
                               className={`mb-4 border rounded-2xl p-3 flex flex-col gap-2 transition-all ${
@@ -809,6 +819,7 @@ if (currentUser?.role === "mesero") {
                                     }}
                                   >
                                     Últimos 4 Dígitos {paymentMethod === "card" ? "💳" : "📲"}
+                                    {selectedTenant?.requireCardDigits === false && " (Opcional)"}
                                   </IonText>
                                   <input
                                     type="text"
@@ -1185,9 +1196,9 @@ if (currentUser?.role === "mesero") {
                                   (Number(paymentAmountReceived) < total ||
                                     !paymentAmountReceived)) ||
                                 (paymentMethod === "card" &&
-                                  (!paymentCardType || !paymentCardLastFour || paymentCardLastFour.length < 4)) ||
+                                  (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4))) ||
                                 (paymentMethod === "transfer" &&
-                                  (!paymentCardLastFour || paymentCardLastFour.length < 4))
+                                  (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)))
                               }
                               style={{
                                 flex: 2,

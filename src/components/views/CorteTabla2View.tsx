@@ -32,6 +32,7 @@ interface CorteTabla2ViewProps {
   setMenuToastMessage: any;
   setMultiTurnEndDate: any;
   setMultiTurnPreviewReady: any;
+  multiTurnPreviewReady: any;
   setMultiTurnStartDate: any;
   setProductSalesMap: any;
   setShowMenuToast: any;
@@ -43,6 +44,7 @@ interface CorteTabla2ViewProps {
   reprintAccount: any;
   saved: any;
   sorted: any;
+  historyLoaded?: boolean;
 }
 
 export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
@@ -67,6 +69,7 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
   setMenuToastMessage,
   setMultiTurnEndDate,
   setMultiTurnPreviewReady,
+  multiTurnPreviewReady,
   setMultiTurnStartDate,
   setProductSalesMap,
   setShowMenuToast,
@@ -78,7 +81,8 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
   handleExportMultiTurnCSV,
   setSelectedMultiTurnDate,
   selectedMultiTurnDate,
-  ClosedAccount
+  ClosedAccount,
+  historyLoaded
 }) => {
 // Role check: Only allowed for non-cajero and non-mesero
     if (["cajero", "mesero"].includes(currentUser?.role || "")) {
@@ -614,9 +618,10 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
 
                 {/* Shift Date Selector & Multi-Turn Report Button */}
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-3 bg-stone-100 p-2 rounded-2xl border border-stone-300">
+                  <div className={`flex items-center gap-3 p-2 rounded-2xl border transition-colors ${!historyLoaded ? 'bg-amber-100 border-amber-300 animate-pulse' : 'bg-stone-100 border-stone-300'}`}>
                     <span className="text-xs font-black text-stone-700 pl-2">📅 Turno:</span>
                     <select
+                      disabled={!historyLoaded}
                       value={activeDateKey}
                       onChange={(e) => {
                         setCorte2SelectedDate(e.target.value);
@@ -631,9 +636,11 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                           Corte del {key} ({shiftAccountsMap[key]?.length || 0} cuentas)
                         </option>
                       ))}
-                      {!sortedShiftKeys.includes(activeDateKey) && (
+                      {!historyLoaded ? (
+                        <option value={activeDateKey}>Cargando fechas...</option>
+                      ) : !sortedShiftKeys.includes(activeDateKey) ? (
                         <option value={activeDateKey}>{activeDateKey}</option>
-                      )}
+                      ) : null}
                     </select>
                   </div>
                   <button
@@ -817,7 +824,13 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                 </div>
               </div>
 
-              {currentShiftAccounts.length > 0 ? (
+              {!historyLoaded ? (
+                <div className="p-12 flex flex-col items-center justify-center text-center text-stone-500 font-bold bg-stone-100/60 rounded-3xl border-2 border-dashed border-stone-300">
+                  <span className="text-4xl block mb-4 animate-pulse">⏳</span>
+                  <span className="text-xl font-black text-stone-600 block mb-2">Cargando cortes de la sucursal...</span>
+                  <span className="text-stone-400 text-sm">Por favor espera un momento</span>
+                </div>
+              ) : currentShiftAccounts.length > 0 ? (
                 <div className="overflow-x-auto rounded-2xl border-2 border-stone-200">
                   <table className="w-full text-left text-xs text-stone-800">
                     <thead className="bg-stone-200 text-stone-800 font-black uppercase tracking-wider border-b-2 border-stone-300">
@@ -967,6 +980,21 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
           selectedMultiTurnDate={selectedMultiTurnDate}
           setSelectedMultiTurnDate={setSelectedMultiTurnDate}
           handleExportMultiTurnCSV={handleExportMultiTurnCSV}
+          sortedShiftKeys={sortedShiftKeys || []}
+          multiTurnStartDate={multiTurnStartDate}
+          setMultiTurnStartDate={setMultiTurnStartDate}
+          multiTurnEndDate={multiTurnEndDate}
+          setMultiTurnEndDate={setMultiTurnEndDate}
+          multiTurnPreviewReady={multiTurnPreviewReady}
+          setMultiTurnPreviewReady={setMultiTurnPreviewReady}
+          selectedTenant={selectedTenant}
+          totalCashSum={totalCashSum}
+          totalCardSum={totalCardSum}
+          totalTransferSum={totalTransferSum}
+          totalMultiTurnSum={totalMultiTurnSum}
+          enhancedMultiTurnRecords={enhancedMultiTurnRecords}
+          handleExportMultiTurnWhatsApp={handleExportMultiTurnWhatsApp}
+          handleExportMultiTurnExcel={handleExportMultiTurnExcel}
         />
       </IonPage>
     );

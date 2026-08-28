@@ -1,0 +1,24 @@
+{
+  "name": "COCINET Pro [DEV]",
+  "short_name": "COCINET [DEV]",
+  "description": "Sistema de restaurante inteligente con base de datos, sincronización y notificaciones.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#e11d48",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/plasticine/512/restaurant.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://img.icons8.com/plasticine/192/restaurant.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import { TablaArqueoModal } from '../modals/TablaArqueoModal';
 import { EditFondoModal } from '../modals/EditFondoModal';
 import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
 import { ExportSessionModal } from '../modals/ExportSessionModal';
-import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase } from '../../utils/firestore';
+import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
 import { getCompanyCatalog } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -107,6 +107,21 @@ interface CorteTablaViewProps {
   targetTenantId: any;
   validateOwnerKey: any;
   validatedBy: any;
+  activeTablaDenom: any;
+  setActiveTablaDenom: any;
+  showTablaKeypadOverlay: any;
+  setShowTablaKeypadOverlay: any;
+  setTablaArq100: any;
+  setTablaArq1000: any;
+  setTablaArq20: any;
+  setTablaArq200: any;
+  setTablaArq50: any;
+  setTablaArq500: any;
+  setTablaArqM05: any;
+  setTablaArqM1: any;
+  setTablaArqM10: any;
+  setTablaArqM2: any;
+  setTablaArqM5: any;
 }
 
 export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
@@ -186,7 +201,23 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   ticketBusinessName,
   ticketSucursal,
   triggerAppNotification,
-  activeSessionForCorte, arqueoBilletes, arqueoMonedas, arqueoTotal, cancelled, doc, estimatedCash, filteredCashMovementsForCorte, filteredExpensesForCorte, filteredHistoryForCorte, filteredPurchasesForCorte, grouped, isValidated, sessionId, targetTenantId, validateOwnerKey, validatedBy,
+  activeSessionForCorte, arqueoBilletes, arqueoMonedas, arqueoTotal, cancelled, doc, estimatedCash, filteredCashMovementsForCorte, filteredExpensesForCorte, filteredHistoryForCorte, filteredPurchasesForCorte, grouped, isValidated, sessionId, targetTenantId, validateOwnerKey,
+  validatedBy,
+  activeTablaDenom,
+  setActiveTablaDenom,
+  showTablaKeypadOverlay,
+  setShowTablaKeypadOverlay,
+  setTablaArq100,
+  setTablaArq1000,
+  setTablaArq20,
+  setTablaArq200,
+  setTablaArq50,
+  setTablaArq500,
+  setTablaArqM05,
+  setTablaArqM1,
+  setTablaArqM10,
+  setTablaArqM2,
+  setTablaArqM5,
   corteData,
   CashierSession
 }) => {
@@ -1043,12 +1074,42 @@ if (currentUser?.role === "mesero") {
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
-                                      if (window.confirm("¿Estás seguro de que deseas eliminar este registro de Turno/Corte? Se borrará el registro de arqueo, pero todos los movimientos de venta, caja, compras y egresos continuarán intactos y a salvo.")) {
-                                        try {
-                                          await deleteCashierSessionFromFirebase(session.id);
-                                          alert("Registro de turno eliminado. Todos los movimientos fueron preservados exitosamente. ✓ 🧹");
-                                        } catch (err) {
-                                          alert("Error al borrar el corte");
+                                      const sessionHistory = (history || []).filter((h: any) => h.sessionId === session.id);
+                                      const sessionExpenses = (expenses || []).filter((ex: any) => ex.sessionId === session.id);
+                                      const sessionCash = (cashMovements || []).filter((cm: any) => cm.sessionId === session.id);
+                                      const sessionPurchases = (purchases || []).filter((p: any) => p.sessionId === session.id);
+
+                                      const tenantName = selectedTenant?.name || "este tenant";
+
+                                      const msg1 = `¿Desea eliminar este corte del tenant ${tenantName}? \n\nESTA ACCIÓN ES IRREVERSIBLE.\n\nSe borrará el registro de arqueo y los siguientes movimientos asociados de este turno y tenant:\n- ${sessionHistory.length} cuentas (ventas/comandas)\n- ${sessionExpenses.length} gastos\n- ${sessionCash.length} movimientos de caja\n- ${sessionPurchases.length} compras\n\nLos movimientos de otros cortes continuarán intactos. ¿Desea continuar?`;
+
+                                      if (window.confirm(msg1)) {
+                                        const msg2 = `¿Está COMPLETAMENTE seguro? Esto borrará definitivamente el turno y sus ${sessionHistory.length} cuentas, ${sessionExpenses.length} gastos, etc. No hay marcha atrás.`;
+                                        if (window.confirm(msg2)) {
+                                          const msg3 = `ÚLTIMA CONFIRMACIÓN.\n\n¿Borrar TODO lo relacionado al turno del tenant ${tenantName}? (Turno, ventas, gastos, movimientos y compras de ESTE corte)`;
+                                          if (window.confirm(msg3)) {
+                                            try {
+                                              for (const item of sessionHistory) {
+                                                if (item?.id) await deleteHistoryItemFromFirebase(item.id);
+                                              }
+                                              for (const item of sessionExpenses) {
+                                                if (item?.id) await deleteExpenseFromFirebase(item.id);
+                                              }
+                                              for (const item of sessionCash) {
+                                                if (item?.id) await deleteCashMovementFromFirebase(item.id);
+                                              }
+                                              for (const item of sessionPurchases) {
+                                                if (item?.id) await deletePurchaseFromFirebase(item.id);
+                                              }
+                                              
+                                              await deleteCashierSessionFromFirebase(session.id);
+
+                                              alert("Registro de turno y todos sus movimientos asociados fueron eliminados de forma irreversible. ✓ 🧹");
+                                            } catch (err) {
+                                              console.error("Error al borrar el corte y movimientos", err);
+                                              alert("Error al borrar el corte y sus movimientos. Revise la consola para más detalles.");
+                                            }
+                                          }
                                         }
                                       }
                                     }}
@@ -1093,11 +1154,13 @@ if (currentUser?.role === "mesero") {
     const isClosed = sessionToRender?.status === "closed";
     const sessionToRenderFinancials = isClosed ? getSessionFinancials(sessionToRender) : null;
 
-    const dynamicCashSales = corteData.cashSales;
-    const dynamicCardSales = corteData.cardSales;
-    const dynamicTransSales = corteData.transSales;
-    const dynamicLupaySales = corteData.lupaySales;
-    const dynamicTotalPurchasesPaid = corteData.totalPurchasesPaid;
+    const safeCorteData = corteData || {};
+
+    const dynamicCashSales = safeCorteData.cashSales || 0;
+    const dynamicCardSales = safeCorteData.cardSales || 0;
+    const dynamicTransSales = safeCorteData.transSales || 0;
+    const dynamicLupaySales = safeCorteData.lupaySales || 0;
+    const dynamicTotalPurchasesPaid = safeCorteData.totalPurchasesPaid || 0;
 
     const fallbackCashSales = sessionToRenderFinancials ? sessionToRenderFinancials.cashSales : 0;
     const fallbackCardSales = sessionToRenderFinancials ? sessionToRenderFinancials.cardSales : 0;
@@ -1108,15 +1171,15 @@ if (currentUser?.role === "mesero") {
     const fallbackTotalInflows = sessionToRenderFinancials ? sessionToRenderFinancials.totalInflows : 0;
 
     const corteDataShadow = {
-      ...corteData,
+      ...safeCorteData,
       cashSales: dynamicCashSales > 0 ? dynamicCashSales : (isClosed ? fallbackCashSales : dynamicCashSales),
       cardSales: dynamicCardSales > 0 ? dynamicCardSales : (isClosed ? fallbackCardSales : dynamicCardSales),
       transSales: dynamicTransSales > 0 ? dynamicTransSales : (isClosed ? fallbackTransSales : dynamicTransSales),
       lupaySales: dynamicLupaySales > 0 ? dynamicLupaySales : (isClosed ? fallbackLupaySales : dynamicLupaySales),
-      cashSalesCount: corteData.cashSalesCount > 0 ? corteData.cashSalesCount : (isClosed && sessionToRender?.cashSalesCount !== undefined ? sessionToRender.cashSalesCount : corteData.cashSalesCount),
-      cardSalesCount: corteData.cardSalesCount > 0 ? corteData.cardSalesCount : (isClosed && sessionToRender?.cardSalesCount !== undefined ? sessionToRender.cardSalesCount : corteData.cardSalesCount),
-      transSalesCount: corteData.transSalesCount > 0 ? corteData.transSalesCount : (isClosed && sessionToRender?.transSalesCount !== undefined ? sessionToRender.transSalesCount : corteData.transSalesCount),
-      lupaySalesCount: corteData.lupaySalesCount > 0 ? corteData.lupaySalesCount : (isClosed && sessionToRender?.lupaySalesCount !== undefined ? sessionToRender.lupaySalesCount : corteData.lupaySalesCount),
+      cashSalesCount: safeCorteData.cashSalesCount > 0 ? safeCorteData.cashSalesCount : (isClosed && sessionToRender?.cashSalesCount !== undefined ? sessionToRender.cashSalesCount : (safeCorteData.cashSalesCount || 0)),
+      cardSalesCount: safeCorteData.cardSalesCount > 0 ? safeCorteData.cardSalesCount : (isClosed && sessionToRender?.cardSalesCount !== undefined ? sessionToRender.cardSalesCount : (safeCorteData.cardSalesCount || 0)),
+      transSalesCount: safeCorteData.transSalesCount > 0 ? safeCorteData.transSalesCount : (isClosed && sessionToRender?.transSalesCount !== undefined ? sessionToRender.transSalesCount : (safeCorteData.transSalesCount || 0)),
+      lupaySalesCount: safeCorteData.lupaySalesCount > 0 ? safeCorteData.lupaySalesCount : (isClosed && sessionToRender?.lupaySalesCount !== undefined ? sessionToRender.lupaySalesCount : (safeCorteData.lupaySalesCount || 0)),
       totalPurchasesPaid: dynamicTotalPurchasesPaid > 0 ? dynamicTotalPurchasesPaid : (isClosed ? fallbackTotalPurchasesPaid : dynamicTotalPurchasesPaid),
     };
 
@@ -1412,7 +1475,13 @@ if (currentUser?.role === "mesero") {
               </motion.button>
               <button
                 type="button"
-                onClick={() => setAppMode("floorplan")}
+                onClick={() => {
+                  if (window.innerHeight > window.innerWidth) {
+                    setAppMode("floorplan");
+                  } else {
+                    setAppMode("gestion_cuentas");
+                  }
+                }}
                 className="bg-emerald-600 hover:bg-emerald-750 text-white font-black py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm transition duration-150 flex items-center gap-1.5 border border-emerald-500/25 mr-2 cursor-pointer shadow-sm shadow-emerald-600/20"
                 title="Volver al mapa de mesas"
               >
@@ -2090,11 +2159,56 @@ if (currentUser?.role === "mesero") {
 <TablaArqueoModal
           showTablaArqueoModal={showTablaArqueoModal}
           setShowTablaArqueoModal={setShowTablaArqueoModal}
+          diferenciaCaja={diferenciaCaja}
+          tablaArqueoTotalBilletes={tablaArqueoTotalBilletes}
+          estimatedCashInBox={estimatedCashInBox}
+          tablaArqueoTotalMonedas={tablaArqueoTotalMonedas}
+          tablaArqueoTotal={tablaArqueoTotal}
+          sessionToRender={sessionToRender}
+          activeTablaDenom={activeTablaDenom}
+          arqueoBilletes={arqueoBilletes}
+          arqueoMonedas={arqueoMonedas}
+          arqueoTotal={arqueoTotal}
+          estimatedCash={estimatedCash}
+          setActiveTablaDenom={setActiveTablaDenom}
+          setShowTablaKeypadOverlay={setShowTablaKeypadOverlay}
+          setTablaArq100={setTablaArq100}
+          setTablaArq1000={setTablaArq1000}
+          setTablaArq20={setTablaArq20}
+          setTablaArq200={setTablaArq200}
+          setTablaArq50={setTablaArq50}
+          setTablaArq500={setTablaArq500}
+          setTablaArqM05={setTablaArqM05}
+          setTablaArqM1={setTablaArqM1}
+          setTablaArqM10={setTablaArqM10}
+          setTablaArqM2={setTablaArqM2}
+          setTablaArqM5={setTablaArqM5}
+          showTablaKeypadOverlay={showTablaKeypadOverlay}
+          tablaArq100={tablaArq100}
+          tablaArq1000={tablaArq1000}
+          tablaArq20={tablaArq20}
+          tablaArq200={tablaArq200}
+          tablaArq50={tablaArq50}
+          tablaArq500={tablaArq500}
+          tablaArqM05={tablaArqM05}
+          tablaArqM1={tablaArqM1}
+          tablaArqM10={tablaArqM10}
+          tablaArqM2={tablaArqM2}
+          tablaArqM5={tablaArqM5}
+          triggerAppNotification={triggerAppNotification}
         />
 
 <SystemsChoiceAlert
           showSystemsChoiceAlert={showSystemsChoiceAlert}
           setShowSystemsChoiceAlert={setShowSystemsChoiceAlert}
+          selectedTenant={selectedTenant}
+          setCashMovements={setCashMovements}
+          setCashierSessions={setCashierSessions}
+          setExpenses={setExpenses}
+          setHistory={setHistory}
+          setShowDeleteAllHistoryConfirm={setShowDeleteAllHistoryConfirm}
+          setTables={setTables}
+          triggerAppNotification={triggerAppNotification}
         />
 
           <IonAlert

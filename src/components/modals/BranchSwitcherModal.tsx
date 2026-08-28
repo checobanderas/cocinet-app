@@ -1,10 +1,9 @@
-import { APIProvider, AdvancedMarker, GoogleMap, Pin } from '@vis.gl/react-google-maps';
+import { APIProvider, AdvancedMarker, Map, Pin } from '@vis.gl/react-google-maps';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
 import { closeOutline } from 'ionicons/icons';
 
 interface BranchSwitcherModalProps {
-  GoogleMap: any;
   COMPANY_CATALOG: any;
   showBranchSwitcherModal: boolean;
   setShowBranchSwitcherModal: (v: boolean) => void;
@@ -36,7 +35,6 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
   handleSwitchBranch,
   MAPS_API_KEY,
   COMPANY_CATALOG,
-  GoogleMap
 }) => {
 
 
@@ -141,18 +139,17 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
                         {company.lat && company.lng && (
                           <div className="mt-3 h-28 w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner pointer-events-none">
                             <APIProvider apiKey={MAPS_API_KEY}>
-                              <GoogleMap
+                              <Map
                                 defaultCenter={{ lat: company.lat, lng: company.lng }}
                                 defaultZoom={15}
                                 mapId="DEMO_MAP_ID"
                                 disableDefaultUI={true}
-                                internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
                                 style={{ width: '100%', height: '100%' }}
                               >
                                 <AdvancedMarker position={{ lat: company.lat, lng: company.lng }}>
                                   <Pin background={company.accentColor} glyphColor="#fff" />
                                 </AdvancedMarker>
-                              </GoogleMap>
+                              </Map>
                             </APIProvider>
                           </div>
                         )}
@@ -209,18 +206,17 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
                         {company.lat && company.lng && (
                           <div className="mt-3 h-28 w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner pointer-events-none">
                             <APIProvider apiKey={MAPS_API_KEY}>
-                              <GoogleMap
+                              <Map
                                 defaultCenter={{ lat: company.lat, lng: company.lng }}
                                 defaultZoom={15}
                                 mapId="DEMO_MAP_ID"
                                 disableDefaultUI={true}
-                                internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
                                 style={{ width: '100%', height: '100%' }}
                               >
                                 <AdvancedMarker position={{ lat: company.lat, lng: company.lng }}>
                                   <Pin background={company.accentColor} glyphColor="#fff" />
                                 </AdvancedMarker>
-                              </GoogleMap>
+                              </Map>
                             </APIProvider>
                           </div>
                         )}

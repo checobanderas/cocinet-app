@@ -120,7 +120,7 @@ def get_logger():
 log = get_logger()
 
 # ─── Flask App & WebSockets (Puerto 3010) ─────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, static_folder="dist", static_url_path="/")
 CORS(app)
 sock = Sock(app)
 
@@ -1549,6 +1549,16 @@ class CocinetPrinterService(win32serviceutil.ServiceFramework):
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
+
+from flask import send_from_directory
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react_app(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
 
 def run_flask():
     try:

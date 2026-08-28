@@ -4,13 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>COCINET Pro Version 2026</title>
-    <!-- Add Web Manifest -->
-    <link rel="manifest" href="/manifest.json" />
     <!-- Meta tags for PWA mobile app behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="COCINET Pro" />
-    <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/512/restaurant.png" />
+    <script>
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        document.title = "COCINET [DEV]";
+        document.write('<link rel="manifest" href="/manifest-dev.json" />');
+        document.write('<link rel="icon" href="https://img.icons8.com/plasticine/128/restaurant.png" type="image/png" />');
+        document.write('<link rel="apple-touch-icon" href="https://img.icons8.com/plasticine/512/restaurant.png" />');
+      } else {
+        document.write('<link rel="manifest" href="/manifest.json" />');
+        document.write('<link rel="icon" href="https://img.icons8.com/fluency/128/restaurant.png" type="image/png" />');
+        document.write('<link rel="apple-touch-icon" href="https://img.icons8.com/fluency/512/restaurant.png" />');
+      }
+    </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   </head>
   <body>

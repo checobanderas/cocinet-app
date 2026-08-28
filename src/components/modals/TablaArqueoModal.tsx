@@ -49,11 +49,11 @@ export const TablaArqueoModal: React.FC<TablaArqueoModalProps> = ({
   showTablaArqueoModal,
   setShowTablaArqueoModal,
   activeTablaDenom, arqueoBilletes, arqueoMonedas, arqueoTotal, estimatedCash, setActiveTablaDenom, setShowTablaKeypadOverlay, setTablaArq100, setTablaArq1000, setTablaArq20, setTablaArq200, setTablaArq50, setTablaArq500, setTablaArqM05, setTablaArqM1, setTablaArqM10, setTablaArqM2, setTablaArqM5, showTablaKeypadOverlay, tablaArq100, tablaArq1000, tablaArq20, tablaArq200, tablaArq50, tablaArq500, tablaArqM05, tablaArqM1, tablaArqM10, tablaArqM2, tablaArqM5, triggerAppNotification,
-  diferenciaCaja,
-  tablaArqueoTotalBilletes,
-  estimatedCashInBox,
-  tablaArqueoTotalMonedas,
-  tablaArqueoTotal,
+  diferenciaCaja = 0,
+  tablaArqueoTotalBilletes = 0,
+  estimatedCashInBox = 0,
+  tablaArqueoTotalMonedas = 0,
+  tablaArqueoTotal = 0,
   sessionToRender
 }) => {
   return (

@@ -21,6 +21,11 @@ export interface CompanyTenant {
   lugarExpedicion?: string;
   telefono?: string;
   email?: string;
+  allowEfectivo?: boolean;
+  allowLupay?: boolean;
+  allowTarjeta?: boolean;
+  allowTransferencia?: boolean;
+  requireCardDigits?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

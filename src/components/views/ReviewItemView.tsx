@@ -2,7 +2,7 @@ import { getFormattedProductName } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonIcon, IonText } from '@ionic/react';
-import { addOutline, chatbubbleEllipsesOutline, removeOutline, trashOutline } from 'ionicons/icons';
+import { addOutline, chatbubbleEllipsesOutline, removeOutline, trashOutline, menuOutline } from 'ionicons/icons';
 
 interface ReviewItemViewProps {
   item: any;
@@ -16,31 +16,55 @@ export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
   item,
   openItemNoteModal, updateQuantity
 }) => {
+  if (item.isSeparator) {
+    return (
+      <div
+        key={`${item.product.id}-${item.plate}-${idx}`}
+        style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", padding: "8px 16px", display: "flex", alignItems: "center", cursor: "grab" }}
+      >
+        <IonIcon icon={menuOutline} style={{ color: "#94a3b8", marginRight: "12px", fontSize: "1.2rem" }} />
+        <div style={{ flex: 1, borderTop: "2px dashed #cbd5e1" }}></div>
+        <span style={{ margin: "0 12px", color: "#64748b", fontWeight: "bold", fontSize: "0.8rem", letterSpacing: "1px" }}>{item.separatorLabel || "--- PLATO ---"}</span>
+        <div style={{ flex: 1, borderTop: "2px dashed #cbd5e1" }}></div>
+        <IonButton
+          fill="clear"
+          color="danger"
+          onClick={() => updateQuantity(item.product.id, item.plate, -1, item.notes, idx)}
+          style={{ height: "32px", width: "32px", margin: "0 0 0 12px" }}
+        >
+          <IonIcon icon={trashOutline} slot="icon-only" style={{ fontSize: "1.1rem" }} />
+        </IonButton>
+      </div>
+    );
+  }
+
   return (
 <div
       key={`${item.product.id}-${item.plate}-${item.notes || ""}-${idx !== undefined ? idx : ""}`}
-      style={{ background: "white", borderBottom: "1px solid #f1f5f9" }}
+      style={{ background: "white", borderBottom: "1px solid #f1f5f9", cursor: "grab" }}
     >
-      <div style={{ padding: "12px 16px" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ flex: 1, marginRight: "8px" }}>
-            <h3
-              style={{
-                fontWeight: "900",
-                margin: 0,
-                fontSize: "0.95rem",
-                color: "#1e293b",
-                lineHeight: "1.2",
-                whiteSpace: "normal",
-                wordBreak: "break-word",
-              }}
-            >
+      <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start" }}>
+        <IonIcon icon={menuOutline} style={{ color: "#cbd5e1", marginRight: "12px", fontSize: "1.2rem", marginTop: "4px" }} />
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ flex: 1, marginRight: "8px" }}>
+              <h3
+                style={{
+                  fontWeight: "900",
+                  margin: 0,
+                  fontSize: "0.95rem",
+                  color: "#1e293b",
+                  lineHeight: "1.2",
+                  whiteSpace: "normal",
+                  wordBreak: "break-word",
+                }}
+              >
               {getFormattedProductName(item.product)}
             </h3>
             <div
@@ -87,7 +111,7 @@ export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
                 fill="clear"
                 color="medium"
                 onClick={() =>
-                  updateQuantity(item.product.id, item.plate, -1, item.notes)
+                  updateQuantity(item.product.id, item.plate, -1, item.notes, idx)
                 }
                 style={{
                   "--padding-start": "4px",
@@ -114,7 +138,7 @@ export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
                 fill="clear"
                 color="primary"
                 onClick={() =>
-                  updateQuantity(item.product.id, item.plate, 1, item.notes)
+                  updateQuantity(item.product.id, item.plate, 1, item.notes, idx)
                 }
                 style={{
                   "--padding-start": "4px",
@@ -152,6 +176,7 @@ export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
                   item.plate,
                   -item.quantity,
                   item.notes,
+                  idx
                 )
               }
               style={{ height: "36px", width: "36px", margin: 0 }}
@@ -189,6 +214,7 @@ export const ReviewItemView: React.FC<ReviewItemViewProps> = ({
             </span>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

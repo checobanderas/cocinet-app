@@ -27,6 +27,8 @@ files_to_zip = [
     ("dist", "dist"), # Carpeta completa de react
     ("public/sentinel_printer.py", "sentinel_printer.py"),
     ("public/instalador_sentinela.py", "instalador_sentinela.py"),
+    ("public/limpiar_entorno.py", "limpiar_entorno.py"),
+    ("public/limpiar_entorno.bat", "limpiar_entorno.bat"),
     ("public/logoroy.png", "logoroy.png") # Agregamos el logo si existe para las impresiones
 ]
 

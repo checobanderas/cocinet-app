@@ -1,4 +1,5 @@
-import React from 'react';
+import { formatTableName } from '../../utils/formatters';
+import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonBadge, IonButton, IonButtons, IonContent, IonFooter, IonHeader, IonIcon, IonLabel, IonList, IonPage, IonSpinner, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, chatbubbleEllipsesOutline, closeOutline, fastFoodOutline, restaurantOutline } from 'ionicons/icons';
@@ -43,6 +44,16 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
   setSelectedTableGestion,
   generateOrder, getComensalColor
 }) => {
+  const listEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Small timeout ensures the DOM has updated with the new item before we scroll
+    const timer = setTimeout(() => {
+      listEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [cart.length]);
+
 const totalPrice = cart.reduce(
       (sum, item) => sum + item.quantity * item.product.price,
       0,
@@ -76,7 +87,7 @@ const totalPrice = cart.reduce(
                     color: "white",
                   }}
                 >
-                  Mesa {selectedTable?.label}
+                  {formatTableName(selectedTable?.zone || '', selectedTable?.label)}
                 </span>
                 <span
                   style={{
@@ -134,12 +145,11 @@ const totalPrice = cart.reduce(
                   setReviewComensal(1);
                   setGeneralNotes("");
                   setConfirmRestart(false);
-                  const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+                  if (checkoutReturnMode === "gestion_cuentas") {
+                    // Do not close the view, just keep it open empty.
+                    // (Optional: could also keep the table selected)
+                  }
+                  setCheckoutReturnMode(null);
                 }
               }}
               style={{
@@ -162,7 +172,42 @@ setCheckoutReturnMode(null);
                 flexShrink: 0,
               }}
             >
-              Reiniciar Pedido 🔄
+              Reiniciar Pedido 🗑️
+            </div>
+            
+            {/* + SEPARADOR BUTTON MOVED HERE */}
+            <div
+              onClick={() => {
+                const comensalNum = reviewComensal === "summary" ? 1 : reviewComensal;
+                const newSep = {
+                  isSeparator: true,
+                  separatorLabel: "--- PLATO ---",
+                  plate: comensalNum,
+                  quantity: 0,
+                  product: { id: `sep_${Date.now()}`, name: "--- PLATO ---", price: 0, category: "separators" } as any
+                };
+                setCart([...cart, newSep]);
+              }}
+              style={{
+                padding: "0 12px",
+                height: "42px",
+                borderRadius: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#059669",
+                color: "white",
+                fontWeight: "900",
+                fontSize: "0.75rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                transition: "all 0.2s ease",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(5, 150, 105, 0.2)",
+                flexShrink: 0,
+              }}
+            >
+              + Separador
             </div>
             {comensales
               .filter((n) => n > 0)
@@ -282,119 +327,44 @@ setCheckoutReturnMode(null);
                       boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                     }}
                   >
-                    <div
-                      style={{
-                        padding: "12px 20px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        background:
-                          comensalNum === 0
-                            ? "#1e293b"
-                            : getComensalColor(comensalNum),
-                        color: "white",
-                      }}
-                    >
-                      <IonText
-                        style={{
-                          fontSize: "1rem",
-                          fontWeight: "900",
-                          letterSpacing: "1px",
-                        }}
-                      >
-                        {comensalNum === 0
-                          ? "PARA COMPARTIR 🥗"
-                          : `PEDIDO COMENSAL ${comensalNum}`}
-                      </IonText>
-                      <div style={{ flex: 1 }}></div>
-                      <IonBadge
-                        style={{
-                          "--background": "rgba(255,255,255,0.2)",
-                          color: "white",
-                          fontSize: "0.8rem",
-                          fontWeight: "bold",
-                          padding: "4px 10px",
-                        }}
-                      >
-                        {allComensalItems.length}{" "}
-                        {allComensalItems.length === 1 ? "Ítem" : "Ítems"}
-                      </IonBadge>
-                    </div>
-
                     <IonList style={{ background: "transparent", padding: 0 }}>
-                      {entradas.length > 0 && (
-                        <>
+                      {allComensalItems.map((item, idx) => {
+                        const globalIndex = cart.indexOf(item);
+                        return (
                           <div
-                            style={{
-                              padding: "8px 20px",
-                              background: "#fffbeb",
-                              borderBottom: "1px solid #fef3c7",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "8px",
+                            key={`dnd-${globalIndex}-${item.product?.id || idx}`}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", globalIndex.toString());
+                              e.currentTarget.style.opacity = "0.5";
+                            }}
+                            onDragEnd={(e) => {
+                              e.currentTarget.style.opacity = "1";
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const draggedGlobalIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                              const targetGlobalIdx = globalIndex;
+                              if (draggedGlobalIdx !== targetGlobalIdx && !isNaN(draggedGlobalIdx)) {
+                                const newCart = [...cart];
+                                const [draggedItem] = newCart.splice(draggedGlobalIdx, 1);
+                                newCart.splice(targetGlobalIdx, 0, draggedItem);
+                                setCart(newCart);
+                              }
                             }}
                           >
-                            <IonIcon
-                              icon={restaurantOutline}
-                              style={{ fontSize: "0.9rem", color: "#b45309" }}
-                            />
-                            <span
-                              style={{
-                                fontSize: "0.7rem",
-                                fontWeight: "900",
-                                color: "#b45309",
-                                textTransform: "uppercase",
-                                letterSpacing: "1px",
-                              }}
-                            >
-                              Entradas / Principios
-                            </span>
+                            {renderReviewItem(item, globalIndex)}
                           </div>
-                          {entradas.map((item, idx) =>
-                            renderReviewItem(item, idx),
-                          )}
-                        </>
-                      )}
-
-                      {otherItems.length > 0 && (
-                        <>
-                          {entradas.length > 0 && (
-                            <div
-                              style={{
-                                padding: "8px 20px",
-                                background: "#f8fafc",
-                                borderBottom: "1px solid #e2e8f0",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                              }}
-                            >
-                              <IonIcon
-                                icon={fastFoodOutline}
-                                style={{ fontSize: "0.9rem", color: "#64748b" }}
-                              />
-                              <span
-                                style={{
-                                  fontSize: "0.7rem",
-                                  fontWeight: "900",
-                                  color: "#64748b",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "1px",
-                                }}
-                              >
-                                Platos Fuertes / Otros
-                              </span>
-                            </div>
-                          )}
-                          {otherItems.map((item, idx) =>
-                            renderReviewItem(item, idx),
-                          )}
-                        </>
-                      )}
+                        );
+                      })}
                     </IonList>
                   </div>
                 );
               })()}
+              <div ref={listEndRef} style={{ height: 1 }} />
             </div>
           ) : (
             <div style={{ animation: "fadeIn 0.3s ease-out" }}>
@@ -560,7 +530,7 @@ setCheckoutReturnMode(null);
                           display: "block",
                         }}
                       >
-                        Mesa {selectedTable?.label}
+                        {formatTableName(selectedTable?.zone || '', selectedTable?.label)}
                       </IonText>
                       <IonText
                         style={{

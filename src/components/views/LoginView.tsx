@@ -141,8 +141,17 @@ interface LoginViewProps {
   setCompaniesConfig: any;
   searchCompanyQuery: any;
   setSearchCompanyQuery: any;
-  selectedTenant: any;
   setSelectedTenant: any;
+  formTenantAllowEfectivo: any;
+  setFormTenantAllowEfectivo: any;
+  formTenantAllowTarjeta: any;
+  setFormTenantAllowTarjeta: any;
+  formTenantAllowTransferencia: any;
+  setFormTenantAllowTransferencia: any;
+  formTenantAllowLupay: any;
+  setFormTenantAllowLupay: any;
+  formTenantRequireCardDigits: any;
+  setFormTenantRequireCardDigits: any;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -273,6 +282,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
   searchCompanyQuery,
   setSearchCompanyQuery,
   setSelectedTenant,
+  formTenantAllowEfectivo,
+  setFormTenantAllowEfectivo,
+  formTenantAllowTarjeta,
+  setFormTenantAllowTarjeta,
+  formTenantAllowTransferencia,
+  setFormTenantAllowTransferencia,
+  formTenantAllowLupay,
+  setFormTenantAllowLupay,
+  formTenantRequireCardDigits,
+  setFormTenantRequireCardDigits,
 }) => {
 return (
       <IonPage>
@@ -324,6 +343,16 @@ return (
           setFormTenantAccentColor={setFormTenantAccentColor}
           formTenantRequireInternalFolio={formTenantRequireInternalFolio}
           setFormTenantRequireInternalFolio={setFormTenantRequireInternalFolio}
+          formTenantAllowEfectivo={formTenantAllowEfectivo}
+          setFormTenantAllowEfectivo={setFormTenantAllowEfectivo}
+          formTenantAllowTarjeta={formTenantAllowTarjeta}
+          setFormTenantAllowTarjeta={setFormTenantAllowTarjeta}
+          formTenantAllowTransferencia={formTenantAllowTransferencia}
+          setFormTenantAllowTransferencia={setFormTenantAllowTransferencia}
+          formTenantAllowLupay={formTenantAllowLupay}
+          setFormTenantAllowLupay={setFormTenantAllowLupay}
+          formTenantRequireCardDigits={formTenantRequireCardDigits}
+          setFormTenantRequireCardDigits={setFormTenantRequireCardDigits}
           transferStep={transferStep}
           setTransferStep={setTransferStep}
           transferTargetOwnerKey={transferTargetOwnerKey}
@@ -760,7 +789,7 @@ return (
                 </div>
               </div>
             ) : showPinPanel ? (
-              <div className="w-full max-w-[600px] bg-white border border-slate-200/80 rounded-3xl p-6 shadow-md mb-8 space-y-6 text-center animate-fade-in mx-auto">
+              <div className="w-full max-w-[600px] landscape:max-w-[1200px] lg:max-w-[1200px] bg-white border border-slate-200/80 rounded-3xl p-6 shadow-md mb-8 space-y-6 text-center animate-fade-in mx-auto">
                 
                 {/* 🛡️ BANNER SUPERIOR CON ESTADO DE RED LOCAL Y WEBSOCKETS (Solo se muestra en el Paso 2 si ya está desbloqueado) */}
                 {(isOwnerUnlocked || restrictedOwnerKey) && (
@@ -1043,7 +1072,7 @@ return (
                               </button>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
                               {customOwners.map((owner) => {
                                 const ownerBranches = COMPANY_CATALOG.filter(c => c.ownerKey === owner.key);
                                 const numMatrices = ownerBranches.filter(c => c.type === 'Matriz').length;
@@ -1204,7 +1233,7 @@ return (
                               <span className="text-[12.5px] uppercase font-black tracking-wider text-slate-400 pl-1 flex items-center gap-1">
                                 🏠 Casa Matriz / Base de Operaciones Principal
                               </span>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {matrices.map((company) => {
                                   const isSelected = selectedTenant.id === company.id;
                                   return (
@@ -1363,7 +1392,7 @@ return (
                               <span className="text-[12.5px] uppercase font-black tracking-wider text-slate-400 pl-1 flex items-center gap-1">
                                 📍 Puntos de Venta y Sucursales de la Red
                               </span>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {sucursales.map((company) => {
                                   const isSelected = selectedTenant.id === company.id;
                                   return (

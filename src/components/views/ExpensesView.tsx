@@ -722,6 +722,17 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           expenseFormData={expenseFormData}
           setExpenseFormData={setExpenseFormData}
           triggerAppNotification={triggerAppNotification}
+          handleSaveExpense={handleSaveExpense}
+          expenseAmount={expenseAmount}
+          expenseCategory={expenseCategory}
+          expenseConcept={expenseConcept}
+          expenseReference={expenseReference}
+          selectedExpenseForEdit={selectedExpenseForEdit}
+          setExpenseAmount={setExpenseAmount}
+          setExpenseCategory={setExpenseCategory}
+          setExpenseConcept={setExpenseConcept}
+          setExpenseReference={setExpenseReference}
+          setSelectedExpenseForEdit={setSelectedExpenseForEdit}
         />
         </IonContent>
       </IonPage>

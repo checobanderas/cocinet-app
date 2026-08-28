@@ -27,7 +27,7 @@ interface TenantBackupConfirmProps {
 export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
   tenantBackupConfirm,
   setTenantBackupConfirm,
-  isTenantBackupLoading, selectedTenant, setIsTenantBackupLoading, setTenantBackupDate, setTenantBackupMode, setTenantBackupMoveTarget, setTenantBackupNote, setTenantBackupProgress, tenantBackupDate, tenantBackupMode, tenantBackupMoveTarget, tenantBackupNote, tenantBackupProgress, tenantBackupSnapshots, triggerAppNotification,
+  isTenantBackupLoading, selectedTenant, setIsTenantBackupLoading, setTenantBackupDate, setTenantBackupMode, setTenantBackupMoveTarget, setTenantBackupNote, setTenantBackupProgress, tenantBackupDate, tenantBackupMode, tenantBackupMoveTarget, tenantBackupNote = "", tenantBackupProgress, tenantBackupSnapshots = [], triggerAppNotification,
   COMPANY_CATALOG
 }) => {
   return (
@@ -177,15 +177,15 @@ export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
 
                             // 1. Respaldo Día -1 (Ayer)
                             setTenantBackupProgress(`Creando respaldo del día ${date1Str} (Ayer)...`);
-                            const label1 = `${tenantShortName} - [DÍA ${date1Str}] ${timeStr}${tenantBackupNote.trim() ? ` - ${tenantBackupNote.trim()}` : ""}`;
+                            const label1 = `${tenantShortName} - [DÍA ${date1Str}] ${timeStr}${(tenantBackupNote || "").trim() ? ` - ${(tenantBackupNote || "").trim()}` : ""}`;
                             const data1 = await exportTenantDataJson(selectedTenant.id, { startDate: date1Str, endDate: date1Str });
-                            await saveTenantBackupSnapshot(selectedTenant.id, label1, tenantBackupNote.trim(), data1);
+                            await saveTenantBackupSnapshot(selectedTenant.id, label1, (tenantBackupNote || "").trim(), data1);
 
                             // 2. Respaldo Día -2 (Anteayer)
                             setTenantBackupProgress(`Creando respaldo del día ${date2Str} (Anteayer)...`);
-                            const label2 = `${tenantShortName} - [DÍA ${date2Str}] ${timeStr}${tenantBackupNote.trim() ? ` - ${tenantBackupNote.trim()}` : ""}`;
+                            const label2 = `${tenantShortName} - [DÍA ${date2Str}] ${timeStr}${(tenantBackupNote || "").trim() ? ` - ${(tenantBackupNote || "").trim()}` : ""}`;
                             const data2 = await exportTenantDataJson(selectedTenant.id, { startDate: date2Str, endDate: date2Str });
-                            await saveTenantBackupSnapshot(selectedTenant.id, label2, tenantBackupNote.trim(), data2);
+                            await saveTenantBackupSnapshot(selectedTenant.id, label2, (tenantBackupNote || "").trim(), data2);
 
                             setTenantBackupProgress("");
                             triggerAppNotification("✅ 2 Respaldos Creados", `Se guardaron exitosamente 2 respaldos por separado para ${date1Str} (Ayer) y ${date2Str} (Anteayer).`, "success");
@@ -215,7 +215,7 @@ export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
                     const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
                     const dateTag = tenantBackupMode === "day" ? `[DÍA ${tenantBackupDate}]` : now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
                     const autoSuffix = `${tenantShortName} - ${dateTag} ${timeStr}`;
-                    const finalLabel = tenantBackupNote.trim() ? `${autoSuffix} - ${tenantBackupNote.trim()}` : autoSuffix;
+                    const finalLabel = (tenantBackupNote || "").trim() ? `${autoSuffix} - ${(tenantBackupNote || "").trim()}` : autoSuffix;
                     return (
                       <div style={{ marginBottom: "12px" }}>
                         <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "700", marginBottom: "4px" }}>📝 Nombre del respaldo:</div>
@@ -252,14 +252,14 @@ export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
                             const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
                             const dateTag = tenantBackupMode === "day" ? `[DÍA ${tenantBackupDate}]` : now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
                             const autoSuffix = `${tenantShortName} - ${dateTag} ${timeStr}`;
-                            const label = tenantBackupNote.trim() ? `${autoSuffix} - ${tenantBackupNote.trim()}` : autoSuffix;
+                            const label = (tenantBackupNote || "").trim() ? `${autoSuffix} - ${(tenantBackupNote || "").trim()}` : autoSuffix;
                             
                             setTenantBackupProgress("Recopilando datos desde Firestore...");
                             const exportOpts = tenantBackupMode === "day" ? { startDate: tenantBackupDate, endDate: tenantBackupDate } : undefined;
                             const data = await exportTenantDataJson(selectedTenant.id, exportOpts);
                             
                             setTenantBackupProgress("Guardando respaldo en la nube...");
-                            await saveTenantBackupSnapshot(selectedTenant.id, label, tenantBackupNote.trim(), data);
+                            await saveTenantBackupSnapshot(selectedTenant.id, label, (tenantBackupNote || "").trim(), data);
                             setTenantBackupNote("");
                             setTenantBackupProgress("");
                             triggerAppNotification("✅ Respaldo Creado", `Respaldo "${label}" guardado exitosamente en la nube.`, "success");
@@ -289,11 +289,11 @@ export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
                   <h3 style={{ margin: "0 0 16px 0", fontWeight: "900", fontSize: "1rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
                     ⏳ Línea de Tiempo de Respaldos
                     <span style={{ fontSize: "0.72rem", fontWeight: "700", background: "#ede9fe", color: "#5b21b6", padding: "2px 8px", borderRadius: "99px" }}>
-                      {tenantBackupSnapshots.length} respaldos
+                      {(tenantBackupSnapshots || []).length} respaldos
                     </span>
                   </h3>
 
-                  {tenantBackupSnapshots.length === 0 ? (
+                  {(tenantBackupSnapshots || []).length === 0 ? (
                     <div style={{ textAlign: "center", padding: "32px 20px", color: "#94a3b8" }}>
                       <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>📂</div>
                       <p style={{ fontWeight: "600", fontSize: "0.9rem", margin: "0 0 4px" }}>No hay respaldos registrados aún</p>
@@ -301,7 +301,7 @@ export const TenantBackupConfirm: React.FC<TenantBackupConfirmProps> = ({
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {tenantBackupSnapshots.map((snap, idx) => {
+                      {(tenantBackupSnapshots || []).map((snap, idx) => {
                         const sizeKb = snap.sizeEstimate ? Math.round(snap.sizeEstimate / 1024) : 0;
                         const totalDocs = snap.totalDocs ?? (snap.data?.collections
                           ? Object.values(snap.data.collections).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0)

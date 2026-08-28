@@ -340,7 +340,7 @@ export function getProductReportName(product: any): string {
   
   if (subgroup) {
     const subgroupLower = subgroup.toLowerCase();
-    let prefix = subgroup;
+    let prefix = "";
     if (subgroupLower.includes("gringa")) prefix = "Gringa";
     else if (subgroupLower.includes("burra")) prefix = "Burra";
     else if (subgroupLower.includes("quesadilla")) prefix = "Quesadilla";

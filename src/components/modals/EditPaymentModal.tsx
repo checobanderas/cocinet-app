@@ -15,12 +15,13 @@ interface EditPaymentModalProps {
   tempCardLastFour: any;
   tempPaymentCardType: any;
   tempPaymentMethod: any;
+  selectedTenant?: any;
 }
 
 export const EditPaymentModal: React.FC<EditPaymentModalProps> = ({
   isEditPaymentModalOpen,
   setIsEditPaymentModalOpen,
-  accountToEditPayment, handleUpdatePaymentMethod, setAccountToEditPayment, setTempCardLastFour, setTempPaymentCardType, setTempPaymentMethod, tempCardLastFour, tempPaymentCardType, tempPaymentMethod
+  accountToEditPayment, handleUpdatePaymentMethod, setAccountToEditPayment, setTempCardLastFour, setTempPaymentCardType, setTempPaymentMethod, tempCardLastFour, tempPaymentCardType, tempPaymentMethod, selectedTenant
 }) => {
   return (
       <IonModal
@@ -52,12 +53,13 @@ export const EditPaymentModal: React.FC<EditPaymentModalProps> = ({
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Selecciona el nuevo método:</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: "cash", label: "Efectivo", icon: cashOutline, color: "text-emerald-400" },
-                  { id: "card", label: "Tarj. Crédito", icon: cardOutline, color: "text-blue-400", subtype: "credito" },
-                  { id: "card", label: "Tarj. Débito", icon: cardOutline, color: "text-indigo-400", subtype: "debito" },
-                  { id: "lupay", label: "Lupay", icon: walletOutline, color: "text-purple-400" },
-                  { id: "transfer", label: "Transferencia", icon: swapHorizontalOutline, color: "text-amber-400" },
-                ].map((m, idx) => (
+                  { id: "cash", label: "Efectivo", icon: cashOutline, color: "text-emerald-400", enabled: selectedTenant?.allowEfectivo !== false },
+                  { id: "card", label: "Tarj. Crédito", icon: cardOutline, color: "text-blue-400", subtype: "credito", enabled: selectedTenant?.allowTarjeta !== false && accountToEditPayment?.requiresInvoice },
+                  { id: "card", label: "Tarj. Débito", icon: cardOutline, color: "text-indigo-400", subtype: "debito", enabled: selectedTenant?.allowTarjeta !== false && accountToEditPayment?.requiresInvoice },
+                  { id: "card", label: "Tarjeta", icon: cardOutline, color: "text-indigo-400", enabled: selectedTenant?.allowTarjeta !== false && !accountToEditPayment?.requiresInvoice },
+                  { id: "lupay", label: "Lupay", icon: walletOutline, color: "text-purple-400", enabled: selectedTenant?.allowLupay !== false },
+                  { id: "transfer", label: "Transferencia", icon: swapHorizontalOutline, color: "text-amber-400", enabled: selectedTenant?.allowTransferencia !== false },
+                ].filter(m => m.enabled).map((m, idx) => (
                   <button
                     key={idx}
                     onClick={() => {
@@ -87,7 +89,12 @@ export const EditPaymentModal: React.FC<EditPaymentModalProps> = ({
                 className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3"
               >
                 <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1.5">Últimos 4 dígitos:</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1.5">
+                    Últimos 4 dígitos: 
+                    <span className={`ml-1 ${selectedTenant?.requireCardDigits !== false ? 'text-red-500' : 'text-slate-600'}`}>
+                      {selectedTenant?.requireCardDigits !== false ? '(Requerido)' : '(Opcional)'}
+                    </span>
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="text"

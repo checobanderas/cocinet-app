@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonCard, IonContent, IonHeader, IonIcon, IonLabel, IonPage, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
-import { addOutline, checkmarkCircleOutline, printOutline, receiptOutline, restaurantOutline, swapHorizontalOutline, trashOutline } from 'ionicons/icons';
+import { addOutline, checkmarkCircleOutline, printOutline, receiptOutline, restaurantOutline, swapHorizontalOutline, trashOutline, beerOutline } from 'ionicons/icons';
 
 interface TableDetailsViewProps {
   appMode: any;
@@ -181,21 +181,37 @@ setCheckoutReturnMode(null);
             <IonSegment
               value={precuentaTab}
               onIonChange={(e) => setPrecuentaTab(e.detail.value as any)}
-              style={{ "--background": "rgba(255,255,255,0.1)" }}
+              style={{ 
+                background: "#0f172a",
+                padding: "4px",
+                borderRadius: "8px",
+              }}
             >
-              <IonSegmentButton value="resumen">
-                <IonLabel style={{ color: "white", fontWeight: "bold" }}>
+              <IonSegmentButton 
+                value="resumen"
+                style={{
+                  "--background-checked": "#3b82f6",
+                  "--color-checked": "#ffffff",
+                  "--color": "#94a3b8",
+                  borderRadius: "6px",
+                  marginRight: "4px"
+                }}
+              >
+                <IonLabel style={{ fontWeight: "bold", opacity: 1 }}>
                   Resumen
                 </IonLabel>
               </IonSegmentButton>
-              <IonSegmentButton value="comandas">
-                <IonLabel style={{ color: "white", fontWeight: "bold" }}>
+              <IonSegmentButton 
+                value="comandas"
+                style={{
+                  "--background-checked": "#3b82f6",
+                  "--color-checked": "#ffffff",
+                  "--color": "#94a3b8",
+                  borderRadius: "6px"
+                }}
+              >
+                <IonLabel style={{ fontWeight: "bold", opacity: 1 }}>
                   Comandas
-                </IonLabel>
-              </IonSegmentButton>
-              <IonSegmentButton value="comensales">
-                <IonLabel style={{ color: "white", fontWeight: "bold" }}>
-                  Comensales
                 </IonLabel>
               </IonSegmentButton>
             </IonSegment>
@@ -367,47 +383,34 @@ setCheckoutReturnMode(null);
                         }}
                       >
                         <IonButton
-                          fill="clear"
+                          fill="outline"
                           color="primary"
                           size="small"
-                          onClick={() => {
-                            const dests = getComandaDestinations(comanda);
-                            if (dests.includes("kitchen")) {
-                              printComanda(
-                                selectedTable!.label,
-                                comanda,
-                                "kitchen",
-                              );
-                            }
-                            if (
-                              dests.includes("kitchen") &&
-                              dests.includes("bar")
-                            ) {
-                              setTimeout(() => {
-                                printComanda(
-                                  selectedTable!.label,
-                                  comanda,
-                                  "bar",
-                                );
-                              }, 1500);
-                            } else if (dests.includes("bar")) {
-                              printComanda(
-                                selectedTable!.label,
-                                comanda,
-                                "bar",
-                              );
-                            }
-                          }}
-                          style={{
-                            margin: 0,
-                            "--padding-start": "0",
-                            "--padding-end": "0",
-                            fontWeight: "bold",
-                            fontSize: "0.8rem",
-                          }}
+                          onClick={() => printComanda(selectedTable!.label, comanda, "kitchen")}
+                          style={{ margin: 0, "--padding-start": "8px", "--padding-end": "8px", fontWeight: "bold", fontSize: "0.7rem", height: "24px" }}
+                        >
+                          <IonIcon icon={restaurantOutline} slot="start" />
+                          Cocina
+                        </IonButton>
+                        <IonButton
+                          fill="outline"
+                          color="secondary"
+                          size="small"
+                          onClick={() => printComanda(selectedTable!.label, comanda, "bar")}
+                          style={{ margin: 0, "--padding-start": "8px", "--padding-end": "8px", fontWeight: "bold", fontSize: "0.7rem", height: "24px" }}
+                        >
+                          <IonIcon icon={beerOutline} slot="start" />
+                          Barra
+                        </IonButton>
+                        <IonButton
+                          fill="outline"
+                          color="medium"
+                          size="small"
+                          onClick={() => printComanda(selectedTable!.label, comanda)}
+                          style={{ margin: 0, "--padding-start": "8px", "--padding-end": "8px", fontWeight: "bold", fontSize: "0.7rem", height: "24px" }}
                         >
                           <IonIcon icon={printOutline} slot="start" />
-                          Reimprimir
+                          Todo
                         </IonButton>
                         {!comanda.isPendingCancellation && (
                           <IonButton
@@ -675,79 +678,81 @@ setCheckoutReturnMode(null);
                   gap: "12px",
                 }}
               >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "12px",
-                  }}
-                >
-                  <IonButton
-                    expand="block"
-                    color="primary"
-                    fill="outline"
-                    disabled={isPrintingPrecuenta}
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (isPrintingPrecuenta) return;
-                      setIsPrintingPrecuenta(true);
+                {tableTotal > 0 && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "12px",
+                    }}
+                  >
+                    <IonButton
+                      expand="block"
+                      color="primary"
+                      fill="outline"
+                      disabled={isPrintingPrecuenta}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (isPrintingPrecuenta) return;
+                        setIsPrintingPrecuenta(true);
 
-                      try {
-                        setPrecuentaModalType(precuentaTab);
-                        
-                        // 🖨️ Mandar a imprimir precuenta inmediatamente según la pestaña seleccionada
-                        if (selectedTable) {
-                          await printTicket(selectedTable, precuentaTab);
+                        try {
+                          setPrecuentaModalType(precuentaTab);
+                          
+                          // 🖨️ Mandar a imprimir precuenta inmediatamente según la pestaña seleccionada
+                          if (selectedTable) {
+                            await printTicket(selectedTable, precuentaTab);
+                          }
+
+                          triggerAppNotification(
+                            "🖨️ Ticket Enviado",
+                            `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para Mesa ${selectedTable?.label || ""}... ⚡🍽️`,
+                            "success"
+                          );
+                        } catch (err: any) {
+                          console.error("Error al imprimir precuenta:", err);
+                        } finally {
+                          setTimeout(() => setIsPrintingPrecuenta(false), 1200);
                         }
+                      }}
+                      style={{
+                        height: "65px",
+                        "--border-radius": "20px",
+                        fontWeight: "800",
+                        fontSize: "1rem",
+                      }}
+                    >
+                      <IonIcon icon={printOutline} slot="start" />
+                      {isPrintingPrecuenta
+                        ? "Imprimiendo..."
+                        : precuentaTab === "resumen"
+                          ? "Precuenta"
+                          : precuentaTab === "comandas"
+                            ? "Comandas"
+                            : "Comensales"}
+                    </IonButton>
 
-                        triggerAppNotification(
-                          "🖨️ Ticket Enviado",
-                          `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para Mesa ${selectedTable?.label || ""}... ⚡🍽️`,
-                          "success"
-                        );
-                      } catch (err: any) {
-                        console.error("Error al imprimir precuenta:", err);
-                      } finally {
-                        setTimeout(() => setIsPrintingPrecuenta(false), 1200);
-                      }
-                    }}
-                    style={{
-                      height: "65px",
-                      "--border-radius": "20px",
-                      fontWeight: "800",
-                      fontSize: "1rem",
-                    }}
-                  >
-                    <IonIcon icon={printOutline} slot="start" />
-                    {isPrintingPrecuenta
-                      ? "Imprimiendo..."
-                      : precuentaTab === "resumen"
-                        ? "Precuenta"
-                        : precuentaTab === "comandas"
-                          ? "Comandas"
-                          : "Comensales"}
-                  </IonButton>
-
-                  <IonButton
-                    expand="block"
-                    color="primary"
-                    onClick={() => {
-                      setActiveCategory("food");
-                      setActiveSubcategory("");
-                      setAppMode("menu");
-                    }}
-                    style={{
-                      height: "65px",
-                      "--border-radius": "20px",
-                      fontWeight: "800",
-                      fontSize: "1rem",
-                    }}
-                  >
-                    <IonIcon icon={addOutline} slot="start" />
-                    Agregar Prod.
-                  </IonButton>
-                </div>
+                    <IonButton
+                      expand="block"
+                      color="primary"
+                      onClick={() => {
+                        setActiveCategory("food");
+                        setActiveSubcategory("");
+                        setAppMode("menu");
+                      }}
+                      style={{
+                        height: "65px",
+                        "--border-radius": "20px",
+                        fontWeight: "800",
+                        fontSize: "1rem",
+                      }}
+                    >
+                      <IonIcon icon={addOutline} slot="start" />
+                      Agregar Prod.
+                    </IonButton>
+                  </div>
+                )}
                 
                 {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
                   <>
@@ -856,7 +861,7 @@ setCheckoutReturnMode(null);
                   color="success"
                   onClick={() => {
                     const existingItems =
-                      selectedTable?.comandas.flatMap((c) => c.items) || [];
+                      selectedTable?.comandas.flatMap((c) => c.items).filter((i: any) => !i.isSeparator) || [];
                     setCheckoutFallbackItems(existingItems);
                     setShowTipInput(false);
                     setShowDiscountInput(false);

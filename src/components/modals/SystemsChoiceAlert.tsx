@@ -90,7 +90,7 @@ export const SystemsChoiceAlert: React.FC<SystemsChoiceAlertProps> = ({
                   }}
                   className="w-full bg-rose-600 hover:bg-rose-700 text-white font-black py-3 px-4 rounded-xl shadow-md transition duration-200 flex items-center justify-center gap-2 cursor-pointer border-none text-sm uppercase tracking-wide"
                 >
-                  <span>🧹</span> Limpiar Corte Actual
+                  <span>🧹</span> Limpiar Corte Actual de {selectedTenant?.name?.split(' ')[0] || "Inquilino"}
                 </button>
 
                 <button
@@ -103,7 +103,7 @@ export const SystemsChoiceAlert: React.FC<SystemsChoiceAlertProps> = ({
                   }}
                   className="w-full bg-red-800 hover:bg-red-900 text-white font-black py-3 px-4 rounded-xl shadow-md transition duration-200 flex items-center justify-center gap-2 cursor-pointer border-none text-sm uppercase tracking-wide"
                 >
-                  <span>⚠️</span> Eliminar Todo el Historial
+                  <span>🚨</span> Eliminar Todo el Historial de {selectedTenant?.name?.split(' ')[0] || "Inquilino"}
                 </button>
 
                 <button

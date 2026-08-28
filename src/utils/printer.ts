@@ -815,8 +815,8 @@ export class PosPrinterJob {
     return this;
   }
 
-  execute() {
-    this.transport.send(this.buffer.join(""));
+  async execute() {
+    await this.transport.send(this.buffer.join(""));
     return this;
   }
 

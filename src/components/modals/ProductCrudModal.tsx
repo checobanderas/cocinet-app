@@ -73,9 +73,6 @@ export const ProductCrudModal: React.FC<ProductCrudModalProps> = ({
   existing, existingSubcategories, existingSubgroups, setRelationMatches, tid,
   COMPANY_CATALOG
 }) => {
-
-  const renderProductCrudModal = () => {
-
     const isEditing = !!productCrudModal.product;
 
     const p = productCrudModal.product;
@@ -855,7 +852,4 @@ setProductCrudModal({ isOpen: false, product: null });
       </IonModal>
 
     );
-
-};
-
 };

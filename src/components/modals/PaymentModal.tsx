@@ -7,6 +7,7 @@ interface PaymentModalProps {
   setShowPaymentModal: (v: boolean) => void;
   selectedTable: any;
   selectedAccountForPayment: any;
+  selectedTenant?: any;
   paymentMethod: string;
   setPaymentMethod: (v: string) => void;
   paymentAmountReceived: string;
@@ -46,6 +47,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   setShowPaymentModal,
   selectedTable,
   selectedAccountForPayment,
+  selectedTenant,
   paymentMethod,
   setPaymentMethod,
   paymentAmountReceived,
@@ -524,15 +526,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   }} 
                   className="ion-margin-bottom" 
                 > 
-                  <IonSegmentButton value="cash">Efectivo</IonSegmentButton> 
-                  <IonSegmentButton value="lupay">Lúpay</IonSegmentButton> 
-                  <IonSegmentButton value="card">Tarjeta</IonSegmentButton> 
-                  <IonSegmentButton value="transfer"> 
-                    Transf. 
-                  </IonSegmentButton> 
+                  {selectedTenant?.allowEfectivo !== false && (
+                    <IonSegmentButton value="cash">Efectivo</IonSegmentButton> 
+                  )}
+                  {selectedTenant?.allowLupay !== false && (
+                    <IonSegmentButton value="lupay">Lúpay</IonSegmentButton> 
+                  )}
+                  {selectedTenant?.allowTarjeta !== false && (
+                    <IonSegmentButton value="card">Tarjeta</IonSegmentButton> 
+                  )}
+                  {selectedTenant?.allowTransferencia !== false && (
+                    <IonSegmentButton value="transfer">Transf.</IonSegmentButton> 
+                  )}
                 </IonSegment> 
 
-                {paymentMethod === "card" && ( 
+                {false && paymentMethod === "card" && requiresInvoice && ( 
                   <div 
                     id="modal-card-type-selection-container"
                     className={`mb-4 border rounded-2xl p-3 flex flex-col gap-2 transition-all ${
@@ -614,7 +622,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             color: "#64748b", 
                           }} 
                         > 
-                          Últimos 4 Dígitos {paymentMethod === "card" ? "💳" : "📲"} 
+                          Últimos 4 Dígitos {paymentMethod === "card" ? "💳" : "📲"}
+                          <span style={{ fontSize: "0.7rem", marginLeft: "4px", color: selectedTenant?.requireCardDigits !== false ? "#ef4444" : "#94a3b8" }}>
+                            {selectedTenant?.requireCardDigits !== false ? "(Requerido)" : "(Opcional)"}
+                          </span>
                         </IonText> 
                         <input 
                           type="text" 
@@ -918,9 +929,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     color="success"
                     onClick={() => confirmPayment(selectedAccountForPayment)}
                     disabled={
+                      isProcessingPayment ||
                       (paymentMethod === "cash" && (Number(paymentAmountReceived) < (selectedAccountForPayment.subtotal + paymentTipValue - modalDiscountAmount) || !paymentAmountReceived)) ||
-                      (paymentMethod === "card" && (!paymentCardType || !paymentCardLastFour || paymentCardLastFour.length < 4)) ||
-                      (paymentMethod === "transfer" && (!paymentCardLastFour || paymentCardLastFour.length < 4))
+                      ((paymentMethod === "card" || paymentMethod === "transfer") && selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4))
                     }
                     style={{ flex: 2, height: "50px", "--border-radius": "14px", fontWeight: "bold" }}
                   >
@@ -1141,5 +1152,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
       </IonModal>
     );
-};
+  };
+
+  return (
+    <>
+      {renderPaymentModal()}
+      {renderNumpadModal()}
+    </>
+  );
 };

@@ -240,7 +240,13 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
   triggerAppNotification,
   analyzeMenuImage, applyBulkCaseToggle, applyBulkSubcategory, applyBulkSubgroup, collapseAllTreeNodes, expandAllTreeNodes, loadAutoFormattedList, moveSelectedDown, moveSelectedToBottom, moveSelectedToTop, moveSelectedUp, parseSplitProducts, saveRelationChanges, toggleTextCase, toggleTreeSectionCollapse, toggleTreeSubgroupCollapse
 }) => {
-const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
+  const [priceAuditDifferences, setPriceAuditDifferences] = React.useState<any[]>([]);
+  const [auditSelectedIds, setAuditSelectedIds] = React.useState<Set<string>>(new Set());
+  const [isAuditingPrices, setIsAuditingPrices] = React.useState(false);
+  const [auditGroupFilter, setAuditGroupFilter] = React.useState<string>("ALL");
+  const [showOnlyActiveUpdates, setShowOnlyActiveUpdates] = React.useState<boolean>(true);
+  const [restoreProgressMsg, setRestoreProgressMsg] = React.useState<string>("");
+  const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
     if (!hasAccess) {
       return (
         <IonPage>
@@ -278,7 +284,11 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
       <IonPage>
       {renderMaterialHeader({
         title: "Administrar Menú",
-        subtitle: `Productos totales: ${products.length}`,
+        subtitle: (() => {
+          const actives = products.filter(p => !p.isDeleted).length;
+          const deleted = products.length - actives;
+          return `Productos totales: ${products.length} (${actives} activos` + (deleted > 0 ? `, ${deleted} inactivos)` : ')');
+        })(),
         showBack: true,
         onBack: () => {
           if (manageMenuTab !== null) {
@@ -420,6 +430,21 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                     stat: "Subir Tabla",
                   },
                   {
+                    id: "audit_prices_excel" as const,
+                    title: "Auditor y Sincronizador de Precios (Excel)",
+                    emoji: "⚖️",
+                    color: "#f59e0b",
+                    shortTitle: "Sincronizar Precios",
+                    description:
+                      "Sube la lista del dueño (Excel) para comparar productos y precios actuales. Detecta cambios y te permite autorizarlos individualmente o de golpe.",
+                    actionExplanation:
+                      "Esta acción compara nombre a nombre, mostrándote una tabla de diferencias (precio anterior vs nuevo) y te permite actualizar el orden y precios según el Excel original.",
+                    bgGradient:
+                      "linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
+                    borderColorActive: "#f59e0b",
+                    stat: "Auditar y Aplicar",
+                  },
+                  {
                     id: "food" as const,
                     title: "Platillos y Alimentos",
                     emoji: "🌮",
@@ -432,7 +457,12 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                     bgGradient:
                       "linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#ef4444",
-                    stat: `${products.filter((p) => p.category === "food").length} productos`,
+                    stat: (() => {
+                      const all = products.filter((p) => p.category === "food");
+                      const active = all.filter((p) => !p.isDeleted).length;
+                      const deleted = all.length - active;
+                      return `${active} PRODUCTOS` + (deleted > 0 ? ` (${deleted} inactivos)` : '');
+                    })(),
                   },
                   {
                     id: "drinks" as const,
@@ -447,7 +477,12 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                     bgGradient:
                       "linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#06b6d4",
-                    stat: `${products.filter((p) => p.category === "drinks").length} bebidas`,
+                    stat: (() => {
+                      const all = products.filter((p) => p.category === "drinks");
+                      const active = all.filter((p) => !p.isDeleted).length;
+                      const deleted = all.length - active;
+                      return `${active} BEBIDAS` + (deleted > 0 ? ` (${deleted} inactivas)` : '');
+                    })(),
                   },
                   {
                     id: "desserts" as const,
@@ -462,7 +497,12 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                     bgGradient:
                       "linear-gradient(135deg, rgba(217, 70, 239, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#d946ef",
-                    stat: `${products.filter((p) => p.category === "desserts").length} postres`,
+                    stat: (() => {
+                      const all = products.filter((p) => p.category === "desserts");
+                      const active = all.filter((p) => !p.isDeleted).length;
+                      const deleted = all.length - active;
+                      return `${active} POSTRES` + (deleted > 0 ? ` (${deleted} inactivos)` : '');
+                    })(),
                   },
                   {
                     id: "recipes" as const,
@@ -1353,7 +1393,7 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                                     <div key={bk.id} style={{ background: "#f8fafc", padding: "8px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.72rem" }}>
                                       <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", color: "#1e293b" }}>
                                         <span>{bk.name}</span>
-                                        <span style={{ color: "#059669" }}>{bk.products?.length || 0} p.</span>
+                                        <span style={{ color: "#059669" }}>{(bk.products || []).filter((p: any) => !p.isDeleted).length}a / {(bk.products || []).filter((p: any) => p.isDeleted).length}i</span>
                                       </div>
                                       <div style={{ color: "#64748b", fontSize: "0.65rem", marginTop: "2px" }}>
                                         Sucursal original: {tenantName}
@@ -1421,7 +1461,7 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                         <span>💾</span> Generar Respaldo de Menú
                       </h3>
                       <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
-                        Guarda el estado actual de tu menú (<b>{products.length} productos</b>) para la sucursal <b>{selectedTenant?.name || selectedTenant?.sucursalDefault || "Principal"}</b>.
+                        Guarda el estado actual de tu menú (<b>{products.filter(p => !p.isDeleted).length} activos y {products.filter(p => p.isDeleted).length} inactivos</b>) para la sucursal <b>{selectedTenant?.name || selectedTenant?.sucursalDefault || "Principal"}</b>.
                       </p>
                     </div>
 
@@ -1617,7 +1657,7 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                                   <span>📅</span> <span className="font-mono">{formattedDate}</span>
                                 </p>
                                 <p style={{ margin: "4px 0 0 0", fontSize: "0.75rem", color: "#475569", fontWeight: "500" }}>
-                                  🍔 Contiene <b>{bk.products?.length || 0}</b> productos y categorías del menú.
+                                  🍔 Contiene <b>{(bk.products || []).filter((p: any) => !p.isDeleted).length} activos y {(bk.products || []).filter((p: any) => p.isDeleted).length} inactivos</b>.
                                 </p>
                               </div>
 
@@ -1626,23 +1666,25 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                                 <IonButton
                                   fill="solid"
                                   color="success"
-                                  size="small"
+                                  disabled={!!restoreProgressMsg}
                                   onClick={async () => {
                                     if (
                                       window.confirm(
-                                        `⚠️ ¿Estás seguro de que deseas recuperar este respaldo?\n\n"${bk.name}"\n\nEsto reemplazará todos los productos (${products.length}) del menú actual de la sucursal: "${selectedTenant?.name}" con los ${bk.products?.length || 0} productos de este respaldo. Esta acción no se puede deshacer.`
+                                        `⚠️ ¿Estás seguro de que deseas recuperar este respaldo?\n\n"${bk.name}"\n\nEsto limpiará el menú actual de la sucursal "${selectedTenant?.name}" y restaurará los ${bk.products?.length || 0} productos a su estado exacto de ese momento.\n\nQuédate tranquilo: Se conservarán intactos todos los UUIDs originales y se respetará el borrado lógico.`
                                       )
                                     ) {
+                                      setRestoreProgressMsg("Iniciando restauración...");
                                       try {
                                         await restoreMenuBackupInFirebase(
                                           selectedTenant.id,
-                                          bk.products || []
+                                          bk.products || [],
+                                          (msg) => setRestoreProgressMsg(msg)
                                         );
                                         
                                         if (enableBackupNotifications) {
                                           triggerAppNotification(
-                                            "Menu Restaurado 🔄",
-                                            `¡El menú se ha restaurado exitosamente al respaldo "${bk.name}"! 🔄✅`,
+                                            "Menú Restaurado 🔄",
+                                            `¡El menú se ha restaurado exitosamente! (UUIDs originales conservados) 🔄✅`,
                                             "success"
                                           );
                                         }
@@ -1653,12 +1695,14 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                                           "Ocurrió un error al intentar restaurar el menú.",
                                           "warning"
                                         );
+                                      } finally {
+                                        setRestoreProgressMsg("");
                                       }
                                     }
                                   }}
                                   style={{ fontWeight: "bold" }}
                                 >
-                                  🔄 Recuperar y Activar
+                                  {restoreProgressMsg ? `⏳ ${restoreProgressMsg}` : "🔄 Recuperar y Activar"}
                                 </IonButton>
 
                                 <IonButton
@@ -2428,6 +2472,482 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {manageMenuTab === "audit_prices_excel" && (
+            <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
+              <div style={{ background: "white", padding: "24px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+                <h2 style={{ margin: "0 0 16px 0", fontSize: "1.2rem", fontWeight: "bold", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>⚖️</span> Auditor de Precios y Orden (Excel)
+                </h2>
+                <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: "20px" }}>
+                  Sube la lista del dueño en formato Excel. Se comparará el nombre del producto para detectar cambios de <b>precio</b> o <b>consecutivo (orden)</b>.
+                  Los productos con diferencias aparecerán en una tabla para que autorices su actualización.
+                </p>
+                
+                <input
+                  type="file"
+                  id="audit-excel-upload"
+                  accept=".xlsx, .xls, .csv"
+                  style={{ display: "none" }}
+                  onChange={async (e: any) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    setIsAuditingPrices(true);
+                    setPriceAuditDifferences([]);
+                    setAuditSelectedIds(new Set());
+
+                    try {
+                      const XLSX = await import("xlsx");
+                      const reader = new FileReader();
+                      reader.onload = async (evt) => {
+                        try {
+                          const ab = evt.target?.result;
+                          if (!ab) throw new Error("No data");
+                          const wb = XLSX.read(ab, { type: "array" });
+                          const wsname = wb.SheetNames[0];
+                          const ws = wb.Sheets[wsname];
+                          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                          
+                          const differencesMap = new Map<string, any>();
+                          const newSelection = new Set<string>();
+
+                          const dbProductsByName = new Map();
+                          const deletedProductsByName = new Map();
+                          products.forEach(p => {
+                            if (!p.isDeleted) {
+                              dbProductsByName.set(p.name.trim().toLowerCase(), p);
+                            } else {
+                              deletedProductsByName.set(p.name.trim().toLowerCase(), p);
+                            }
+                          });
+
+                          let rowsProcessed = 0;
+                          let currentSubgroup = "";
+
+                          data.forEach((row: any) => {
+                             if (!Array.isArray(row) || row.length === 0) return;
+                             
+                             const firstCol = String(row[0] || "").trim();
+                             if (!firstCol) return;
+
+                             if (firstCol.toUpperCase() === "PRODUCTO" || firstCol.toUpperCase() === "NOMBRE") return;
+
+                             let orderNum = NaN;
+                             let priceNum = NaN;
+
+                             for (let i = 1; i < row.length; i++) {
+                                 const cellVal = String(row[i] || "").replace(/[$,]/g, "").trim();
+                                 if (cellVal !== "") {
+                                     const val = parseFloat(cellVal);
+                                     if (!isNaN(val)) {
+                                         if (isNaN(orderNum)) orderNum = val;
+                                         else if (isNaN(priceNum)) priceNum = val;
+                                     }
+                                 }
+                             }
+
+                             if (isNaN(orderNum) && isNaN(priceNum)) {
+                                 currentSubgroup = firstCol;
+                                 return;
+                             }
+
+                             const excelName = firstCol;
+                             const lowerName = excelName.toLowerCase();
+
+                             rowsProcessed++;
+                             const excelOrder = isNaN(orderNum) ? 0 : Math.round(orderNum);
+                             const excelPrice = isNaN(priceNum) ? 0 : priceNum;
+
+                             const match = dbProductsByName.get(lowerName);
+                             const deletedMatch = deletedProductsByName.get(lowerName);
+                             
+                             if (match) {
+                               const priceDiff = Number(match.price) !== excelPrice;
+                               const orderDiff = Number(match.sortOrder || 0) !== excelOrder;
+                               const matchSubcategory = (match.subcategory || "").trim();
+                               const subcategoryDiff = matchSubcategory !== currentSubgroup;
+                               
+                               if (priceDiff || orderDiff || subcategoryDiff) {
+                                 differencesMap.set(lowerName, {
+                                   id: match.id,
+                                   type: "update",
+                                   name: excelName,
+                                   oldPrice: Number(match.price),
+                                   newPrice: excelPrice,
+                                   oldOrder: Number(match.sortOrder || 0),
+                                   newOrder: excelOrder,
+                                   oldSubcategory: matchSubcategory,
+                                   newSubcategory: currentSubgroup,
+                                   originalSubgroup: match.subgroup || "",
+                                   dbProduct: match,
+                                   priceChanged: priceDiff,
+                                   orderChanged: orderDiff,
+                                   subcategoryChanged: subcategoryDiff
+                                 });
+                               } else {
+                                 // If a later duplicate perfectly matches, we remove it from differences
+                                 differencesMap.delete(lowerName);
+                                 newSelection.delete(match.id);
+                               }
+                             } else if (deletedMatch) {
+                               differencesMap.set(lowerName, {
+                                   id: deletedMatch.id,
+                                   type: "deleted_ignored",
+                                   name: excelName,
+                                   oldPrice: Number(deletedMatch.price),
+                                   newPrice: excelPrice,
+                                   oldOrder: Number(deletedMatch.sortOrder || 0),
+                                   newOrder: excelOrder,
+                                   oldSubcategory: deletedMatch.subcategory || "",
+                                   newSubcategory: currentSubgroup,
+                                   originalSubgroup: deletedMatch.subgroup || "",
+                                   dbProduct: deletedMatch,
+                                   priceChanged: false,
+                                   orderChanged: false,
+                                   subcategoryChanged: false
+                               });
+                             } else {
+                               differencesMap.set(lowerName, {
+                                   id: "new_" + Math.random(),
+                                   type: "new",
+                                   name: excelName,
+                                   oldPrice: "-",
+                                   newPrice: excelPrice,
+                                   oldOrder: "-",
+                                   newOrder: excelOrder,
+                                   oldSubcategory: "-",
+                                   newSubcategory: currentSubgroup,
+                                   originalSubgroup: "-",
+                                   dbProduct: null,
+                                   priceChanged: false,
+                                   orderChanged: false,
+                                   subcategoryChanged: false
+                               });
+                             }
+                          });
+
+                          const differences = Array.from(differencesMap.values());
+
+                          // Sort differences so that deleted_ignored are at the very bottom
+                          differences.sort((a, b) => {
+                             if (a.type === "deleted_ignored" && b.type !== "deleted_ignored") return 1;
+                             if (a.type !== "deleted_ignored" && b.type === "deleted_ignored") return -1;
+                             return 0;
+                          });
+
+                          if (data.length > 0 && rowsProcessed === 0) {
+                             triggerAppNotification("Formato no reconocido ⚠️", "No se encontraron productos con precios/consecutivos válidos.", "warning");
+                          } else if (differences.length === 0) {
+                             triggerAppNotification("Sin diferencias ✅", "Todos los productos coinciden exactamente con el archivo de Excel.", "success");
+                          } else {
+                             triggerAppNotification("Excel procesado", `Se encontraron ${differences.length} diferencias.`, "info");
+                          }
+
+                          setPriceAuditDifferences(differences);
+                          setAuditSelectedIds(newSelection);
+                        } catch (innerErr) {
+                          console.error("Error parsing inside onload:", innerErr);
+                          triggerAppNotification("Error de formato", "El archivo no se pudo leer correctamente. Verifica que sea un Excel válido.", "error");
+                        } finally {
+                          setIsAuditingPrices(false);
+                          e.target.value = "";
+                        }
+                      };
+                      reader.onerror = () => {
+                         console.error("File reader error");
+                         triggerAppNotification("Error", "No se pudo leer el archivo físico.", "error");
+                         setIsAuditingPrices(false);
+                         e.target.value = "";
+                      };
+                      reader.readAsArrayBuffer(file);
+                    } catch (err) {
+                      console.error(err);
+                      triggerAppNotification("Error", "Fallo al importar librería de Excel", "error");
+                      setIsAuditingPrices(false);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
+                  <IonButton 
+                    color="primary" 
+                    disabled={isAuditingPrices}
+                    onClick={() => document.getElementById("audit-excel-upload")?.click()}
+                  >
+                    <IonIcon slot="start" icon={cloudUploadOutline} />
+                    {isAuditingPrices ? "Analizando Excel..." : "Seleccionar Archivo Excel"}
+                  </IonButton>
+                </div>
+
+                {priceAuditDifferences.length > 0 && (
+                  <div style={{ marginTop: "24px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", background: "#f8fafc", padding: "12px", borderRadius: "8px", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                        <span style={{ fontWeight: "bold", color: "#1e293b" }}>{priceAuditDifferences.length} diferencias encontradas.</span>
+                        <br/>
+                        <span style={{ fontSize: "0.8rem", color: "#64748b" }}>Selecciona cuáles deseas autorizar. Los productos que "No Existen" no se actualizarán.</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "10px", marginTop: "16px", flexWrap: "wrap" }}>
+                        {auditGroupFilter === "_NEW_" ? (
+                          <IonButton color="success" onClick={async () => {
+                            const visible = priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update"));
+                            const toAdd = visible.filter(d => d.type === "new" && auditSelectedIds.has(d.id));
+                            if (toAdd.length === 0) {
+                              triggerAppNotification("Sin cambios", "No hay productos faltantes seleccionados.", "info");
+                              return;
+                            }
+                            if (!window.confirm(`¿Estás seguro de agregar ${toAdd.length} productos faltantes al menú?`)) return;
+                            
+                            setIsAuditingPrices(true);
+                            let successCount = 0;
+                            for (let i = 0; i < toAdd.length; i++) {
+                               const diff = toAdd[i];
+                               const uniqueUuid = generateUUID();
+                               const nowTimestamp = getMexicoISOString().slice(0, 19).replace("T", " ");
+                               const newId = `prod_${Date.now()}_${i}_${Math.floor(Math.random() * 1000000)}`;
+
+                               try {
+                                 await addProductToFirebase({
+                                   id: newId,
+                                   uuid: uniqueUuid,
+                                   created_at: nowTimestamp,
+                                   updated_at: nowTimestamp,
+                                   name: diff.name.trim(),
+                                   price: diff.newPrice,
+                                   sortOrder: diff.newOrder,
+                                   category: "food",
+                                   subcategory: diff.newSubcategory || "General",
+                                   subgroup: "",
+                                   drinkType: null,
+                                   destination: "kitchen",
+                                   quickNotes: [],
+                                 });
+                                 successCount++;
+                               } catch(e) { console.error("Error adding product", e); }
+                            }
+                            
+                            triggerAppNotification("Éxito ✅", `Se agregaron ${successCount} productos nuevos.`, "success");
+                            setPriceAuditDifferences(prev => prev.filter(d => !toAdd.some(u => u.id === d.id)));
+                            setIsAuditingPrices(false);
+                          }} disabled={isAuditingPrices || auditSelectedIds.size === 0}>
+                            Agregar Productos Faltantes
+                          </IonButton>
+                        ) : (
+                          <>
+                            <IonButton color="primary" onClick={async () => {
+                                const visible = priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update"));
+                                const toUpdate = visible.filter(d => d.type === "update" && auditSelectedIds.has(d.id) && d.priceChanged);
+                                if (toUpdate.length === 0) {
+                                  triggerAppNotification("Sin cambios", "No hay cambios de PRECIO seleccionados en el grupo visible.", "info");
+                                  return;
+                                }
+                                if (!window.confirm(`¿Estás seguro de actualizar SOLAMENTE LOS PRECIOS de ${toUpdate.length} productos?`)) return;
+                                
+                                setIsAuditingPrices(true);
+                                let successCount = 0;
+                                for (const diff of toUpdate) {
+                                   try {
+                                     await updateProductInFirebase(diff.id, { price: diff.newPrice });
+                                     successCount++;
+                                   } catch(e) { console.error("Error update", e); }
+                                }
+                                
+                                triggerAppNotification("Éxito ✅", `Se actualizaron precios en ${successCount} productos.`, "success");
+                                setPriceAuditDifferences(prev => prev.map(d => toUpdate.some(u => u.id === d.id) ? { ...d, oldPrice: d.newPrice, priceChanged: false } : d));
+                                setIsAuditingPrices(false);
+                            }} disabled={isAuditingPrices || auditSelectedIds.size === 0}>
+                              Aplicar SOLO Precios
+                            </IonButton>
+
+                            <IonButton color="secondary" onClick={async () => {
+                                const visible = priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update"));
+                                const toUpdate = visible.filter(d => d.type === "update" && auditSelectedIds.has(d.id) && d.subcategoryChanged);
+                                if (toUpdate.length === 0) {
+                                  triggerAppNotification("Sin cambios", "No hay cambios de GRUPO seleccionados en el grupo visible.", "info");
+                                  return;
+                                }
+                                if (!window.confirm(`¿Estás seguro de actualizar SOLAMENTE LA CATEGORÍA (Botón Rojo) de ${toUpdate.length} productos?`)) return;
+                                
+                                setIsAuditingPrices(true);
+                                let successCount = 0;
+                                for (const diff of toUpdate) {
+                                   try {
+                                     await updateProductInFirebase(diff.id, { subcategory: diff.newSubcategory });
+                                     successCount++;
+                                   } catch(e) { console.error("Error update", e); }
+                                }
+                                
+                                triggerAppNotification("Éxito ✅", `Se actualizó la categoría en ${successCount} productos.`, "success");
+                                setPriceAuditDifferences(prev => prev.map(d => toUpdate.some(u => u.id === d.id) ? { ...d, oldSubcategory: d.newSubcategory, subcategoryChanged: false } : d));
+                                setIsAuditingPrices(false);
+                            }} disabled={isAuditingPrices || auditSelectedIds.size === 0}>
+                              Aplicar SOLO Grupos
+                            </IonButton>
+
+                            <IonButton color="tertiary" onClick={async () => {
+                                const visible = priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update"));
+                                const toUpdate = visible.filter(d => d.type === "update" && auditSelectedIds.has(d.id) && d.orderChanged);
+                                if (toUpdate.length === 0) {
+                                  triggerAppNotification("Sin cambios", "No hay cambios de ORDEN seleccionados en el grupo visible.", "info");
+                                  return;
+                                }
+                                if (!window.confirm(`¿Estás seguro de actualizar SOLAMENTE EL ORDEN de ${toUpdate.length} productos?`)) return;
+                                
+                                setIsAuditingPrices(true);
+                                let successCount = 0;
+                                for (const diff of toUpdate) {
+                                   try {
+                                     await updateProductInFirebase(diff.id, { sortOrder: diff.newOrder });
+                                     successCount++;
+                                   } catch(e) { console.error("Error update", e); }
+                                }
+                                
+                                triggerAppNotification("Éxito ✅", `Se actualizó el orden en ${successCount} productos.`, "success");
+                                setPriceAuditDifferences(prev => prev.map(d => toUpdate.some(u => u.id === d.id) ? { ...d, oldOrder: d.newOrder, orderChanged: false } : d));
+                                setIsAuditingPrices(false);
+                            }} disabled={isAuditingPrices || auditSelectedIds.size === 0}>
+                              Aplicar SOLO Orden
+                            </IonButton>
+                          </>
+                        )}
+
+                        <IonButton color="danger" fill="outline" onClick={() => {
+                          setPriceAuditDifferences([]);
+                          setAuditSelectedIds(new Set());
+                        }} disabled={isAuditingPrices}>
+                          Limpiar Auditoría
+                        </IonButton>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "16px", marginBottom: "16px", background: "#f1f5f9", padding: "12px", borderRadius: "8px", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: "bold", color: "#1e293b" }}>Filtrar por Grupo (Excel):</span>
+                        <select 
+                          value={auditGroupFilter}
+                          onChange={(e) => setAuditGroupFilter(e.target.value)}
+                          style={{ padding: "8px", borderRadius: "8px", border: "1px solid #cbd5e1", minWidth: "200px" }}
+                        >
+                          <option value="ALL">-- Todos los Grupos --</option>
+                          <option value="_NEW_">-- ⚠️ Productos Faltantes (Nuevos) --</option>
+                          {Array.from(new Set(priceAuditDifferences.map(d => d.newSubcategory))).filter(Boolean).sort().map(grp => (
+                            <option key={grp as string} value={grp as string}>{grp as string}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", borderLeft: "1px solid #cbd5e1", paddingLeft: "12px" }}>
+                        <input 
+                          type="checkbox" 
+                          id="showOnlyActiveToggle"
+                          checked={showOnlyActiveUpdates}
+                          onChange={e => setShowOnlyActiveUpdates(e.target.checked)}
+                        />
+                        <label htmlFor="showOnlyActiveToggle" style={{ fontSize: "0.9rem", color: "#334155", cursor: "pointer" }}>Ocultar inactivos y no encontrados</label>
+                      </div>
+
+                      <span style={{ fontSize: "0.85rem", color: "#64748b", marginLeft: "auto" }}>
+                        (Mostrando {priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update")).length} registros)
+                      </span>
+                    </div>
+
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", fontSize: "0.9rem" }}>
+                        <thead style={{ background: "#f8fafc", borderBottom: "2px solid #cbd5e1" }}>
+                          <tr>
+                            <th style={{ padding: "10px", textAlign: "center", width: "50px" }}>
+                              <input 
+                                type="checkbox"
+                                title="Seleccionar/Deseleccionar Visibles"
+                                checked={
+                                  priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update")).filter(d => d.type === "update" || d.type === "new").length > 0 &&
+                                  priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update")).filter(d => d.type === "update" || d.type === "new").every(d => auditSelectedIds.has(d.id))
+                                }
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  const next = new Set(auditSelectedIds);
+                                  const visible = priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update"));
+                                  visible.forEach(d => {
+                                    if (d.type === "update" || d.type === "new") {
+                                      if (isChecked) next.add(d.id);
+                                      else next.delete(d.id);
+                                    }
+                                  });
+                                  setAuditSelectedIds(next);
+                                }}
+                              />
+                            </th>
+                            <th style={{ padding: "10px", textAlign: "left" }}>Producto</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>Precio Ant.</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>Precio Excel</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>Orden Ant.</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>Orden Excel</th>
+                            <th style={{ padding: "10px", textAlign: "left" }}>Categoría Cajero (Botón Rojo) Ant.</th>
+                            <th style={{ padding: "10px", textAlign: "left" }}>Categoría Cajero (Excel)</th>
+                            <th style={{ padding: "10px", textAlign: "left", color: "#64748b" }}>Subgrupo Cajero (Botón Gris)</th>
+                            <th style={{ padding: "10px", textAlign: "center" }}>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {priceAuditDifferences.filter(d => auditGroupFilter === "_NEW_" ? d.type === "new" : (auditGroupFilter === "ALL" || d.newSubcategory === auditGroupFilter) && (!showOnlyActiveUpdates || d.type === "update")).map((diff, idx) => (
+                            <tr key={idx} style={{ borderBottom: "1px solid #e2e8f0", background: diff.type === "new" ? "#fef2f2" : diff.type === "deleted_ignored" ? "#fef2f2" : "white" }}>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                {(diff.type === "update" || diff.type === "new") && (
+                                  <input 
+                                    type="checkbox" 
+                                    checked={auditSelectedIds.has(diff.id)}
+                                    onChange={(e) => {
+                                      const next = new Set(auditSelectedIds);
+                                      if (e.target.checked) next.add(diff.id);
+                                      else next.delete(diff.id);
+                                      setAuditSelectedIds(next);
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td style={{ padding: "10px", fontWeight: "bold", color: diff.type === "deleted_ignored" ? "#ef4444" : "inherit" }}>{diff.name}</td>
+                              <td style={{ padding: "10px", textAlign: "right", color: diff.priceChanged ? "#ef4444" : "#64748b", textDecoration: diff.priceChanged ? "line-through" : "none" }}>
+                                {diff.oldPrice !== "-" ? `$${diff.oldPrice}` : "-"}
+                              </td>
+                              <td style={{ padding: "10px", textAlign: "right", color: diff.priceChanged ? "#10b981" : "#1e293b", fontWeight: diff.priceChanged ? "900" : "normal", fontSize: diff.priceChanged ? "1.1rem" : "0.85rem" }}>
+                                ${diff.newPrice}
+                              </td>
+                              <td style={{ padding: "10px", textAlign: "right", color: diff.orderChanged ? "#ef4444" : "#64748b" }}>
+                                {diff.oldOrder}
+                              </td>
+                              <td style={{ padding: "10px", textAlign: "right", color: diff.orderChanged ? "#10b981" : "#1e293b", fontWeight: diff.orderChanged ? "bold" : "normal" }}>
+                                {diff.newOrder}
+                              </td>
+                              <td style={{ padding: "10px", color: diff.subcategoryChanged ? "#ef4444" : "#64748b", textDecoration: diff.subcategoryChanged ? "line-through" : "none" }}>
+                                {diff.oldSubcategory || "-"}
+                              </td>
+                              <td style={{ padding: "10px", color: diff.subcategoryChanged ? "#10b981" : "#1e293b", fontWeight: diff.subcategoryChanged ? "bold" : "normal" }}>
+                                {diff.newSubcategory || "-"}
+                              </td>
+                              <td style={{ padding: "10px", color: "#64748b", fontStyle: "italic", fontSize: "0.8rem" }}>
+                                {diff.originalSubgroup || "-"}
+                              </td>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                {diff.type === "deleted_ignored" ? (
+                                  <span style={{ background: "#fee2e2", color: "#ef4444", padding: "4px 8px", borderRadius: "12px", fontSize: "0.7rem", fontWeight: "bold" }}>Inactivo (Ignorado)</span>
+                                ) : diff.type === "new" ? (
+                                  <span style={{ background: "#fee2e2", color: "#ef4444", padding: "4px 8px", borderRadius: "12px", fontSize: "0.7rem", fontWeight: "bold" }}>No Existe</span>
+                                ) : (
+                                  <span style={{ background: "#dcfce7", color: "#10b981", padding: "4px 8px", borderRadius: "12px", fontSize: "0.7rem", fontWeight: "bold" }}>Diferente</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -3214,7 +3734,7 @@ const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUs
                   }}
                 >
                   <h3 style={{ margin: 0, fontWeight: "800", color: "#1e293b", fontSize: "1.1rem" }}>
-                    📋 Catálogo de Productos y Notas Asignadas ({products.length} productos)
+                    📋 Catálogo de Productos y Notas Asignadas ({products.filter(p => !p.isDeleted).length} activos y {products.filter(p => p.isDeleted).length} inactivos)
                   </h3>
                   <input
                     type="text"

@@ -35,7 +35,22 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
   getComensalColor,
   showDelete
 }) => {
-const isCancelled = item.isCancelled;
+    if (!item || !item.product) return null;
+
+    if (item.isSeparator) {
+      return (
+        <div
+          key={`sep-${item.product.id}-${item.plate}-${folio}-${index}`}
+          style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", padding: "4px 16px", display: "flex", alignItems: "center" }}
+        >
+          <div style={{ flex: 1, borderTop: "2px dashed #cbd5e1" }}></div>
+          <span style={{ margin: "0 12px", color: "#64748b", fontWeight: "bold", fontSize: "0.7rem", letterSpacing: "1px" }}>{item.separatorLabel || "--- PLATO ---"}</span>
+          <div style={{ flex: 1, borderTop: "2px dashed #cbd5e1" }}></div>
+        </div>
+      );
+    }
+
+    const isCancelled = item.isCancelled;
     const isPendingCancellation = item.isPendingCancellation;
     const canSelect = showDelete && !isCancelled && !isPendingCancellation && folio !== undefined;
     const isSelected = canSelect && (itemsSelectedForCancellation || []).some(

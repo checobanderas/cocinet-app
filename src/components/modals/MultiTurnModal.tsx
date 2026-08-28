@@ -43,7 +43,7 @@ export const MultiTurnModal: React.FC<MultiTurnModalProps> = ({
   handleExportMultiTurnExcel,
   sortedShiftKeys
 }) => {
-  const renderMultiTurnModal = () => (
+  return (
       <IonModal
         isOpen={showMultiTurnModal}
         onDidDismiss={() => setShowMultiTurnModal(false)}

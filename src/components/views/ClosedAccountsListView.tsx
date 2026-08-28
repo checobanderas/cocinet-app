@@ -1,4 +1,5 @@
 import { updateInvoiceRequirementInFirebase } from '../../utils/firestore';
+import { formatTableName } from '../../utils/formatters';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonBadge, IonButton, IonIcon } from '@ionic/react';
@@ -74,18 +75,60 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   triggerAppNotification,
   cancelled, historyForCuentasTab, markAsPaid, reprintAccount
 }) => {
+  const [showSummaryPanel, setShowSummaryPanel] = React.useState(false);
+
 return (
       <>
-        <div style={{ animation: "fadeIn 0.3s ease-out" }}>
+        <div className="custom-scrollbar" style={{ animation: "fadeIn 0.3s ease-out", height: "100%", overflowY: "auto", paddingRight: "8px", paddingBottom: "24px" }}>
+            {/* TITLE AND TOGGLE FOR SUMMARY CARDS */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: showSummaryPanel ? "12px" : "16px", paddingLeft: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ 
+                  background: "linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)", 
+                  WebkitBackgroundClip: "text", 
+                  WebkitTextFillColor: "transparent",
+                  fontSize: "1.4rem",
+                  fontWeight: "900",
+                  letterSpacing: "0.5px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  textShadow: "0px 2px 10px rgba(0,0,0,0.2)"
+                }}>
+                  <i className="fa-solid fa-file-invoice-dollar" style={{ WebkitTextFillColor: "#8b5cf6" }}></i>
+                  HISTORIAL DE CUENTAS
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSummaryPanel(!showSummaryPanel)}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #cbd5e1",
+                  color: "#475569",
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  fontSize: "0.8rem",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                {showSummaryPanel ? "Ocultar Tipos de Pago ▲" : "Mostrar Tipos de Pago ▼"}
+              </button>
+            </div>
+
             {/* Sales Summary Cards */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                gap: "12px",
-                marginBottom: "16px",
-              }}
-            >
+            {showSummaryPanel && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: "12px",
+                  marginBottom: "16px",
+                }}
+              >
               <div
                 onClick={() =>
                   setPaymentMethodFilter((prev) =>
@@ -352,6 +395,7 @@ return (
                 </div>
               </div>
             </div>
+            )}
 
             {/* Filter Notice Banner if active */}
             {paymentMethodFilter !== "all" && (
@@ -527,7 +571,7 @@ return (
                                 }}
                               >
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <span>Mesa {account.tableLabel}</span>
+                                  <span>{formatTableName(account.zone || '', account.tableLabel)}</span>
                                   {account.zone === "Servicio a Domicilio" && (
                                     <button
                                       type="button"
