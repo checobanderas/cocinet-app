@@ -1421,11 +1421,11 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
           "success"
         );
 
-        // Disparo de WhatsApp
+        // Disparo de WhatsApp Silencioso
         const text = generateCorteText(matchedUser.name, matchedUser.role, isReopening);
         const metaConfig = getWhatsAppCloudConfig();
 
-        if (metaConfig.phoneNumberId && metaConfig.accessToken) {
+        if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
           const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
           const recipients = tenantUsers.filter(
             (u) =>
@@ -1524,8 +1524,38 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       triggerAppNotification("Exportador", "Corte exportado a archivo TXT correctamente 📄✨", "success");
     };
 
-    const sendCorteTablaToWhatsApp = () => {
+    const sendCorteTablaToWhatsApp = async () => {
       const text = generateCorteText();
+      const metaConfig = getWhatsAppCloudConfig();
+
+      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
+        const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+        const recipients = tenantUsers.filter(
+          (u) =>
+            (u.isReportRecipient ||
+              u.id.endsWith("-admin") ||
+              u.id.endsWith("-manager") ||
+              u.id.endsWith("-sistemas") ||
+              u.role === "admin") &&
+            u.phone
+        );
+
+        if (recipients.length > 0) {
+          triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Entregando corte a administradores...`, "info");
+          recipients.forEach((r) => {
+            sendSilentWhatsAppMessage(r.phone!, text).catch((e) =>
+              console.error("Error silent send:", e)
+            );
+          });
+          triggerAppNotification(
+            "WhatsApp Silencioso Entregado 🚀✅",
+            `Corte entregado en segundo plano a ${recipients.map((r) => r.name).join(", ")}.`,
+            "success"
+          );
+          return;
+        }
+      }
+
       const encodedText = encodeURIComponent(text);
       window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
       triggerAppNotification("WhatsApp", "Enlace de WhatsApp generado con éxito 📲💬", "success");

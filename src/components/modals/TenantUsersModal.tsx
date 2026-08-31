@@ -140,14 +140,15 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         `✨ _Prueba de envío automático configurada correctamente (Lada +52)._`;
 
       const metaConfig = getWhatsAppCloudConfig();
-      if (metaConfig.phoneNumberId && metaConfig.accessToken) {
-        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Conectando con Meta para entregar reporte a ${user.name}...`, "info");
+      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
+        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Enviando reporte en segundo plano a ${user.name}...`, "info");
         const res = await sendSilentWhatsAppMessage(user.phone, text);
         if (res.success) {
-          triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte de corte entregado en segundo plano a +52 ${user.phone}.`, "success");
+          triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte entregado en segundo plano a +52 ${user.phone}.`, "success");
           return;
         } else {
-          console.warn("Fallo Meta silent send, abriendo web como fallback:", res.error);
+          console.warn("Fallo silent send:", res.error);
+          triggerAppNotification("Error API ⚠️", `No se pudo enviar en segundo plano: ${res.error}`, "warning");
         }
       }
 
@@ -166,7 +167,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       const msg = `Hola ${user.name}! Mensaje operativo de Cocinet Pro:\n\nTu acceso a la sucursal ${modalTenant?.name || ''} está activo.`;
 
       const metaConfig = getWhatsAppCloudConfig();
-      if (metaConfig.phoneNumberId && metaConfig.accessToken) {
+      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
         const res = await sendSilentWhatsAppMessage(user.phone, msg);
         if (res.success) {
           triggerAppNotification("Aviso Entregado ✅", `Mensaje silencioso enviado al WhatsApp de ${user.name}.`, "success");
