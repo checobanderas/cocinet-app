@@ -454,29 +454,65 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
     const selectedCount = currentShiftAccounts.filter((acc) => activeSelectedSet.has(acc.id)).length;
 
     // --- LOGICA REPORTE MULTI-TURNO ---
-    const enhancedMultiTurnRecords = corte2Records
-      .filter(r => {
+    const allFoliatedItems: Array<{
+      folio: number;
+      date: string;
+      accountId: string;
+      table: string;
+      paymentCategory: "Efectivo" | "Tarjeta" | "Transferencia / Bancos";
+      rawPaymentMethod: string;
+      total: number;
+      timestamp: string;
+    }> = [];
+
+    const enhancedMultiTurnRecords = (corte2Records || [])
+      .filter((r: any) => {
         if (!multiTurnStartDate || !multiTurnEndDate) return false;
         return r.date >= multiTurnStartDate && r.date <= multiTurnEndDate;
       })
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(r => {
+      .sort((a: any, b: any) => a.date.localeCompare(b.date))
+      .map((r: any) => {
         let cashTotal = 0;
         let cardTotal = 0;
         let transferTotal = 0;
         
-        const shiftAccounts = shiftAccountsMap[r.date] || [];
-        const selectedAccounts = shiftAccounts.filter(acc => r.selectedAccountIds.includes(acc.id));
-        
-        selectedAccounts.forEach(acc => {
-          const amt = Number(acc.total || 0);
-          const method = (acc.paymentMethod || "").toLowerCase();
-          if (["card", "tarjeta"].some(m => method.includes(m))) {
-            cardTotal += amt;
-          } else if (["transfer", "transferencia", "banco", "bank"].some(m => method.includes(m))) {
-            transferTotal += amt;
-          } else {
-            cashTotal += amt;
+        const shiftAccounts = [...(shiftAccountsMap[r.date] || [])].sort((a, b) => {
+          const tA = new Date(a.timestamp).getTime();
+          const tB = new Date(b.timestamp).getTime();
+          return tA - tB;
+        });
+
+        const selectedSet = new Set(r.selectedAccountIds || []);
+        let runningFolio = r.folioAnterior || 0;
+
+        shiftAccounts.forEach(acc => {
+          if (selectedSet.has(acc.id)) {
+            runningFolio++;
+            const amt = Number(acc.total || 0);
+            const method = (acc.paymentMethod || (acc as any).metodoPago || (acc as any).payment_method || (acc as any).formaPago || (acc as any).tipoPago || "").toLowerCase().trim();
+            
+            let paymentCategory: "Efectivo" | "Tarjeta" | "Transferencia / Bancos" = "Efectivo";
+            if (["card", "tarjeta"].some(m => method.includes(m))) {
+              cardTotal += amt;
+              paymentCategory = "Tarjeta";
+            } else if (["transfer", "transferencia", "banco", "bank"].some(m => method.includes(m))) {
+              transferTotal += amt;
+              paymentCategory = "Transferencia / Bancos";
+            } else {
+              cashTotal += amt;
+              paymentCategory = "Efectivo";
+            }
+
+            allFoliatedItems.push({
+              folio: runningFolio,
+              date: r.date,
+              accountId: acc.id,
+              table: (acc as any).tableName || (acc as any).mesa || (acc as any).table || "",
+              paymentCategory,
+              rawPaymentMethod: acc.paymentMethod || "Efectivo",
+              total: amt,
+              timestamp: acc.timestamp
+            });
           }
         });
         
@@ -488,80 +524,258 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
         };
       });
 
-    const totalMultiTurnSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + (r.montoFoliado || 0), 0);
-    const totalCashSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.cashTotal, 0);
-    const totalCardSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.cardTotal, 0);
-    const totalTransferSum = enhancedMultiTurnRecords.reduce((acc, r) => acc + r.transferTotal, 0);
+    // Ordenar estrictamente todos los items foliados de forma ascendente por número de folio
+    allFoliatedItems.sort((a, b) => a.folio - b.folio);
+
+    const cashFoliatedItems = allFoliatedItems.filter(it => it.paymentCategory === "Efectivo").sort((a, b) => a.folio - b.folio);
+    const cardFoliatedItems = allFoliatedItems.filter(it => it.paymentCategory === "Tarjeta").sort((a, b) => a.folio - b.folio);
+    const transferFoliatedItems = allFoliatedItems.filter(it => it.paymentCategory === "Transferencia / Bancos").sort((a, b) => a.folio - b.folio);
+
+    const totalMultiTurnSum = enhancedMultiTurnRecords.reduce((acc: number, r: any) => acc + (r.montoFoliado || 0), 0);
+    const totalCashSum = enhancedMultiTurnRecords.reduce((acc: number, r: any) => acc + r.cashTotal, 0);
+    const totalCardSum = enhancedMultiTurnRecords.reduce((acc: number, r: any) => acc + r.cardTotal, 0);
+    const totalTransferSum = enhancedMultiTurnRecords.reduce((acc: number, r: any) => acc + r.transferTotal, 0);
+
+    const minFolio = allFoliatedItems.length > 0 ? allFoliatedItems[0].folio : 0;
+    const maxFolio = allFoliatedItems.length > 0 ? allFoliatedItems[allFoliatedItems.length - 1].folio : 0;
 
     const handleExportMultiTurnWhatsApp = () => {
-      let text = `*REPORTE MULTI-TURNO*\n`;
-      text += `Sucursal: ${selectedTenant?.name || "N/A"}\n`;
-      text += `Periodo: ${multiTurnStartDate} al ${multiTurnEndDate}\n\n`;
-      enhancedMultiTurnRecords.forEach(r => {
-        text += `📅 Turno: ${r.date}\n`;
-        text += `🔢 Folios: ${r.folioAnterior + 1} al ${r.folioFinal}\n`;
+      let text = `*📋 REPORTE MULTI-TURNO*\n`;
+      text += `🏬 *Sucursal:* ${selectedTenant?.name || "N/A"}\n`;
+      text += `📅 *Periodo:* ${multiTurnStartDate} al ${multiTurnEndDate}\n`;
+      if (allFoliatedItems.length > 0) {
+        text += `🔢 *Rango Global de Folios:* #${minFolio} al #${maxFolio} (${allFoliatedItems.length} folios)\n`;
+      }
+      text += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `*1️⃣ RESUMEN POR TURNOS*\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      enhancedMultiTurnRecords.forEach((r: any) => {
+        text += `📅 *Turno: ${r.date}*\n`;
+        text += `🔢 Folios: #${r.folioAnterior + 1} al #${r.folioFinal}\n`;
         text += `💵 Efectivo: $${r.cashTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
         text += `💳 Tarjeta: $${r.cardTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
         text += `🏦 Transfer: $${r.transferTotal.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
-        text += `💰 TOTAL: $${r.montoFoliado.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
+        text += `💰 *Total Turno:* $${r.montoFoliado.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
       });
       if (enhancedMultiTurnRecords.length === 0) {
         text += `No hay folios registrados en este periodo.\n\n`;
       }
-      text += `*RESUMEN DEL PERIODO*\n`;
-      text += `💵 Efectivo: $${totalCashSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
-      text += `💳 Tarjeta: $${totalCardSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
-      text += `🏦 Transfer: $${totalTransferSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
-      text += `*💰 TOTAL GLOBAL: $${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})}*\n`;
+
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `*2️⃣ LISTADO GENERAL (FOLIO POR FOLIO)*\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      if (allFoliatedItems.length > 0) {
+        allFoliatedItems.forEach(it => {
+          const icon = it.paymentCategory === "Efectivo" ? "💵" : it.paymentCategory === "Tarjeta" ? "💳" : "🏦";
+          text += `Folio #${it.folio} | $${it.total.toLocaleString("es-MX", {minimumFractionDigits:2})} | ${icon} ${it.paymentCategory} (${it.date})\n`;
+        });
+        text += `\n*Total Acumulado:* $${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})} (${allFoliatedItems.length} cuentas)\n\n`;
+      } else {
+        text += `Sin cuentas foliadas.\n\n`;
+      }
+
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `*3️⃣ DESGLOSE POR MÉTODO DE PAGO*\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      
+      text += `💵 *EFECTIVO (${cashFoliatedItems.length} folios):*\n`;
+      if (cashFoliatedItems.length > 0) {
+        cashFoliatedItems.forEach(it => {
+          text += `• Folio #${it.folio}: $${it.total.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        });
+        text += `*Subtotal Efectivo:* $${totalCashSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
+      } else {
+        text += `Sin folios en efectivo.\n\n`;
+      }
+
+      text += `💳 *TARJETA (${cardFoliatedItems.length} folios):*\n`;
+      if (cardFoliatedItems.length > 0) {
+        cardFoliatedItems.forEach(it => {
+          text += `• Folio #${it.folio}: $${it.total.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        });
+        text += `*Subtotal Tarjeta:* $${totalCardSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
+      } else {
+        text += `Sin folios con tarjeta.\n\n`;
+      }
+
+      text += `🏦 *TRANSFERENCIAS / BANCOS (${transferFoliatedItems.length} folios):*\n`;
+      if (transferFoliatedItems.length > 0) {
+        transferFoliatedItems.forEach(it => {
+          text += `• Folio #${it.folio}: $${it.total.toLocaleString("es-MX", {minimumFractionDigits:2})}\n`;
+        });
+        text += `*Subtotal Transferencias/Bancos:* $${totalTransferSum.toLocaleString("es-MX", {minimumFractionDigits:2})}\n\n`;
+      } else {
+        text += `Sin folios con transferencia/bancos.\n\n`;
+      }
+
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `*💰 GRAN TOTAL GLOBAL: $${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})}*\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+
       const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
       window.open(url, "_blank");
     };
 
     const handleExportMultiTurnExcel = () => {
+      const maxDesgloseRows = Math.max(cashFoliatedItems.length, cardFoliatedItems.length, transferFoliatedItems.length, 1);
+      let desgloseRowsHtml = '';
+      for (let i = 0; i < maxDesgloseRows; i++) {
+        const cash = cashFoliatedItems[i];
+        const card = cardFoliatedItems[i];
+        const trans = transferFoliatedItems[i];
+        desgloseRowsHtml += `
+          <tr>
+            <td align="center">${cash ? '#' + cash.folio : ''}</td>
+            <td align="right">${cash ? cash.total.toFixed(2) : ''}</td>
+            <td style="border:none; width:15px;"></td>
+            <td align="center">${card ? '#' + card.folio : ''}</td>
+            <td align="right">${card ? card.total.toFixed(2) : ''}</td>
+            <td style="border:none; width:15px;"></td>
+            <td align="center">${trans ? '#' + trans.folio : ''}</td>
+            <td align="right">${trans ? trans.total.toFixed(2) : ''}</td>
+          </tr>
+        `;
+      }
+
       const html = `
         <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head><meta charset="utf-8"></head>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+            table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+            th, td { border: 1px solid #b0bec5; padding: 6px 10px; }
+            th { background-color: #e2e8f0; font-weight: bold; }
+          </style>
+        </head>
         <body>
           <table border="1">
             <thead>
               <tr>
-                <th colspan="7" style="font-size:16px; font-weight:bold; background-color:#d9e1f2;">
+                <th colspan="7" style="font-size:16px; font-weight:bold; background-color:#1e3a8a; color:#ffffff; text-align:center; padding:10px;">
                   REPORTE MULTI-TURNO - ${selectedTenant?.name || "N/A"}
                 </th>
               </tr>
               <tr>
-                <th colspan="7" style="font-size:14px; background-color:#f0f0f0;">
-                  Periodo: ${multiTurnStartDate} al ${multiTurnEndDate}
+                <th colspan="7" style="font-size:12px; background-color:#f1f5f9; text-align:center; padding:6px;">
+                  Periodo: ${multiTurnStartDate} al ${multiTurnEndDate} &nbsp;|&nbsp; 
+                  Rango Global de Folios: #${minFolio} al #${maxFolio} (${allFoliatedItems.length} folios)
                 </th>
               </tr>
-              <tr style="background-color:#d9e1f2;">
+              <tr>
+                <th colspan="7" style="font-size:13px; font-weight:bold; background-color:#0284c7; color:#ffffff; text-align:left; padding:6px;">
+                  1. RESUMEN GENERAL POR TURNOS
+                </th>
+              </tr>
+              <tr style="background-color:#e0f2fe; font-weight:bold;">
                 <th>Turno</th>
-                <th>Folio Inicial</th>
-                <th>Folio Final</th>
-                <th>Efectivo ($)</th>
-                <th>Tarjeta ($)</th>
-                <th>Transferencia ($)</th>
-                <th>Total ($)</th>
+                <th align="center">Folio Inicial</th>
+                <th align="center">Folio Final</th>
+                <th align="right">Efectivo ($)</th>
+                <th align="right">Tarjeta ($)</th>
+                <th align="right">Transferencia ($)</th>
+                <th align="right">Total Turno ($)</th>
               </tr>
             </thead>
             <tbody>
-              ${enhancedMultiTurnRecords.map(r => `
+              ${enhancedMultiTurnRecords.map((r: any) => `
                 <tr>
                   <td>${r.date}</td>
-                  <td>${r.folioAnterior + 1}</td>
-                  <td>${r.folioFinal}</td>
-                  <td>${r.cashTotal}</td>
-                  <td>${r.cardTotal}</td>
-                  <td>${r.transferTotal}</td>
-                  <td>${r.montoFoliado}</td>
+                  <td align="center">${r.folioAnterior + 1}</td>
+                  <td align="center">${r.folioFinal}</td>
+                  <td align="right">${r.cashTotal.toFixed(2)}</td>
+                  <td align="right">${r.cardTotal.toFixed(2)}</td>
+                  <td align="right">${r.transferTotal.toFixed(2)}</td>
+                  <td align="right" style="font-weight:bold;">${r.montoFoliado.toFixed(2)}</td>
                 </tr>
               `).join('')}
-              <tr style="background-color:#ffff00; font-weight:bold;">
-                <td colspan="3" align="right">TOTAL PERIODO</td>
-                <td>${totalCashSum}</td>
-                <td>${totalCardSum}</td>
-                <td>${totalTransferSum}</td>
-                <td>${totalMultiTurnSum}</td>
+              <tr style="background-color:#dcfce7; font-weight:bold;">
+                <td colspan="3" align="right">TOTALES DEL PERIODO:</td>
+                <td align="right">${totalCashSum.toFixed(2)}</td>
+                <td align="right">${totalCardSum.toFixed(2)}</td>
+                <td align="right">${totalTransferSum.toFixed(2)}</td>
+                <td align="right" style="font-size:12pt; color:#166534;">${totalMultiTurnSum.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <br/>
+
+          <!-- 2. LISTADO ACUMULADO FOLIO POR FOLIO -->
+          <table border="1">
+            <thead>
+              <tr>
+                <th colspan="4" style="font-size:13px; font-weight:bold; background-color:#0d9488; color:#ffffff; text-align:left; padding:6px;">
+                  2. LISTADO GENERAL ACUMULADO (FOLIO POR FOLIO CONSECUTIVO)
+                </th>
+              </tr>
+              <tr style="background-color:#ccfbf1; font-weight:bold;">
+                <th align="center"># Folio</th>
+                <th>Turno / Fecha</th>
+                <th>Método de Pago</th>
+                <th align="right">Importe ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allFoliatedItems.map(it => `
+                <tr>
+                  <td align="center" style="font-weight:bold;">#${it.folio}</td>
+                  <td>${it.date}</td>
+                  <td>${it.paymentCategory}</td>
+                  <td align="right">${it.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+              <tr style="background-color:#dcfce7; font-weight:bold;">
+                <td colspan="3" align="right">TOTAL ACUMULADO (${allFoliatedItems.length} FOLIOS):</td>
+                <td align="right" style="font-size:12pt; color:#166534;">${totalMultiTurnSum.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <br/>
+
+          <!-- 3. DESGLOSE POR MÉTODO DE PAGO -->
+          <table border="1">
+            <thead>
+              <tr>
+                <th colspan="8" style="font-size:13px; font-weight:bold; background-color:#4f46e5; color:#ffffff; text-align:left; padding:6px;">
+                  3. DESGLOSE POR MÉTODO DE PAGO (ORDENADO POR FOLIO)
+                </th>
+              </tr>
+              <tr>
+                <th colspan="2" align="center" style="background-color:#dcfce7; color:#166534; font-weight:bold;">💵 EFECTIVO (${cashFoliatedItems.length})</th>
+                <th style="border:none; width:15px;"></th>
+                <th colspan="2" align="center" style="background-color:#e0e7ff; color:#3730a3; font-weight:bold;">💳 TARJETA (${cardFoliatedItems.length})</th>
+                <th style="border:none; width:15px;"></th>
+                <th colspan="2" align="center" style="background-color:#fef3c7; color:#92400e; font-weight:bold;">🏦 TRANSFERENCIAS / BANCOS (${transferFoliatedItems.length})</th>
+              </tr>
+              <tr style="background-color:#f8fafc; font-weight:bold;">
+                <th align="center"># Folio</th>
+                <th align="right">Importe ($)</th>
+                <th style="border:none;"></th>
+                <th align="center"># Folio</th>
+                <th align="right">Importe ($)</th>
+                <th style="border:none;"></th>
+                <th align="center"># Folio</th>
+                <th align="right">Importe ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${desgloseRowsHtml}
+              <tr style="background-color:#f1f5f9; font-weight:bold;">
+                <td align="center">Subtotal Efectivo:</td>
+                <td align="right">${totalCashSum.toFixed(2)}</td>
+                <td style="border:none;"></td>
+                <td align="center">Subtotal Tarjeta:</td>
+                <td align="right">${totalCardSum.toFixed(2)}</td>
+                <td style="border:none;"></td>
+                <td align="center">Subtotal Bancos:</td>
+                <td align="right">${totalTransferSum.toFixed(2)}</td>
+              </tr>
+              <tr style="background-color:#fef08a; font-weight:bold; font-size:12pt;">
+                <td colspan="8" align="right" style="padding:10px;">
+                  GRAN TOTAL ACUMULADO: $${totalMultiTurnSum.toFixed(2)}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -618,10 +832,25 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
 
                 {/* Shift Date Selector & Multi-Turn Report Button */}
                 <div className="flex flex-col gap-2">
-                  <div className={`flex items-center gap-3 p-2 rounded-2xl border transition-colors ${!historyLoaded ? 'bg-amber-100 border-amber-300 animate-pulse' : 'bg-stone-100 border-stone-300'}`}>
-                    <span className="text-xs font-black text-stone-700 pl-2">📅 Turno:</span>
+                  <style>{`
+                    @keyframes turnoHeartbeat {
+                      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.4); }
+                      15% { transform: scale(1.05); box-shadow: 0 0 12px 3px rgba(217, 119, 6, 0.35); }
+                      30% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+                      45% { transform: scale(1.03); box-shadow: 0 0 8px 2px rgba(217, 119, 6, 0.25); }
+                      60% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+                      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+                    }
+                    .turno-heartbeat-anim {
+                      animation: turnoHeartbeat 1.8s infinite ease-in-out;
+                      transform-origin: center center;
+                    }
+                  `}</style>
+                  <div
+                    className="turno-heartbeat-anim flex items-center gap-3 p-2 rounded-2xl border bg-amber-50 border-amber-400 shadow-md transition-all"
+                  >
+                    <span className="text-xs font-black text-amber-900 pl-2">📅 Turno:</span>
                     <select
-                      disabled={!historyLoaded}
                       value={activeDateKey}
                       onChange={(e) => {
                         setCorte2SelectedDate(e.target.value);
@@ -629,15 +858,17 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                         setCorte2FolioAnterior(null);
                         setCorte2MontoObjetivo(0);
                       }}
-                      className="bg-white text-amber-900 font-black text-sm px-3 py-2 rounded-xl border-2 border-stone-300 outline-none cursor-pointer shadow-sm focus:border-amber-500"
+                      className="bg-white text-amber-950 font-black text-sm px-3 py-2 rounded-xl border-2 border-amber-400 outline-none cursor-pointer shadow-sm focus:border-amber-600 transition"
                     >
                       {sortedShiftKeys.map((key) => (
                         <option key={key} value={key}>
                           Corte del {key} ({shiftAccountsMap[key]?.length || 0} cuentas)
                         </option>
                       ))}
-                      {!historyLoaded ? (
-                        <option value={activeDateKey}>Cargando fechas...</option>
+                      {sortedShiftKeys.length === 0 ? (
+                        <option value={activeDateKey}>
+                          {!historyLoaded ? "Cargando fechas..." : "Sin turnos registrados"}
+                        </option>
                       ) : !sortedShiftKeys.includes(activeDateKey) ? (
                         <option value={activeDateKey}>{activeDateKey}</option>
                       ) : null}
@@ -827,7 +1058,7 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                 </div>
               </div>
 
-              {!historyLoaded ? (
+              {(!historyLoaded && (!history || history.length === 0)) ? (
                 <div className="p-12 flex flex-col items-center justify-center text-center text-stone-500 font-bold bg-stone-100/60 rounded-3xl border-2 border-dashed border-stone-300">
                   <span className="text-4xl block mb-4 animate-pulse">⏳</span>
                   <span className="text-xl font-black text-stone-600 block mb-2">Cargando cortes de la sucursal...</span>
@@ -996,6 +1227,12 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
           totalTransferSum={totalTransferSum}
           totalMultiTurnSum={totalMultiTurnSum}
           enhancedMultiTurnRecords={enhancedMultiTurnRecords}
+          allFoliatedItems={allFoliatedItems}
+          cashFoliatedItems={cashFoliatedItems}
+          cardFoliatedItems={cardFoliatedItems}
+          transferFoliatedItems={transferFoliatedItems}
+          minFolio={minFolio}
+          maxFolio={maxFolio}
           handleExportMultiTurnWhatsApp={handleExportMultiTurnWhatsApp}
           handleExportMultiTurnExcel={handleExportMultiTurnExcel}
         />
