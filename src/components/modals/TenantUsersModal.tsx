@@ -4,7 +4,6 @@ import { closeOutline, settingsOutline } from 'ionicons/icons';
 import { formatMexicoPhone } from '../../utils/appHelpers';
 import { requestFCMToken, triggerDeviceNotification } from '../../utils/fcm';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
-import { MetaWhatsAppConfigModal } from './MetaWhatsAppConfigModal';
 
 interface TenantUsersModalProps {
   showTenantUsersModal: boolean;
@@ -30,8 +29,77 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
   revealedPins,
   setRevealedPins,
   triggerAppNotification
-}) => {
-    const [showMetaConfigModal, setShowMetaConfigModal] = useState(false);
+    const [provider, setProvider] = useState<any>('ultramsg');
+    const [instanceId, setInstanceId] = useState('instance190130');
+    const [token, setToken] = useState('ayi9d3764t8h8t7s');
+    const [phoneNumberId, setPhoneNumberId] = useState('');
+    const [accessToken, setAccessToken] = useState('');
+    const [testPhone, setTestPhone] = useState('9511273796');
+    const [showToken, setShowToken] = useState(false);
+    const [isSendingTest, setIsSendingTest] = useState(false);
+
+    React.useEffect(() => {
+      const cfg = getWhatsAppCloudConfig();
+      if (cfg) {
+        setProvider(cfg.provider || 'ultramsg');
+        setInstanceId(cfg.instanceId || 'instance190130');
+        setToken(cfg.token || '');
+        setPhoneNumberId(cfg.phoneNumberId || '');
+        setAccessToken(cfg.accessToken || '');
+      }
+    }, [showTenantUsersModal]);
+
+    const handleSaveConfig = () => {
+      saveWhatsAppCloudConfig({
+        provider,
+        instanceId: instanceId.trim(),
+        token: token.trim(),
+        phoneNumberId: phoneNumberId.trim(),
+        accessToken: accessToken.trim(),
+        isEnabled: provider === 'ultramsg' 
+          ? Boolean(instanceId.trim() && token.trim())
+          : Boolean(phoneNumberId.trim() && accessToken.trim()),
+      });
+      triggerAppNotification('Configuración Guardada 💾', 'Credenciales de WhatsApp guardadas con éxito.', 'success');
+    };
+
+    const handleTestSilentSendDirect = async () => {
+      if (provider === 'ultramsg' && (!instanceId.trim() || !token.trim())) {
+        triggerAppNotification('Faltan Credenciales ⚠️', 'Ingresa tu Instance ID y Token de UltraMsg.', 'warning');
+        return;
+      }
+      if (!testPhone.trim()) {
+        triggerAppNotification('Teléfono Requerido 📱', 'Ingresa un número celular para probar.', 'warning');
+        return;
+      }
+
+      setIsSendingTest(true);
+      handleSaveConfig();
+
+      const result = await sendSilentWhatsAppMessage(
+        testPhone.trim(),
+        `🌮 *COCINET PRO: PRUEBA DE CORTE SILENCIOSO*\n\n¡Hola! El sistema de envío automático en segundo plano está funcionando al 100%. 🚀✨\n\n🟢 *Servicio:* ${provider.toUpperCase()}\n⏰ *Fecha:* ${new Date().toLocaleString('es-MX')}\n📊 *Estado:* Conexión Exitosa`,
+        {
+          provider,
+          instanceId: instanceId.trim(),
+          token: token.trim(),
+          phoneNumberId: phoneNumberId.trim(),
+          accessToken: accessToken.trim(),
+        }
+      );
+
+      setIsSendingTest(false);
+
+      if (result.success) {
+        triggerAppNotification(
+          '¡WhatsApp Silencioso Entregado! ✅🚀',
+          `Mensaje entregado con éxito a +52 ${testPhone} (ID: ${result.messageId}).`,
+          'success'
+        );
+      } else {
+        triggerAppNotification('Error al Enviar ❌', result.error || 'Verifica tus credenciales.', 'error');
+      }
+    };
 
     const cycleAvatar = (userId: string, currentAvatar: string) => {
       const avatars = [
@@ -178,12 +246,12 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setShowMetaConfigModal(true)}
-                  className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-slate-300 border-none cursor-pointer"
-                  title="Configurar credenciales de WhatsApp Cloud API de Meta"
+                  onClick={() => setShowWhatsAppPanel(!showWhatsAppPanel)}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-emerald-200 border-none cursor-pointer"
+                  title="Configurar WhatsApp Silencioso (UltraMsg / Meta)"
                 >
-                  <i className="fa-solid fa-gear text-[11px]" />
-                  <span>Configurar WhatsApp API (Meta)</span>
+                  <i className="fa-brands fa-whatsapp text-[13px]" />
+                  <span>{showWhatsAppPanel ? '▲ Ocultar Config WhatsApp' : '⚙️ Configurar WhatsApp Silencioso'}</span>
                 </button>
                 <button
                   type="button"
@@ -195,7 +263,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       triggerAppNotification("Aviso ⚠️", "Permiso de notificaciones no concedido o no soportado en esta ventana.", "warning");
                     }
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-emerald-200 border-none cursor-pointer"
+                  className="bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md border-none cursor-pointer"
                 >
                   <i className="fa-solid fa-bell text-[11px]" />
                   <span>Activar Notificaciones Push</span>
@@ -209,6 +277,150 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Panel Desplegable de Configuración de WhatsApp */}
+            {showWhatsAppPanel && (
+              <div className="bg-white border-2 border-emerald-500/80 rounded-2xl p-5 shadow-lg space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-base">
+                      <i className="fa-brands fa-whatsapp" />
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-800 m-0">⚙️ Configuración de WhatsApp Silencioso (Segundo Plano)</h4>
+                      <p className="text-[11px] text-slate-500 m-0 font-medium">Conecta UltraMsg por código QR o Meta Cloud API para enviar cortes automáticos sin abrir WhatsApp Web.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowWhatsAppPanel(false)}
+                    className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg border-none cursor-pointer"
+                  >
+                    <IonIcon icon={closeOutline} />
+                  </button>
+                </div>
+
+                {/* Selector de Proveedor */}
+                <div className="flex bg-slate-100 p-1 rounded-xl gap-1 max-w-md">
+                  <button
+                    type="button"
+                    onClick={() => setProvider('ultramsg')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition border-none cursor-pointer flex items-center justify-center gap-1.5 ${
+                      provider === 'ultramsg' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600'
+                    }`}
+                  >
+                    <span>⚡ UltraMsg (Por Código QR)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProvider('meta')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition border-none cursor-pointer flex items-center justify-center gap-1.5 ${
+                      provider === 'meta' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-transparent text-slate-600'
+                    }`}
+                  >
+                    <span>🏢 Meta Cloud API</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {provider === 'ultramsg' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">
+                          Instance ID (Identificador de Instancia) 🆔:
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: instance190130"
+                          value={instanceId}
+                          onChange={(e) => setInstanceId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-black text-slate-700">Token Secreto de UltraMsg 🔑:</label>
+                          <button
+                            type="button"
+                            onClick={() => setShowToken(!showToken)}
+                            className="text-[10px] text-emerald-600 font-bold bg-transparent border-none cursor-pointer"
+                          >
+                            {showToken ? 'Ocultar' : 'Mostrar'}
+                          </button>
+                        </div>
+                        <input
+                          type={showToken ? 'text' : 'password'}
+                          placeholder="Ej: ayi9d3764t8h8t7s..."
+                          value={token}
+                          onChange={(e) => setToken(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">Phone Number ID de Meta 🆔:</label>
+                        <input
+                          type="text"
+                          placeholder="Ej: 104582910482910"
+                          value={phoneNumberId}
+                          onChange={(e) => setPhoneNumberId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">Access Token de Meta (Bearer) 🔑:</label>
+                        <input
+                          type="password"
+                          placeholder="EAABw..."
+                          value={accessToken}
+                          onChange={(e) => setAccessToken(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Fila de Prueba y Guardado */}
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <span className="text-xs font-black text-slate-700 shrink-0">Celular de Prueba:</span>
+                    <div className="relative flex-1 sm:w-48">
+                      <span className="absolute left-2.5 top-2 text-xs font-black text-slate-400 font-mono">+52</span>
+                      <input
+                        type="tel"
+                        placeholder="9511273796"
+                        value={testPhone}
+                        onChange={(e) => setTestPhone(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl pl-10 pr-2 py-1.5 text-xs font-mono text-slate-800 outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTestSilentSendDirect}
+                      disabled={isSendingTest}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-1.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 transition border-none cursor-pointer shadow-md shadow-emerald-200 shrink-0"
+                    >
+                      <i className="fa-brands fa-whatsapp text-xs" />
+                      <span>{isSendingTest ? 'Enviando...' : 'Probar Envío 🚀'}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveConfig();
+                      setShowWhatsAppPanel(false);
+                    }}
+                    className="bg-slate-900 hover:bg-black text-white font-bold py-2 px-5 rounded-xl text-xs transition border-none cursor-pointer shadow-md"
+                  >
+                    Guardar y Cerrar 💾
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
@@ -469,12 +681,6 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
             </div>
           </div>
         </IonContent>
-
-        <MetaWhatsAppConfigModal
-          isOpen={showMetaConfigModal}
-          onClose={() => setShowMetaConfigModal(false)}
-          triggerAppNotification={triggerAppNotification}
-        />
       </IonModal>
     );
 };
