@@ -371,14 +371,39 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
 
       const dotacionInicial = Number(session.dotacionInicial || 0);
 
-      const finalCashSales = (session.cashSales !== undefined && Number(session.cashSales) > 0) ? Number(session.cashSales) : cashSales;
-      const finalCardSales = (session.cardSales !== undefined && Number(session.cardSales) > 0) ? Number(session.cardSales) : cardSales;
-      const finalTransSales = (session.transSales !== undefined && Number(session.transSales) > 0) ? Number(session.transSales) : transSales;
-      const finalLupaySales = (session.lupaySales !== undefined && Number(session.lupaySales) > 0) ? Number(session.lupaySales) : lupaySales;
+      // Prioritize saved numbers if session is closed, or use dynamic calculation
+      const hasSavedSales = session.status === "closed" && (
+        session.lastReportedTotal !== undefined ||
+        session.cashSales !== undefined ||
+        session.cardSales !== undefined ||
+        session.transSales !== undefined
+      );
 
-      const finalTotalInflows = (session.totalInflows !== undefined && Number(session.totalInflows) > 0) ? Number(session.totalInflows) : totalInflows;
-      const finalTotalOutflows = (session.totalOutflows !== undefined && Number(session.totalOutflows) > 0) ? Number(session.totalOutflows) : totalOutflows;
-      const finalTotalPurchasesPaid = (session.totalPurchasesPaid !== undefined && Number(session.totalPurchasesPaid) > 0) ? Number(session.totalPurchasesPaid) : totalPurchasesPaid;
+      const dynamicTotal = cashSales + cardSales + transSales + lupaySales;
+
+      const finalCashSales = (hasSavedSales && Number(session.cashSales || 0) > 0)
+        ? Number(session.cashSales)
+        : (cashSales > 0 ? cashSales : Number(session.cashSales || 0));
+
+      const finalCardSales = (hasSavedSales && Number(session.cardSales || 0) > 0)
+        ? Number(session.cardSales)
+        : (cardSales > 0 ? cardSales : Number(session.cardSales || 0));
+
+      const finalTransSales = (hasSavedSales && Number(session.transSales || 0) > 0)
+        ? Number(session.transSales)
+        : (transSales > 0 ? transSales : Number(session.transSales || 0));
+
+      const finalLupaySales = (hasSavedSales && Number(session.lupaySales || 0) > 0)
+        ? Number(session.lupaySales)
+        : (lupaySales > 0 ? lupaySales : Number(session.lupaySales || 0));
+
+      const finalTotalVentas = (hasSavedSales && Number(session.lastReportedTotal || 0) > 0)
+        ? Number(session.lastReportedTotal)
+        : (dynamicTotal > 0 ? dynamicTotal : (finalCashSales + finalCardSales + finalTransSales + finalLupaySales));
+
+      const finalTotalInflows = (Number(session.totalInflows || 0) > 0) ? Number(session.totalInflows) : totalInflows;
+      const finalTotalOutflows = (Number(session.totalOutflows || 0) > 0) ? Number(session.totalOutflows) : totalOutflows;
+      const finalTotalPurchasesPaid = (Number(session.totalPurchasesPaid || 0) > 0) ? Number(session.totalPurchasesPaid) : totalPurchasesPaid;
 
       const computedEstimated = Math.max(
         0,
@@ -389,16 +414,20 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
           finalTotalPurchasesPaid
       );
 
-      const balanceEsperado = Number(session.estimatedCash || 0) > 0 ? Number(session.estimatedCash) : computedEstimated;
+      const balanceEsperado = (session.estimatedCash !== undefined && session.estimatedCash !== null && Number(session.estimatedCash) > 0)
+        ? Number(session.estimatedCash)
+        : computedEstimated;
       const balanceReal = Number(session.arqueoTotal || 0);
-      const dif = balanceReal - balanceEsperado;
+      const dif = (session.diferencia !== undefined && session.diferencia !== null)
+        ? Number(session.diferencia)
+        : (balanceReal - balanceEsperado);
 
       return {
         cashSales: finalCashSales,
         cardSales: finalCardSales,
         transSales: finalTransSales,
         lupaySales: finalLupaySales,
-        totalVentas: finalCashSales + finalCardSales + finalTransSales + finalLupaySales,
+        totalVentas: finalTotalVentas,
         dotacionInicial,
         totalInflows: finalTotalInflows,
         totalOutflows: finalTotalOutflows,
@@ -527,41 +556,41 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       const patronUserName = `Patrón ${tenantShortName} 🤠 Matriz`;
 
       // Memorize grouped closed sessions by day
-      const groupedClosedSessions = cashierSessions.reduce((acc: Record<string, CashierSession[]>, session) => {
-        if (session.status !== "closed") return acc;
+      const { groupedClosedSessions, sortedGroupKeys } = React.useMemo(() => {
+        const grouped = (cashierSessions || []).reduce((acc: Record<string, CashierSession[]>, session: any) => {
+          if (session.status !== "closed") return acc;
 
-        // Apply secondary filter
-        
-        const dateVal = session.closedAt || session.openedAt || getMexicoISOString();
-        const d = new Date(dateVal);
-        const dayString = d.toLocaleDateString("es-MX", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const capitalized = dayString.charAt(0).toUpperCase() + dayString.slice(1);
+          const dateVal = session.closedAt || session.openedAt || getMexicoISOString();
+          const d = new Date(dateVal);
+          const dayString = d.toLocaleDateString("es-MX", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          const capitalized = dayString.charAt(0).toUpperCase() + dayString.slice(1);
 
-        if (!acc[capitalized]) {
-          acc[capitalized] = [];
-        }
-        acc[capitalized].push(session);
-        return acc;
-      }, {});
+          if (!acc[capitalized]) {
+            acc[capitalized] = [];
+          }
+          acc[capitalized].push(session);
+          return acc;
+        }, {});
 
-      // Sort sessions inside groups
-      Object.keys(groupedClosedSessions).forEach((key) => {
-        groupedClosedSessions[key].sort((a, b) => {
-          const timeA = new Date(a.closedAt || a.openedAt).getTime();
-          const timeB = new Date(b.closedAt || b.openedAt).getTime();
+        Object.keys(grouped).forEach((key) => {
+          grouped[key].sort((a, b) => {
+            const timeA = new Date(a.closedAt || a.openedAt).getTime();
+            const timeB = new Date(b.closedAt || b.openedAt).getTime();
+            return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
+          });
+        });
+
+        const sortedKeys = Object.keys(grouped).sort((keyA, keyB) => {
+          const itemA = grouped[keyA][0];
+          const itemB = grouped[keyB][0];
+          if (!itemA || !itemB) return 0;
+          const timeA = new Date(itemA.closedAt || itemA.openedAt).getTime();
+          const timeB = new Date(itemB.closedAt || itemB.openedAt).getTime();
           return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
         });
-      });
 
-      // Sort the group keys
-      const sortedGroupKeys = Object.keys(groupedClosedSessions).sort((keyA, keyB) => {
-        const itemA = groupedClosedSessions[keyA][0];
-        const itemB = groupedClosedSessions[keyB][0];
-        if (!itemA || !itemB) return 0;
-        const timeA = new Date(itemA.closedAt || itemA.openedAt).getTime();
-        const timeB = new Date(itemB.closedAt || itemB.openedAt).getTime();
-        return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
-      });
+        return { groupedClosedSessions: grouped, sortedGroupKeys: sortedKeys };
+      }, [cashierSessions, historySortOrder]);
 
       return (
         <IonPage>
