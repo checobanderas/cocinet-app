@@ -5,7 +5,7 @@ import { EditFondoModal } from '../modals/EditFondoModal';
 import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
 import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
-import { getCompanyCatalog, getTenantUsers } from '../../utils/appHelpers';
+import { getCompanyCatalog, getTenantUsers, getOperatingDay } from '../../utils/appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -279,35 +279,45 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       const sId = session.id;
       const sOpened = new Date(session.openedAt);
       const sClosed = session.closedAt ? new Date(session.closedAt) : null;
+      const sessionOpDay = getOperatingDay(session.openedAt || session.closedAt || new Date());
 
-      // Filter history for this session
-      const sessionHistory = history.filter((h) => {
+      // Filter history for this session (by sessionId, timestamp range, or operating day)
+      const sessionHistory = history.filter((h: any) => {
         if (h.sessionId && h.sessionId === sId) return true;
-        // Timestamp fallback
         const hTime = new Date(h.timestamp);
-        return hTime >= sOpened && (!sClosed || hTime <= sClosed);
+        if (hTime >= sOpened && (!sClosed || hTime <= sClosed)) return true;
+        if (h.timestamp && getOperatingDay(h.timestamp) === sessionOpDay) return true;
+        return false;
       });
 
       // Filter cash movements
-      const sessionMovements = cashMovements.filter((m) => {
+      const sessionMovements = cashMovements.filter((m: any) => {
         if (m.sessionId && m.sessionId === sId) return true;
         const mTime = new Date(m.timestamp || m.date || new Date());
-        return mTime >= sOpened && (!sClosed || mTime <= sClosed);
+        if (mTime >= sOpened && (!sClosed || mTime <= sClosed)) return true;
+        const mDate = m.timestamp || m.date || m.createdAt;
+        if (mDate && getOperatingDay(mDate) === sessionOpDay) return true;
+        return false;
       });
 
       // Filter expenses
-      const sessionExpenses = expenses.filter((e) => {
+      const sessionExpenses = expenses.filter((e: any) => {
         if (e.sessionId && e.sessionId === sId) return true;
         if (!e.createdAt) return false;
         const eTime = new Date(e.createdAt);
-        return eTime >= sOpened && (!sClosed || eTime <= sClosed);
+        if (eTime >= sOpened && (!sClosed || eTime <= sClosed)) return true;
+        if (getOperatingDay(e.createdAt) === sessionOpDay) return true;
+        return false;
       });
 
       // Filter purchases
-      const sessionPurchases = purchases.filter((p) => {
+      const sessionPurchases = purchases.filter((p: any) => {
         if (p.sessionId && p.sessionId === sId) return true;
         const pTime = new Date(p.timestamp || new Date());
-        return pTime >= sOpened && (!sClosed || pTime <= sClosed);
+        if (pTime >= sOpened && (!sClosed || pTime <= sClosed)) return true;
+        const pDate = p.timestamp || p.date || p.createdAt;
+        if (pDate && getOperatingDay(pDate) === sessionOpDay) return true;
+        return false;
       });
 
       // Calculate sales
@@ -316,8 +326,9 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       let transSales = 0;
       let lupaySales = 0;
 
-      sessionHistory.forEach((h) => {
-        if (h.status === "completed" || h.isPaid) {
+      sessionHistory.forEach((h: any) => {
+        const isNotCancelled = !h.isCancelled && h.status !== "cancelled";
+        if (isNotCancelled && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0)) {
           const method = (h.paymentMethod || "").toLowerCase();
           const amt = Number(h.total || 0);
           if (method === "cash" || method === "efectivo") {
@@ -751,30 +762,42 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                             const sOpened = new Date(session.openedAt);
                             const sClosed = session.closedAt ? new Date(session.closedAt) : null;
 
+                            const sessionOpDay = getOperatingDay(session.openedAt || session.closedAt || new Date());
+
                             // Filter data for this specific session inline
-                            const sessionHistory = history.filter((h) => {
+                            const sessionHistory = history.filter((h: any) => {
                               if (h.sessionId && h.sessionId === sId) return true;
                               const hTime = new Date(h.timestamp);
-                              return hTime >= sOpened && (!sClosed || hTime <= sClosed);
+                              if (hTime >= sOpened && (!sClosed || hTime <= sClosed)) return true;
+                              if (h.timestamp && getOperatingDay(h.timestamp) === sessionOpDay) return true;
+                              return false;
                             });
 
-                            const sessionMovements = cashMovements.filter((m) => {
+                            const sessionMovements = cashMovements.filter((m: any) => {
                               if (m.sessionId && m.sessionId === sId) return true;
                               const mTime = new Date(m.timestamp || m.date || new Date());
-                              return mTime >= sOpened && (!sClosed || mTime <= sClosed);
+                              if (mTime >= sOpened && (!sClosed || mTime <= sClosed)) return true;
+                              const mDate = m.timestamp || m.date || m.createdAt;
+                              if (mDate && getOperatingDay(mDate) === sessionOpDay) return true;
+                              return false;
                             });
 
-                            const sessionExpenses = expenses.filter((e) => {
+                            const sessionExpenses = expenses.filter((e: any) => {
                               if (e.sessionId && e.sessionId === sId) return true;
                               if (!e.createdAt) return false;
                               const eTime = new Date(e.createdAt);
-                              return eTime >= sOpened && (!sClosed || eTime <= sClosed);
+                              if (eTime >= sOpened && (!sClosed || eTime <= sClosed)) return true;
+                              if (getOperatingDay(e.createdAt) === sessionOpDay) return true;
+                              return false;
                             });
 
-                            const sessionPurchases = purchases.filter((p) => {
+                            const sessionPurchases = purchases.filter((p: any) => {
                               if (p.sessionId && p.sessionId === sId) return true;
                               const pTime = new Date(p.timestamp || new Date());
-                              return pTime >= sOpened && (!sClosed || pTime <= sClosed);
+                              if (pTime >= sOpened && (!sClosed || pTime <= sClosed)) return true;
+                              const pDate = p.timestamp || p.date || p.createdAt;
+                              if (pDate && getOperatingDay(pDate) === sessionOpDay) return true;
+                              return false;
                             });
 
                             return (
