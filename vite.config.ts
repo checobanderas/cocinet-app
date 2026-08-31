@@ -12,6 +12,9 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        devOptions: {
+          enabled: false
+        },
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000 // 5MB
         },
