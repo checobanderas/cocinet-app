@@ -18,25 +18,24 @@ export interface WhatsAppGatewayConfig {
   isEnabled?: boolean;
 }
 
-const DEFAULT_CONFIG_KEY = "cocinet_whatsapp_gateway_config";
+/** Credenciales globales preconfiguradas para todos los tenants */
+const GLOBAL_DEFAULT_INSTANCE = "instance190130";
+const GLOBAL_DEFAULT_TOKEN = "ayi9d3764t8h8t7s";
 
-/** Obtiene la configuración activa de WhatsApp guardada */
+/** Obtiene la configuración activa de WhatsApp guardada o la global por defecto */
 export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
   if (typeof window !== "undefined") {
     try {
       const saved = localStorage.getItem(DEFAULT_CONFIG_KEY);
       if (saved) {
-        return JSON.parse(saved);
-      }
-      // Retrocompatibilidad con la clave anterior
-      const oldMeta = localStorage.getItem("cocinet_meta_whatsapp_config");
-      if (oldMeta) {
-        const parsed = JSON.parse(oldMeta);
+        const parsed = JSON.parse(saved);
         return {
-          provider: "meta",
+          provider: parsed.provider || "ultramsg",
+          instanceId: parsed.instanceId || GLOBAL_DEFAULT_INSTANCE,
+          token: parsed.token || GLOBAL_DEFAULT_TOKEN,
           phoneNumberId: parsed.phoneNumberId || "",
           accessToken: parsed.accessToken || "",
-          isEnabled: Boolean(parsed.phoneNumberId && parsed.accessToken)
+          isEnabled: true,
         };
       }
     } catch (e) {
@@ -46,11 +45,11 @@ export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
 
   return {
     provider: "ultramsg",
-    instanceId: "",
-    token: "",
+    instanceId: GLOBAL_DEFAULT_INSTANCE,
+    token: GLOBAL_DEFAULT_TOKEN,
     phoneNumberId: "",
     accessToken: "",
-    isEnabled: false,
+    isEnabled: true,
   };
 }
 
