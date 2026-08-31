@@ -1715,7 +1715,12 @@ export default function App() {
                   role: u.role || "mesero",
                   pin: u.pin || "",
                   avatar: u.avatar || "fa-solid fa-user",
-                  tenantId: u.tenantId || ""
+                  tenantId: u.tenantId || "",
+                  phone: u.phone || "",
+                  email: u.email || "",
+                  reportSchedule: u.reportSchedule || "Al Cierre",
+                  isReportRecipient: u.isReportRecipient ?? (u.role === "admin" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas")),
+                  fcmToken: u.fcmToken || ""
                 });
               }
             });

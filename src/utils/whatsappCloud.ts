@@ -100,13 +100,18 @@ export async function sendSilentWhatsAppMessage(
       bodyParams.append("to", cleanPhone);
       bodyParams.append("body", messageText);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: bodyParams.toString(),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -120,7 +125,7 @@ export async function sendSilentWhatsAppMessage(
       }
     } catch (err: any) {
       console.error("❌ Error de red con UltraMsg:", err);
-      return { success: false, error: err.message || "Error de conexión con UltraMsg." };
+      return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con UltraMsg.' : (err.message || "Error de conexión.") };
     }
   }
 
