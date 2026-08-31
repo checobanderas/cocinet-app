@@ -244,6 +244,20 @@ return (
                     >
                       {selectedTenant.type || "MATRIZ"} ⭐
                     </span>
+                    <span
+                      style={{
+                        fontSize: "9px",
+                        fontFamily: "monospace",
+                        fontWeight: "900",
+                        background: "rgba(0,0,0,0.6)",
+                        color: "#fde047",
+                        padding: "2px 6px",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(253, 224, 71, 0.4)",
+                      }}
+                    >
+                      ID: {selectedTenant.id}
+                    </span>
                   </div>
                   <span
                     style={{

@@ -1506,9 +1506,16 @@ if (currentUser?.role === "mesero") {
             </IonButtons>
             <IonTitle style={{ fontWeight: "bold", padding: "0 4px" }}>
               <div className="flex flex-col justify-center leading-tight">
-                <span className="text-xs sm:text-sm md:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
-                  {selectedTenant ? `🏢 ${selectedTenant.name}` : "Corte de Caja"}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs sm:text-sm md:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
+                    {selectedTenant ? `🏢 ${selectedTenant.name}` : "Corte de Caja"}
+                  </span>
+                  {selectedTenant && (
+                    <span className="text-[9px] font-mono font-black text-amber-200 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/40">
+                      ID: {selectedTenant.id}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] sm:text-[11px] md:text-xs text-slate-300 font-bold tracking-normal truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
                   📍 {selectedTenant?.sucursalDefault || "Matriz"} {sessionToRender?.status === "closed" ? "(Auditoría)" : ""}
                 </span>
@@ -1683,11 +1690,18 @@ if (currentUser?.role === "mesero") {
           <div className="max-w-4xl mx-auto pt-2 pb-6 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
               <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">
-                  <span className="text-2xl sm:text-3xl">📊</span> Corte Actual
-                </h1>
-                <p className="text-[14px] sm:text-[14px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
-                  Resumen general y balance final
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2 m-0">
+                    <span className="text-2xl sm:text-3xl">📊</span> Corte Actual
+                  </h1>
+                  {selectedTenant && (
+                    <span className="text-xs font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                      🏢 {selectedTenant.name} ({selectedTenant.id})
+                    </span>
+                  )}
+                </div>
+                <p className="text-[14px] sm:text-[14px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                  Resumen general y balance final • {selectedTenant?.sucursalDefault || "Matriz"}
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
