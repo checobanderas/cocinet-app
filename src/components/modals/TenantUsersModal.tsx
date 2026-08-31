@@ -29,6 +29,8 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
   revealedPins,
   setRevealedPins,
   triggerAppNotification
+}) => {
+    const [showWhatsAppPanel, setShowWhatsAppPanel] = useState(false);
     const [provider, setProvider] = useState<any>('ultramsg');
     const [instanceId, setInstanceId] = useState('instance190130');
     const [token, setToken] = useState('ayi9d3764t8h8t7s');
