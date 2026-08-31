@@ -837,13 +837,19 @@ export default function App() {
         params.get("company") ||
         params.get("id");
       if (tenantParam) {
+        const cleanP = tenantParam.toLowerCase().trim();
+        const cleanPWithPrefix = cleanP.startsWith("tenant-") ? cleanP : `tenant-${cleanP}`;
+        const cleanPWithoutPrefix = cleanP.replace(/^tenant-/, "");
+
         const found = COMPANY_CATALOG.find(
           (c) =>
-            c.id.toLowerCase() === tenantParam.toLowerCase().trim() ||
-            c.name.toLowerCase().includes(tenantParam.toLowerCase().trim()) ||
-            c.sucursalDefault
-              .toLowerCase()
-              .includes(tenantParam.toLowerCase().trim())
+            c.id.toLowerCase() === cleanP ||
+            c.id.toLowerCase() === cleanPWithPrefix ||
+            c.id.toLowerCase().replace(/^tenant-/, "") === cleanPWithoutPrefix ||
+            c.name.toLowerCase().includes(cleanP) ||
+            c.sucursalDefault.toLowerCase().includes(cleanP) ||
+            (c.direccion && c.direccion.toLowerCase().includes(cleanP)) ||
+            (c.propietario && c.propietario.toLowerCase().includes(cleanP))
         );
         if (found) {
           return found;
@@ -953,13 +959,19 @@ export default function App() {
         params.get("filtro");
 
       if (tenantParam) {
+        const cleanP = tenantParam.toLowerCase().trim();
+        const cleanPWithPrefix = cleanP.startsWith("tenant-") ? cleanP : `tenant-${cleanP}`;
+        const cleanPWithoutPrefix = cleanP.replace(/^tenant-/, "");
+
         const found = COMPANY_CATALOG.find(
           (c) =>
-            c.id.toLowerCase() === tenantParam.toLowerCase().trim() ||
-            c.name.toLowerCase().includes(tenantParam.toLowerCase().trim()) ||
-            c.sucursalDefault
-              .toLowerCase()
-              .includes(tenantParam.toLowerCase().trim()),
+            c.id.toLowerCase() === cleanP ||
+            c.id.toLowerCase() === cleanPWithPrefix ||
+            c.id.toLowerCase().replace(/^tenant-/, "") === cleanPWithoutPrefix ||
+            c.name.toLowerCase().includes(cleanP) ||
+            c.sucursalDefault.toLowerCase().includes(cleanP) ||
+            (c.direccion && c.direccion.toLowerCase().includes(cleanP)) ||
+            (c.propietario && c.propietario.toLowerCase().includes(cleanP))
         );
         if (found) {
           // If token matches a user in ANY sucursal, redirect them to that sucursal
