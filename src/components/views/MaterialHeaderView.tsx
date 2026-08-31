@@ -121,9 +121,12 @@ const { title, subtitle, showBack = false, onBack, showMenu = true, actions, min
               {/* Branch indicator & Switcher button */}
               {!minimal && selectedTenant && (
                 <div className="flex items-center gap-1.5">
-                  <div className="hidden sm:flex items-center px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
                     <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
                       🏢 {selectedTenant.name}
+                    </span>
+                    <span className="text-[9px] font-mono font-black text-amber-200 bg-black/40 px-1 py-0.5 rounded border border-amber-500/40">
+                      {selectedTenant.id}
                     </span>
                   </div>
 

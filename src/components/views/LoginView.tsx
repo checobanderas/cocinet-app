@@ -1159,7 +1159,7 @@ return (
                                               {owner.name}
                                             </h4>
                                             <span className="text-[11px] text-slate-400 font-bold block mt-1 uppercase">
-                                              ID Red: #{owner.key}
+                                              Grupo Patrón: #{owner.key}
                                             </span>
                                           </div>
                                         </div>
@@ -1343,19 +1343,27 @@ return (
                                                 </div>
                                               );
                                             })()}
-                                            <div>
-                                              <div className="flex items-center gap-1.5 flex-wrap">
-                                                <h4 className="text-sm font-black text-slate-800 tracking-tight leading-snug uppercase">
-                                                  {company.name}
-                                                </h4>
-                                                <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                                  MATRIZ 🏡
-                                                </span>
+                                                <div>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  <h4 className="text-sm font-black text-slate-800 tracking-tight leading-snug uppercase">
+                                                    {company.name}
+                                                  </h4>
+                                                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                    MATRIZ 🏡
+                                                  </span>
+                                                  <span className="text-[10.5px] bg-slate-900 text-amber-300 font-mono font-black px-2 py-0.5 rounded border border-slate-700">
+                                                    TENANT: {company.id}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                  <span className="text-[11px] text-slate-400 font-mono font-bold">
+                                                    {company.rfc}
+                                                  </span>
+                                                  <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-mono font-bold">
+                                                    🔗 ?tenant={company.id.replace('tenant-', '')}
+                                                  </span>
+                                                </div>
                                               </div>
-                                              <span className="block text-[11.5px] text-slate-400 font-mono font-bold">
-                                                {company.rfc}
-                                              </span>
-                                            </div>
                                           </div>
 
                                           {isMasterAdmin && (
@@ -1502,19 +1510,27 @@ return (
                                                 </div>
                                               );
                                             })()}
-                                            <div>
-                                              <div className="flex items-center gap-1.5 flex-wrap">
-                                                <h4 className="text-sm font-black text-slate-800 tracking-tight leading-snug uppercase">
-                                                  {company.name}
-                                                </h4>
-                                                <span className="text-[10px] bg-slate-100 text-slate-600 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                                  SUCURSAL 📍
-                                                </span>
+                                                <div>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  <h4 className="text-sm font-black text-slate-800 tracking-tight leading-snug uppercase">
+                                                    {company.name}
+                                                  </h4>
+                                                  <span className="text-[10px] bg-slate-100 text-slate-600 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                    SUCURSAL 📍
+                                                  </span>
+                                                  <span className="text-[10.5px] bg-slate-900 text-amber-300 font-mono font-black px-2 py-0.5 rounded border border-slate-700">
+                                                    TENANT: {company.id}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                  <span className="text-[11px] text-slate-400 font-mono font-bold">
+                                                    {company.rfc}
+                                                  </span>
+                                                  <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-mono font-bold">
+                                                    🔗 ?tenant={company.id.replace('tenant-', '')}
+                                                  </span>
+                                                </div>
                                               </div>
-                                              <span className="block text-[11.5px] text-slate-400 font-mono font-bold">
-                                                {company.rfc}
-                                              </span>
-                                            </div>
                                           </div>
 
                                           {isMasterAdmin && (
