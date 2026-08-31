@@ -226,6 +226,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   const [showClosePinModal, setShowClosePinModal] = useState(false);
   const [closePinInput, setClosePinInput] = useState("");
   const [showTestWhatsappModal, setShowTestWhatsappModal] = useState(false);
+  const [testWhatsappPhone, setTestWhatsappPhone] = useState("");
   const [pendingTablesList, setPendingTablesList] = useState<any[]>([]);
 
   // Memorize grouped closed sessions by day at the top level (Rules of Hooks)
