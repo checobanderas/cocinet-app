@@ -148,6 +148,10 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
 
     const sortedShiftKeys = Object.keys(shiftAccountsMap).sort((a, b) => b.localeCompare(a));
 
+    const [selectedMonth, setSelectedMonth] = React.useState<string>("");
+
+    const availableMonthKeys = Array.from(new Set(sortedShiftKeys.map(k => k.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+
     const getTodayLocalShiftKey = () => {
       const now = new Date();
       if (now.getHours() < 5) {
@@ -159,7 +163,43 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
       return `${y}-${m}-${day}`;
     };
 
-    const activeDateKey = corte2SelectedDate || sortedShiftKeys[0] || getTodayLocalShiftKey();
+    const currentMonthKey = getTodayLocalShiftKey().slice(0, 7); // e.g. "2026-08"
+
+    // Default to current month or first available month
+    const activeMonth = selectedMonth || (availableMonthKeys.includes(currentMonthKey) ? currentMonthKey : (availableMonthKeys[0] || ""));
+
+    const formatMonthLabel = (monthKey: string) => {
+      if (!monthKey || monthKey === "all") return "Todos los Meses";
+      const [yearStr, monthStr] = monthKey.split("-");
+      const monthNum = parseInt(monthStr, 10);
+      const monthsEs = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+      ];
+      const monthName = monthsEs[monthNum - 1] || monthStr;
+      return `${monthName} ${yearStr}`;
+    };
+
+    const filteredShiftKeys = activeMonth === "all"
+      ? sortedShiftKeys
+      : sortedShiftKeys.filter(k => k.startsWith(activeMonth));
+
+    const activeDateKey = (corte2SelectedDate && (activeMonth === "all" || corte2SelectedDate.startsWith(activeMonth)))
+      ? corte2SelectedDate
+      : (filteredShiftKeys[0] || sortedShiftKeys[0] || getTodayLocalShiftKey());
+
+    const handleMonthChange = (newMonth: string) => {
+      setSelectedMonth(newMonth);
+      const newFilteredKeys = newMonth === "all"
+        ? sortedShiftKeys
+        : sortedShiftKeys.filter(k => k.startsWith(newMonth));
+      if (newFilteredKeys.length > 0) {
+        setCorte2SelectedDate(newFilteredKeys[0]);
+        setCorte2SelectedAccountIds([]);
+        setCorte2FolioAnterior(null);
+        setCorte2MontoObjetivo(0);
+      }
+    };
 
     // Accounts for active date, sorted chronologically ascending (⏱️)
     const currentShiftAccounts = [...(shiftAccountsMap[activeDateKey] || [])].sort((a, b) => {
@@ -832,8 +872,8 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                   </div>
                 </div>
 
-                {/* Shift Date Selector & Multi-Turn Report Button */}
-                <div className="flex flex-col gap-2">
+                {/* Shift Date & Month Selector & Multi-Turn Report Button */}
+                <div className="flex flex-wrap items-center gap-2.5">
                   <style>{`
                     @keyframes turnoHeartbeat {
                       0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.4); }
@@ -848,10 +888,38 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                       transform-origin: center center;
                     }
                   `}</style>
+                  
+                  {/* Selector de Mes / Periodo */}
+                  <div className="flex items-center gap-2 p-1.5 md:p-2 rounded-2xl border bg-amber-50/80 border-amber-300 shadow-sm">
+                    <span className="text-xs font-black text-amber-900 pl-1.5 flex items-center gap-1">
+                      <span>📆</span> Mes:
+                    </span>
+                    <select
+                      value={activeMonth}
+                      onChange={(e) => handleMonthChange(e.target.value)}
+                      className="bg-white text-amber-950 font-black text-xs md:text-sm px-2.5 py-2 rounded-xl border-2 border-amber-400 outline-none cursor-pointer shadow-sm focus:border-amber-600 transition"
+                    >
+                      {availableMonthKeys.map((mKey) => (
+                        <option key={mKey} value={mKey}>
+                          {formatMonthLabel(mKey)} ({sortedShiftKeys.filter(k => k.startsWith(mKey)).length} turnos)
+                        </option>
+                      ))}
+                      {availableMonthKeys.length > 1 && (
+                        <option value="all">Todos los Meses ({sortedShiftKeys.length} turnos)</option>
+                      )}
+                      {availableMonthKeys.length === 0 && (
+                        <option value="">Cargando periodos...</option>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Selector de Turno con Animación Heartbeat */}
                   <div
-                    className="turno-heartbeat-anim flex items-center gap-3 p-2 rounded-2xl border bg-amber-50 border-amber-400 shadow-md transition-all"
+                    className="turno-heartbeat-anim flex items-center gap-2 p-1.5 md:p-2 rounded-2xl border bg-amber-50 border-amber-400 shadow-md transition-all"
                   >
-                    <span className="text-xs font-black text-amber-900 pl-2">📅 Turno:</span>
+                    <span className="text-xs font-black text-amber-900 pl-1.5 flex items-center gap-1">
+                      <span>📅</span> Turno:
+                    </span>
                     <select
                       value={activeDateKey}
                       onChange={(e) => {
@@ -860,30 +928,38 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                         setCorte2FolioAnterior(null);
                         setCorte2MontoObjetivo(0);
                       }}
-                      className="bg-white text-amber-950 font-black text-sm px-3 py-2 rounded-xl border-2 border-amber-400 outline-none cursor-pointer shadow-sm focus:border-amber-600 transition"
+                      className="bg-white text-amber-950 font-black text-xs md:text-sm px-2.5 py-2 rounded-xl border-2 border-amber-400 outline-none cursor-pointer shadow-sm focus:border-amber-600 transition"
                     >
-                      {sortedShiftKeys.map((key) => (
+                      {filteredShiftKeys.map((key) => (
                         <option key={key} value={key}>
                           Corte del {key} ({shiftAccountsMap[key]?.length || 0} cuentas)
                         </option>
                       ))}
-                      {sortedShiftKeys.length === 0 ? (
+                      {filteredShiftKeys.length === 0 ? (
                         <option value={activeDateKey}>
-                          {!historyLoaded ? "Cargando fechas..." : "Sin turnos registrados"}
+                          {!historyLoaded ? "Cargando fechas..." : "Sin turnos en este periodo"}
                         </option>
-                      ) : !sortedShiftKeys.includes(activeDateKey) ? (
+                      ) : !filteredShiftKeys.includes(activeDateKey) ? (
                         <option value={activeDateKey}>{activeDateKey}</option>
                       ) : null}
                     </select>
                   </div>
+
+                  {/* Botón Reporte Multi-Turnos */}
                   <button
                     onClick={() => {
                       setShowMultiTurnModal(true);
                       setMultiTurnPreviewReady(false);
-                      setMultiTurnStartDate("");
-                      setMultiTurnEndDate("");
+                      if (filteredShiftKeys.length > 0) {
+                        const sortedAsc = [...filteredShiftKeys].sort((a, b) => a.localeCompare(b));
+                        setMultiTurnStartDate(sortedAsc[0]);
+                        setMultiTurnEndDate(sortedAsc[sortedAsc.length - 1]);
+                      } else {
+                        setMultiTurnStartDate("");
+                        setMultiTurnEndDate("");
+                      }
                     }}
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-4 rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2.5 px-3.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 whitespace-nowrap"
                   >
                     <span>📑</span>
                     <span>Reporte Multi-Turnos</span>
