@@ -6205,13 +6205,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
   }, [cashierSessions, appMode, corteTablaSessionSelected]);
 
-  // Automatically default Corte View Mode to "current" (Turno Actual) for administrators
-  // so they can see active movements and the current operating day right away instead of history.
-  useEffect(() => {
-    if (currentUser?.role === "admin") {
-      setCorteViewMode("current");
-    }
-  }, [currentUser, selectedTenant]);
+  // Default view mode initialized once
 
   const [pendingCancellation, setPendingCancellation] = useState<{
     type: "item" | "order";

@@ -924,14 +924,14 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                                           💵 Ventas en Efectivo:
                                         </span>
                                         <div className="space-y-1 max-h-[150px] overflow-y-auto pr-1">
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && ["cash", "efectivo"].includes((h.paymentMethod || "").toLowerCase())).map((h, idx) => (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && ["cash", "efectivo"].includes((h.paymentMethod || "").toLowerCase())).map((h, idx) => (
                                             <div key={`s-cash-${h.id}-${idx}`} className="flex justify-between items-center text-xs bg-slate-50 p-2 rounded border border-slate-100/60">
                                               <span className="font-bold text-slate-700">Mesa {h.tableLabel || "0"}</span>
                                               <span className="text-slate-400 font-semibold">{new Date(h.timestamp || Date.now()).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}</span>
                                               <span className="font-extrabold text-slate-800">${Number(h.total || 0).toFixed(2)}</span>
                                             </div>
                                           ))}
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && ["cash", "efectivo"].includes((h.paymentMethod || "").toLowerCase())).length === 0 && (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && ["cash", "efectivo"].includes((h.paymentMethod || "").toLowerCase())).length === 0 && (
                                             <span className="text-xs text-slate-400 font-semibold italic block py-0.5">Ninguna venta en efectivo.</span>
                                           )}
                                         </div>
@@ -943,14 +943,14 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                                           💳 Ventas Electrónicas (Tarjeta/Trans):
                                         </span>
                                         <div className="space-y-1 max-h-[150px] overflow-y-auto pr-1">
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && !["cash", "efectivo", "lupay"].includes((h.paymentMethod || "").toLowerCase())).map((h, idx) => (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && !["cash", "efectivo", "lupay"].includes((h.paymentMethod || "").toLowerCase())).map((h, idx) => (
                                             <div key={`s-mixed-${h.id}-${idx}`} className="flex justify-between items-center text-xs bg-slate-50 p-2 rounded border border-slate-100/60">
                                               <span className="font-bold text-slate-700">Mesa {h.tableLabel || "0"} <span className="bg-indigo-50 text-indigo-750 text-[12px] px-1 py-0.5 rounded font-black uppercase">{h.paymentMethod}{h.cardLastFour ? ` *${h.cardLastFour}` : ""}</span></span>
                                               <span className="text-slate-400 font-semibold">{new Date(h.timestamp || Date.now()).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}</span>
                                               <span className="font-extrabold text-slate-800">${Number(h.total || 0).toFixed(2)}</span>
                                             </div>
                                           ))}
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && !["cash", "efectivo", "lupay"].includes((h.paymentMethod || "").toLowerCase())).length === 0 && (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && !["cash", "efectivo", "lupay"].includes((h.paymentMethod || "").toLowerCase())).length === 0 && (
                                             <span className="text-xs text-slate-400 font-semibold italic block py-0.5">Ninguna venta electrónica.</span>
                                           )}
                                         </div>
@@ -962,14 +962,14 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                                           📱 Cuentas de LUPAY:
                                         </span>
                                         <div className="space-y-1 max-h-[150px] overflow-y-auto pr-1">
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && (h.paymentMethod || "").toLowerCase() === "lupay").map((h, idx) => (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && (h.paymentMethod || "").toLowerCase() === "lupay").map((h, idx) => (
                                             <div key={`s-lupay-${h.id}-${idx}`} className="flex justify-between items-center text-xs bg-slate-50 p-2 rounded border border-slate-100/60">
                                               <span className="font-bold text-slate-700">Mesa {h.tableLabel || "0"} <span className="bg-indigo-50 text-indigo-750 text-[12px] px-1 py-0.5 rounded font-black uppercase">{h.paymentMethod}</span></span>
                                               <span className="text-slate-400 font-semibold">{new Date(h.timestamp || Date.now()).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}</span>
                                               <span className="font-extrabold text-slate-800">${Number(h.total || 0).toFixed(2)}</span>
                                             </div>
                                           ))}
-                                          {sessionHistory.filter(h => (h.status === "completed" || h.isPaid) && (h.paymentMethod || "").toLowerCase() === "lupay").length === 0 && (
+                                          {sessionHistory.filter(h => !h.isCancelled && h.status !== 'cancelled' && (h.status === "completed" || h.status === "paid" || h.status === "closed" || h.isPaid || !h.status || Number(h.total || 0) > 0) && (h.paymentMethod || "").toLowerCase() === "lupay").length === 0 && (
                                             <span className="text-xs text-slate-400 font-semibold italic block py-0.5">Ninguna venta LUPAY.</span>
                                           )}
                                         </div>
