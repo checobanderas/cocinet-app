@@ -313,13 +313,47 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         dif: 0,
       };
 
+      const dotacionInicial = Number(session.dotacionInicial || 0);
+
+      // 1. Si el turno ya está CERRADO y tiene métricas consolidadas, retornar los valores almacenados directamente (100% fijo, cero parpadeo)
+      if (session.status === "closed" && (session.lastReportedTotal !== undefined || session.cashSales !== undefined || session.estimatedCash !== undefined)) {
+        const cashSales = Number(session.cashSales || 0);
+        const cardSales = Number(session.cardSales || 0);
+        const transSales = Number(session.transSales || 0);
+        const lupaySales = Number(session.lupaySales || 0);
+        const totalVentas = Number(session.lastReportedTotal ?? (cashSales + cardSales + transSales + lupaySales));
+        const totalInflows = Number(session.totalInflows || 0);
+        const totalOutflows = Number(session.totalOutflows || 0);
+        const totalPurchasesPaid = Number(session.totalPurchasesPaid || 0);
+        const totalGastos = totalOutflows + totalPurchasesPaid;
+        const balanceEsperado = Number(session.estimatedCash ?? Math.max(0, dotacionInicial + cashSales + totalInflows - totalGastos));
+        const balanceReal = Number(session.arqueoTotal || 0);
+        const dif = Number(session.diferencia ?? (balanceReal - balanceEsperado));
+
+        return {
+          cashSales,
+          cardSales,
+          transSales,
+          lupaySales,
+          totalVentas,
+          dotacionInicial,
+          totalInflows,
+          totalOutflows,
+          totalPurchasesPaid,
+          totalGastos,
+          balanceEsperado,
+          balanceReal,
+          dif,
+        };
+      }
+
+      // 2. De lo contrario (turno abierto o sin métricas de cierre), calcular dinámicamente en tiempo real
       const sId = session.id;
       const sOpened = new Date(session.openedAt);
       const sClosed = session.closedAt ? new Date(session.closedAt) : null;
       const sessionOpDay = getOperatingDay(session.openedAt || session.closedAt || new Date());
 
-      // Filter history for this session (by sessionId, timestamp range, or operating day)
-      const sessionHistory = history.filter((h: any) => {
+      const sessionHistory = (history || []).filter((h: any) => {
         if (h.sessionId && h.sessionId === sId) return true;
         const hTime = new Date(h.timestamp);
         if (hTime >= sOpened && (!sClosed || hTime <= sClosed)) return true;
@@ -327,8 +361,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         return false;
       });
 
-      // Filter cash movements
-      const sessionMovements = cashMovements.filter((m: any) => {
+      const sessionMovements = (cashMovements || []).filter((m: any) => {
         if (m.sessionId && m.sessionId === sId) return true;
         const mTime = new Date(m.timestamp || m.date || new Date());
         if (mTime >= sOpened && (!sClosed || mTime <= sClosed)) return true;
@@ -337,8 +370,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         return false;
       });
 
-      // Filter expenses
-      const sessionExpenses = expenses.filter((e: any) => {
+      const sessionExpenses = (expenses || []).filter((e: any) => {
         if (e.sessionId && e.sessionId === sId) return true;
         if (!e.createdAt) return false;
         const eTime = new Date(e.createdAt);
@@ -347,8 +379,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         return false;
       });
 
-      // Filter purchases
-      const sessionPurchases = purchases.filter((p: any) => {
+      const sessionPurchases = (purchases || []).filter((p: any) => {
         if (p.sessionId && p.sessionId === sId) return true;
         const pTime = new Date(p.timestamp || new Date());
         if (pTime >= sOpened && (!sClosed || pTime <= sClosed)) return true;
@@ -357,7 +388,6 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         return false;
       });
 
-      // Calculate sales
       let cashSales = 0;
       let cardSales = 0;
       let transSales = 0;
@@ -380,97 +410,39 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         }
       });
 
-      // Inflows and outflows from movements
       let totalInflows = 0;
       let totalOutflows = 0;
-
-      sessionMovements.forEach((m) => {
+      sessionMovements.forEach((m: any) => {
         const amt = Number(m.amount || 0);
-        if (m.type === "in") {
-          totalInflows += amt;
-        } else if (m.type === "out") {
-          totalOutflows += amt;
-        }
+        if (m.type === "in") totalInflows += amt;
+        else if (m.type === "out") totalOutflows += amt;
       });
 
-      // Expenses
-      sessionExpenses.forEach((e) => {
+      sessionExpenses.forEach((e: any) => {
         totalOutflows += Number(e.amount || 0);
       });
 
-      // Purchases
       let totalPurchasesPaid = 0;
-      sessionPurchases.forEach((p) => {
-        if (p.isPaid) {
-          totalPurchasesPaid += Number(p.total || 0);
-        }
+      sessionPurchases.forEach((p: any) => {
+        if (p.isPaid) totalPurchasesPaid += Number(p.total || 0);
       });
 
-      const dotacionInicial = Number(session.dotacionInicial || 0);
-
-      // Prioritize saved numbers if session is closed, or use dynamic calculation
-      const hasSavedSales = session.status === "closed" && (
-        session.lastReportedTotal !== undefined ||
-        session.cashSales !== undefined ||
-        session.cardSales !== undefined ||
-        session.transSales !== undefined
-      );
-
-      const dynamicTotal = cashSales + cardSales + transSales + lupaySales;
-
-      const finalCashSales = (hasSavedSales && Number(session.cashSales || 0) > 0)
-        ? Number(session.cashSales)
-        : (cashSales > 0 ? cashSales : Number(session.cashSales || 0));
-
-      const finalCardSales = (hasSavedSales && Number(session.cardSales || 0) > 0)
-        ? Number(session.cardSales)
-        : (cardSales > 0 ? cardSales : Number(session.cardSales || 0));
-
-      const finalTransSales = (hasSavedSales && Number(session.transSales || 0) > 0)
-        ? Number(session.transSales)
-        : (transSales > 0 ? transSales : Number(session.transSales || 0));
-
-      const finalLupaySales = (hasSavedSales && Number(session.lupaySales || 0) > 0)
-        ? Number(session.lupaySales)
-        : (lupaySales > 0 ? lupaySales : Number(session.lupaySales || 0));
-
-      const finalTotalVentas = (hasSavedSales && Number(session.lastReportedTotal || 0) > 0)
-        ? Number(session.lastReportedTotal)
-        : (dynamicTotal > 0 ? dynamicTotal : (finalCashSales + finalCardSales + finalTransSales + finalLupaySales));
-
-      const finalTotalInflows = (Number(session.totalInflows || 0) > 0) ? Number(session.totalInflows) : totalInflows;
-      const finalTotalOutflows = (Number(session.totalOutflows || 0) > 0) ? Number(session.totalOutflows) : totalOutflows;
-      const finalTotalPurchasesPaid = (Number(session.totalPurchasesPaid || 0) > 0) ? Number(session.totalPurchasesPaid) : totalPurchasesPaid;
-
-      const computedEstimated = Math.max(
-        0,
-        dotacionInicial +
-          finalCashSales +
-          finalTotalInflows -
-          finalTotalOutflows -
-          finalTotalPurchasesPaid
-      );
-
-      const balanceEsperado = (session.estimatedCash !== undefined && session.estimatedCash !== null && Number(session.estimatedCash) > 0)
-        ? Number(session.estimatedCash)
-        : computedEstimated;
+      const computedEstimated = Math.max(0, dotacionInicial + cashSales + totalInflows - totalOutflows - totalPurchasesPaid);
       const balanceReal = Number(session.arqueoTotal || 0);
-      const dif = (session.diferencia !== undefined && session.diferencia !== null)
-        ? Number(session.diferencia)
-        : (balanceReal - balanceEsperado);
+      const dif = balanceReal - computedEstimated;
 
       return {
-        cashSales: finalCashSales,
-        cardSales: finalCardSales,
-        transSales: finalTransSales,
-        lupaySales: finalLupaySales,
-        totalVentas: finalTotalVentas,
+        cashSales,
+        cardSales,
+        transSales,
+        lupaySales,
+        totalVentas: cashSales + cardSales + transSales + lupaySales,
         dotacionInicial,
-        totalInflows: finalTotalInflows,
-        totalOutflows: finalTotalOutflows,
-        totalPurchasesPaid: finalTotalPurchasesPaid,
-        totalGastos: finalTotalOutflows + finalTotalPurchasesPaid,
-        balanceEsperado,
+        totalInflows,
+        totalOutflows,
+        totalPurchasesPaid,
+        totalGastos: totalOutflows + totalPurchasesPaid,
+        balanceEsperado: computedEstimated,
         balanceReal,
         dif,
       };
