@@ -226,8 +226,44 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   const [showClosePinModal, setShowClosePinModal] = useState(false);
   const [closePinInput, setClosePinInput] = useState("");
   const [showTestWhatsappModal, setShowTestWhatsappModal] = useState(false);
-  const [testWhatsappPhone, setTestWhatsappPhone] = useState("");
   const [pendingTablesList, setPendingTablesList] = useState<any[]>([]);
+
+  // Memorize grouped closed sessions by day at the top level (Rules of Hooks)
+  const { groupedClosedSessions, sortedGroupKeys } = React.useMemo(() => {
+    const grouped = (cashierSessions || []).reduce((acc: Record<string, CashierSession[]>, session: any) => {
+      if (session.status !== "closed") return acc;
+
+      const dateVal = session.closedAt || session.openedAt || getMexicoISOString();
+      const d = new Date(dateVal);
+      const dayString = d.toLocaleDateString("es-MX", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const capitalized = dayString.charAt(0).toUpperCase() + dayString.slice(1);
+
+      if (!acc[capitalized]) {
+        acc[capitalized] = [];
+      }
+      acc[capitalized].push(session);
+      return acc;
+    }, {});
+
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort((a, b) => {
+        const timeA = new Date(a.closedAt || a.openedAt).getTime();
+        const timeB = new Date(b.closedAt || b.openedAt).getTime();
+        return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
+      });
+    });
+
+    const sortedKeys = Object.keys(grouped).sort((keyA, keyB) => {
+      const itemA = grouped[keyA][0];
+      const itemB = grouped[keyB][0];
+      if (!itemA || !itemB) return 0;
+      const timeA = new Date(itemA.closedAt || itemA.openedAt).getTime();
+      const timeB = new Date(itemB.closedAt || itemB.openedAt).getTime();
+      return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
+    });
+
+    return { groupedClosedSessions: grouped, sortedGroupKeys: sortedKeys };
+  }, [cashierSessions, historySortOrder]);
 
   if (currentUser?.role === "mesero") {
       return (
@@ -554,43 +590,6 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       const tenantShortName = selectedTenant?.name.replace("Sombrerudos ", "") || "Matriz";
       const patronUserId = `${selectedTenant?.id}-admin`;
       const patronUserName = `Patrón ${tenantShortName} 🤠 Matriz`;
-
-      // Memorize grouped closed sessions by day
-      const { groupedClosedSessions, sortedGroupKeys } = React.useMemo(() => {
-        const grouped = (cashierSessions || []).reduce((acc: Record<string, CashierSession[]>, session: any) => {
-          if (session.status !== "closed") return acc;
-
-          const dateVal = session.closedAt || session.openedAt || getMexicoISOString();
-          const d = new Date(dateVal);
-          const dayString = d.toLocaleDateString("es-MX", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-          const capitalized = dayString.charAt(0).toUpperCase() + dayString.slice(1);
-
-          if (!acc[capitalized]) {
-            acc[capitalized] = [];
-          }
-          acc[capitalized].push(session);
-          return acc;
-        }, {});
-
-        Object.keys(grouped).forEach((key) => {
-          grouped[key].sort((a, b) => {
-            const timeA = new Date(a.closedAt || a.openedAt).getTime();
-            const timeB = new Date(b.closedAt || b.openedAt).getTime();
-            return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
-          });
-        });
-
-        const sortedKeys = Object.keys(grouped).sort((keyA, keyB) => {
-          const itemA = grouped[keyA][0];
-          const itemB = grouped[keyB][0];
-          if (!itemA || !itemB) return 0;
-          const timeA = new Date(itemA.closedAt || itemA.openedAt).getTime();
-          const timeB = new Date(itemB.closedAt || itemB.openedAt).getTime();
-          return historySortOrder === "desc" ? timeB - timeA : timeA - timeB;
-        });
-
-        return { groupedClosedSessions: grouped, sortedGroupKeys: sortedKeys };
-      }, [cashierSessions, historySortOrder]);
 
       return (
         <IonPage>
