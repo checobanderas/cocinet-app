@@ -3,6 +3,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonContent, IonIcon, IonPage, IonSpinner, IonText } from '@ionic/react';
 import { addOutline, cloudUploadOutline, imageOutline, restaurantOutline, syncOutline, trashOutline } from 'ionicons/icons';
+import { PurgeZeroSalesProductsModal } from '../modals/PurgeZeroSalesProductsModal';
+import { ManageSubgroupsTab } from './ManageSubgroupsTab';
+import { MenuPdfAuditorModal } from '../MenuPdfAuditorModal';
 
 interface ManageMenuViewProps {
   COMPANY_CATALOG: any;
@@ -35,6 +38,7 @@ interface ManageMenuViewProps {
   handleExcelUpload: any;
   handleGenerateAdHocNotes: any;
   handleImportTenantMenu: any;
+  handleReplicateMenuToTenants?: any;
   handleMenuImageUpload: any;
   handleResetMenuAndRefill: any;
   handleTreeDragOver: any;
@@ -161,6 +165,7 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
   handleExcelUpload,
   handleGenerateAdHocNotes,
   handleImportTenantMenu,
+  handleReplicateMenuToTenants,
   handleMenuImageUpload,
   handleResetMenuAndRefill,
   handleTreeDragOver,
@@ -245,8 +250,20 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
   const [isAuditingPrices, setIsAuditingPrices] = React.useState(false);
   const [auditGroupFilter, setAuditGroupFilter] = React.useState<string>("ALL");
   const [showOnlyActiveUpdates, setShowOnlyActiveUpdates] = React.useState<boolean>(true);
-  const [restoreProgressMsg, setRestoreProgressMsg] = React.useState<string>("");
-  const hasAccess = isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
+  const [showPurgeModal, setShowPurgeModal] = React.useState<boolean>(false);
+  const [replicateSubTab, setReplicateSubTab] = React.useState<"replicate" | "import">("replicate");
+  const [selectedReplicateBranchIds, setSelectedReplicateBranchIds] = React.useState<string[]>([]);
+  const [isReplicatingBranches, setIsReplicatingBranches] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (manageMenuTab === "import_tenant") {
+      const siblingBranches = COMPANY_CATALOG.filter(
+        (c) => c.id !== selectedTenant?.id && (selectedTenant?.ownerKey ? c.ownerKey === selectedTenant.ownerKey : true)
+      ).map((c) => c.id);
+      setSelectedReplicateBranchIds(siblingBranches);
+    }
+  }, [manageMenuTab, selectedTenant?.id, selectedTenant?.ownerKey, COMPANY_CATALOG]);
+  const hasAccess = isMasterAdmin || isOwnerUnlocked || currentUser?.role === "admin" || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas");
     if (!hasAccess) {
       return (
         <IonPage>
@@ -301,15 +318,11 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              if (window.confirm("¿Estás absolutamente seguro que deseas empezar el proceso para borrar TODOS los productos de este tenant?")) {
-                setDeleteConfirmation({ isOpen: true, type: "all" });
-              }
-            }}
-            className="px-3 py-1.5 rounded-full bg-red-100 hover:bg-red-200 text-red-600 text-xs font-black flex items-center gap-1 transition border-none shadow-sm cursor-pointer mr-2"
-            title="Eliminar Productos Sucursal"
+            onClick={() => setShowPurgeModal(true)}
+            className="px-3 py-1.5 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-black flex items-center gap-1 transition border-none shadow-sm cursor-pointer mr-2"
+            title="Vaciar Productos (Solo Tenants con 0 Ventas)"
           >
-            <span>🗑️ Eliminar productos de {selectedTenant?.name || "este tenant"}</span>
+            <span>🧹 Vaciar productos de {selectedTenant?.name || "este tenant"} (0 Ventas)</span>
           </motion.button>
         ) : null
       })}
@@ -385,19 +398,49 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                     stat: `${backups.length} respaldos`,
                   },
                   {
-                    id: "import_tenant" as const,
-                    title: "Importar de otra sucursal",
-                    emoji: "📥",
-                    color: "#8b5cf6",
-                    shortTitle: "Clonar Carta",
+                    id: "purge_zero_sales" as const,
+                    title: "Vaciar Catálogo (0 Ventas)",
+                    emoji: "🧹",
+                    color: "#be123c",
+                    shortTitle: "Purga Segura",
                     description:
-                      "Copia de forma masiva los productos y la estructura de categorías de otra sucursal de la empresa hacia esta sucursal.",
+                      "Elimina de forma física y limpia todos los productos de esta sucursal (y hermanas) únicamente si no cuenta con ventas registradas.",
                     actionExplanation:
-                      "Ocultar� l�gicamente los productos antiguos e importar� la carta exacta. Tus cortes de venta antiguos y tickets quedan protegidos.",
+                      "Valida en tiempo real que existan 0 ventas, genera un respaldo previo y vacía el catálogo para dejarlo listo para un Excel limpio.",
+                    bgGradient:
+                      "linear-gradient(135deg, rgba(190, 18, 60, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
+                    borderColorActive: "#be123c",
+                    stat: "Solo Tenants Nuevos",
+                  },
+                  {
+                    id: "import_tenant" as const,
+                    title: "Replicar / Importar Carta",
+                    emoji: "📡",
+                    color: "#8b5cf6",
+                    shortTitle: "Replicar Menú",
+                    description:
+                      "Reclona y distribuye de forma masiva los productos de esta sucursal/matriz hacia las demás sucursales de tu red, o importa la carta de otra sucursal.",
+                    actionExplanation:
+                      "Generará un respaldo de los productos anteriores e insertará la carta completa sincronizada en caliente para cada sucursal.",
                     bgGradient:
                       "linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#8b5cf6",
-                    stat: "Importar Menú",
+                    stat: "Replicar a Sucursales",
+                  },
+                  {
+                    id: "manage_subgroups" as const,
+                    title: "Agregar Grupos y Subgrupos",
+                    emoji: "🏷️",
+                    color: "#4f46e5",
+                    shortTitle: "Grupos y Subgrupos",
+                    description:
+                      "Asigna y modifica subgrupos (ej: Burras, Gringas, Quesadillas, Harina, Maíz) y secciones en lote o con Auto-Clasificación por nombre.",
+                    actionExplanation:
+                      "Permite organizar y clasificar tus platillos en subgrupos para una navegación ágil y cómoda en la toma de pedidos.",
+                    bgGradient:
+                      "linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
+                    borderColorActive: "#4f46e5",
+                    stat: "Organizar Menú",
                   },
                   {
                     id: "upload_subgroups" as const,
@@ -430,19 +473,19 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                     stat: "Subir Tabla",
                   },
                   {
-                    id: "audit_prices_excel" as const,
-                    title: "Auditor y Sincronizador de Precios (Excel)",
+                    id: "compare_excel_pdf" as const,
+                    title: "Comparar Excel vs Carta en PDF",
                     emoji: "⚖️",
                     color: "#f59e0b",
-                    shortTitle: "Sincronizar Precios",
+                    shortTitle: "Excel vs Carta PDF",
                     description:
-                      "Sube la lista del dueño (Excel) para comparar productos y precios actuales. Detecta cambios y te permite autorizarlos individualmente o de golpe.",
+                      "Sube el Excel de la empresa y la Carta física en PDF. La IA contrastará los precios, detectará discrepancias y te permitirá exportar el Excel idéntico para el auditor.",
                     actionExplanation:
-                      "Esta acción compara nombre a nombre, mostrándote una tabla de diferencias (precio anterior vs nuevo) y te permite actualizar el orden y precios según el Excel original.",
+                      "Cruza nombres y precios con IA Multimodal, genera un semáforo de diferencias y exporta el archivo exacto con las correcciones anotadas en el mismo orden original.",
                     bgGradient:
                       "linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(255, 255, 255, 0.7) 100%)",
                     borderColorActive: "#f59e0b",
-                    stat: "Auditar y Aplicar",
+                    stat: "Auditar y Exportar",
                   },
                   {
                     id: "food" as const,
@@ -571,7 +614,13 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                       key={w.id}
                       whileHover={{ scale: 1.02, cursor: "pointer" }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setManageMenuTab(w.id as any)}
+                      onClick={() => {
+                        if (w.id === "purge_zero_sales") {
+                          setShowPurgeModal(true);
+                        } else {
+                          setManageMenuTab(w.id as any);
+                        }
+                      }}
                       style={{
                         background: w.bgGradient,
                         borderRadius: "14px",
@@ -709,6 +758,15 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                   stat: "Excel e IA Integrados",
                   actionExplanation:
                     "Procesa un listado de productos desde Excel/CSV con sus precios usando Inteligencia Artificial para auto-clasificarlos.",
+                },
+                {
+                  id: "compare_excel_pdf" as const,
+                  title: "Comparar Excel vs Carta en PDF",
+                  emoji: "⚖️",
+                  color: "#f59e0b",
+                  stat: "Auditar y Exportar",
+                  actionExplanation:
+                    "Sube el Excel de la empresa y la Carta física en PDF. La IA contrastará los precios, detectará discrepancias y te permitirá exportar el Excel idéntico para el auditor.",
                 },
                 {
                   id: "food" as const,
@@ -854,218 +912,454 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
               );
             })()
           )}
+          {manageMenuTab === "manage_subgroups" && (
+            <ManageSubgroupsTab
+              products={products}
+              selectedTenant={selectedTenant}
+              COMPANY_CATALOG={COMPANY_CATALOG}
+              triggerAppNotification={triggerAppNotification}
+              onClose={() => setManageMenuTab(null)}
+            />
+          )}
+          {manageMenuTab === "compare_excel_pdf" && (
+            <MenuPdfAuditorModal
+              isOpen={true}
+              onClose={() => setManageMenuTab(null)}
+              products={products}
+              selectedTenant={selectedTenant}
+              triggerAppNotification={triggerAppNotification}
+              sisterTenants={COMPANY_CATALOG?.filter((c: any) => c.id !== selectedTenant) || []}
+            />
+          )}
           {manageMenuTab === "import_tenant" && (
             <div style={{ padding: "24px", background: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
-              <div style={{ marginBottom: "20px" }}>
-                <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.25rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>📥</span> Importar Menú de Otra Sucursal o Matriz
-                </h3>
-                <p style={{ margin: "6px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
-                  Clona todo el catálogo de productos de otra sucursal. Esta operación reemplazará la carta de la sucursal actual por la seleccionada.
-                </p>
+              {/* Mode Switcher */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "20px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setReplicateSubTab("replicate")}
+                  style={{
+                    padding: "10px 18px",
+                    background: replicateSubTab === "replicate" ? "#4f46e5" : "#f1f5f9",
+                    color: replicateSubTab === "replicate" ? "white" : "#475569",
+                    fontWeight: "bold",
+                    borderRadius: "10px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "0.88rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: replicateSubTab === "replicate" ? "0 2px 4px rgba(79, 70, 229, 0.2)" : "none",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <span>📡</span> Replicar Catálogo a Otras Sucursales
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReplicateSubTab("import")}
+                  style={{
+                    padding: "10px 18px",
+                    background: replicateSubTab === "import" ? "#7c3aed" : "#f1f5f9",
+                    color: replicateSubTab === "import" ? "white" : "#475569",
+                    fontWeight: "bold",
+                    borderRadius: "10px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "0.88rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: replicateSubTab === "import" ? "0 2px 4px rgba(124, 58, 237, 0.2)" : "none",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <span>📥</span> Importar Menú de Otra Sucursal / Matriz
+                </button>
               </div>
 
-              {importConfirmStep === 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
-                  <div>
-                    <label style={{ fontSize: "0.82rem", fontWeight: "bold", color: "#475569", display: "block", marginBottom: "8px" }}>
-                      Seleccionar Sucursal / Matriz de Origen
-                    </label>
-                    <select
-                      value={importSelectedTenantId}
-                      onChange={(e) => setImportSelectedTenantId(e.target.value)}
-                      disabled={isImportingTenantMenu}
-                      style={{
-                        width: "100%",
-                        padding: "12px 14px",
-                        fontSize: "0.9rem",
-                        borderRadius: "10px",
-                        border: "1.5px solid #cbd5e1",
-                        background: "#f8fafc",
-                        outline: "none",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer"
-                      }}
-                    >
-                      <option value="">-- Seleccionar Sucursal --</option>
-                      {COMPANY_CATALOG.filter((c) => c.id !== selectedTenant?.id).map((tenant) => (
-                        <option key={tenant.id} value={tenant.id}>
-                          {tenant.name} ({tenant.type || "Sucursal"})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {/* REPLICATE MODE (From current branch to selected/all other branches) */}
+              {replicateSubTab === "replicate" && (() => {
+                const siblingBranches = COMPANY_CATALOG.filter(
+                  (c) => c.id !== selectedTenant?.id && (selectedTenant?.ownerKey ? c.ownerKey === selectedTenant.ownerKey : true)
+                );
+                const activeProductsCount = products.filter((p) => !p.isDeleted).length;
 
-                  <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "12px", padding: "16px", color: "#92400e" }}>
-                    <h4 style={{ margin: "0 0 6px 0", fontSize: "0.88rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
-                      ⚠️ Importante antes de continuar
-                    </h4>
-                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.8rem", lineHeight: "1.4" }}>
-                      <li>Se archivarán (borrado lógico) todos los productos de la sucursal actual: <strong>{selectedTenant?.name || ""}</strong>.</li>
-                      <li>Se creará un respaldo automático del menú actual en tu historial de respaldos.</li>
-                      <li>Los productos importados conservarán sus precios, nombres, descripciones y categorías exactas de la sucursal origen.</li>
-                    </ul>
-                  </div>
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "600px" }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.2rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>📡</span> Replicar Menú de "{selectedTenant?.name}" a Sucursales
+                      </h3>
+                      <p style={{ margin: "6px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                        Clona los <strong>{activeProductsCount} productos activos</strong> de esta sucursal ({selectedTenant?.type === "Matriz" ? "Casa Matriz" : selectedTenant?.name}) hacia las demás sucursales de la red seleccionadas.
+                      </p>
+                    </div>
 
-                  <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setImportConfirmStep(1)}
-                      disabled={!importSelectedTenantId}
-                      style={{
-                        padding: "12px 24px",
-                        background: !importSelectedTenantId ? "#a78bfa" : "#7c3aed",
-                        color: "white",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "none",
-                        cursor: !importSelectedTenantId ? "not-allowed" : "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        fontSize: "0.9rem",
-                        boxShadow: "0 4px 6px rgba(124, 58, 237, 0.15)"
-                      }}
-                    >
-                      <span>📥</span>
-                      Confirmar e Importar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImportSelectedTenantId("");
-                        setManageMenuTab(null);
-                      }}
-                      style={{
-                        padding: "12px 20px",
-                        background: "white",
-                        color: "#64748b",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "1.5px solid #cbd5e1",
-                        cursor: "pointer",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
+                    {siblingBranches.length === 0 ? (
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px", color: "#64748b" }}>
+                        <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "bold" }}>
+                          No hay otras sucursales registradas bajo este propietario para replicar. Puedes registrar nuevas sucursales desde el inicio.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "16px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                            <label style={{ fontSize: "0.85rem", fontWeight: "bold", color: "#1e293b" }}>
+                              Sucursales Destino ({selectedReplicateBranchIds.length} de {siblingBranches.length} seleccionadas):
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (selectedReplicateBranchIds.length === siblingBranches.length) {
+                                  setSelectedReplicateBranchIds([]);
+                                } else {
+                                  setSelectedReplicateBranchIds(siblingBranches.map(b => b.id));
+                                }
+                              }}
+                              style={{
+                                fontSize: "0.75rem",
+                                fontWeight: "bold",
+                                color: "#4f46e5",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                textDecoration: "underline"
+                              }}
+                            >
+                              {selectedReplicateBranchIds.length === siblingBranches.length ? "Deseleccionar todas" : "Seleccionar todas"}
+                            </button>
+                          </div>
 
-              {importConfirmStep === 1 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
-                  <div style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "12px", padding: "18px", color: "#991b1b" }}>
-                    <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
-                      ⚠️ ALERTA DE SEGURIDAD (Paso 1 de 2)
-                    </h4>
-                    <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
-                      Estás a punto de <strong>ARCHIVAR (BORRADO LÓGICO)</strong> todos los productos de esta sucursal (<strong>{selectedTenant?.name || ""}</strong>) e importar los productos de la sucursal/matriz <strong>"{COMPANY_CATALOG.find(c => c.id === importSelectedTenantId)?.name || importSelectedTenantId}"</strong>.
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {siblingBranches.map((branch) => {
+                              const isChecked = selectedReplicateBranchIds.includes(branch.id);
+                              return (
+                                <label
+                                  key={branch.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "10px 14px",
+                                    borderRadius: "8px",
+                                    background: isChecked ? "#eff6ff" : "white",
+                                    border: isChecked ? "1.5px solid #3b82f6" : "1px solid #e2e8f0",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s"
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedReplicateBranchIds(prev => [...prev, branch.id]);
+                                      } else {
+                                        setSelectedReplicateBranchIds(prev => prev.filter(id => id !== branch.id));
+                                      }
+                                    }}
+                                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                                  />
+                                  <span style={{ fontSize: "0.9rem", fontWeight: "bold", color: "#1e293b" }}>
+                                    {branch.avatar || "🏢"} {branch.name}
+                                  </span>
+                                  <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "auto", fontWeight: "bold" }}>
+                                    {branch.type || "Sucursal"}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "12px", padding: "16px", color: "#065f46" }}>
+                          <h4 style={{ margin: "0 0 6px 0", fontSize: "0.88rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
+                            🛡️ Seguridad y Respaldo Automático
+                          </h4>
+                          <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.8rem", lineHeight: "1.4" }}>
+                            <li>Se generará un respaldo automático de los productos anteriores de cada sucursal destino.</li>
+                            <li>Tus <strong>ventas, comandas y cortes de caja pasados permanecerán intactos</strong> con sus precios históricos exactos.</li>
+                            <li>Cada sucursal destino tendrá sus propios productos activos sincronizados en caliente.</li>
+                          </ul>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                          <button
+                            type="button"
+                            disabled={selectedReplicateBranchIds.length === 0 || isImportingTenantMenu || activeProductsCount === 0}
+                            onClick={() => {
+                              if (handleReplicateMenuToTenants) {
+                                handleReplicateMenuToTenants(selectedReplicateBranchIds);
+                              }
+                            }}
+                            style={{
+                              padding: "12px 24px",
+                              background: selectedReplicateBranchIds.length === 0 || isImportingTenantMenu || activeProductsCount === 0 ? "#94a3b8" : "#4f46e5",
+                              color: "white",
+                              fontWeight: "bold",
+                              borderRadius: "12px",
+                              border: "none",
+                              cursor: selectedReplicateBranchIds.length === 0 || isImportingTenantMenu || activeProductsCount === 0 ? "not-allowed" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              fontSize: "0.9rem",
+                              boxShadow: "0 4px 6px rgba(79, 70, 229, 0.2)"
+                            }}
+                          >
+                            {isImportingTenantMenu ? (
+                              <>
+                                <span className="animate-spin">🔄</span>
+                                Replicando Catálogo...
+                              </>
+                            ) : (
+                              <>
+                                <span>🚀</span>
+                                Replicar a {selectedReplicateBranchIds.length} Sucursal(es)
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setManageMenuTab(null)}
+                            style={{
+                              padding: "12px 20px",
+                              background: "white",
+                              color: "#64748b",
+                              fontWeight: "bold",
+                              borderRadius: "12px",
+                              border: "1.5px solid #cbd5e1",
+                              cursor: "pointer",
+                              fontSize: "0.9rem"
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* IMPORT MODE (From another branch into current branch) */}
+              {replicateSubTab === "import" && (
+                <div>
+                  <div style={{ marginBottom: "16px" }}>
+                    <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "1.2rem", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span>📥</span> Importar Menú hacia "{selectedTenant?.name}"
+                    </h3>
+                    <p style={{ margin: "6px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                      Trae y reemplaza la carta de esta sucursal por la de la Matriz u otra sucursal seleccionada.
                     </p>
-                    <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
-                      ¿Estás seguro de que deseas continuar? Los productos actuales serán marcados como eliminados (borrado lógico) y no se perderán de forma permanente.
-                    </p>
                   </div>
 
-                  <div style={{ display: "flex", gap: "12px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setImportConfirmStep(2)}
-                      style={{
-                        padding: "12px 24px",
-                        background: "#dc2626",
-                        color: "white",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      Sí, deseo continuar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setImportConfirmStep(0)}
-                      style={{
-                        padding: "12px 20px",
-                        background: "white",
-                        color: "#64748b",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "1.5px solid #cbd5e1",
-                        cursor: "pointer",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      Cancelar / Regresar
-                    </button>
-                  </div>
-                </div>
-              )}
+                  {importConfirmStep === 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                      <div>
+                        <label style={{ fontSize: "0.82rem", fontWeight: "bold", color: "#475569", display: "block", marginBottom: "8px" }}>
+                          Seleccionar Sucursal / Matriz de Origen
+                        </label>
+                        <select
+                          value={importSelectedTenantId}
+                          onChange={(e) => setImportSelectedTenantId(e.target.value)}
+                          disabled={isImportingTenantMenu}
+                          style={{
+                            width: "100%",
+                            padding: "12px 14px",
+                            fontSize: "0.9rem",
+                            borderRadius: "10px",
+                            border: "1.5px solid #cbd5e1",
+                            background: "#f8fafc",
+                            outline: "none",
+                            cursor: isImportingTenantMenu ? "not-allowed" : "pointer"
+                          }}
+                        >
+                          <option value="">-- Seleccionar Sucursal --</option>
+                          {COMPANY_CATALOG.filter((c) => c.id !== selectedTenant?.id).map((tenant) => (
+                            <option key={tenant.id} value={tenant.id}>
+                              {tenant.name} ({tenant.type || "Sucursal"})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-              {importConfirmStep === 2 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
-                  <div style={{ background: "#fff7ed", border: "1px solid #ffedd5", borderRadius: "12px", padding: "18px", color: "#c2410c" }}>
-                    <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
-                      🛑 RECOMENDACIÓN DE RESPALDO (Paso 2 de 2)
-                    </h4>
-                    <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
-                      Antes de continuar, el sistema generará automáticamente una copia de respaldo del menú actual en tu historial de respaldos.
-                    </p>
-                    <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
-                      ¿Aún así deseas continuar con la importación y el borrado lógico de la carta actual?
-                    </p>
-                  </div>
+                      <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "12px", padding: "16px", color: "#92400e" }}>
+                        <h4 style={{ margin: "0 0 6px 0", fontSize: "0.88rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
+                          ⚠️ Importante antes de continuar
+                        </h4>
+                        <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.8rem", lineHeight: "1.4" }}>
+                          <li>Se archivarán (borrado lógico) todos los productos de la sucursal actual: <strong>{selectedTenant?.name || ""}</strong>.</li>
+                          <li>Se creará un respaldo automático del menú actual en tu historial de respaldos.</li>
+                          <li>Los productos importados conservarán sus precios, nombres, descripciones y categorías exactas de la sucursal origen.</li>
+                        </ul>
+                      </div>
 
-                  <div style={{ display: "flex", gap: "12px" }}>
-                    <button
-                      type="button"
-                      onClick={handleImportTenantMenu}
-                      disabled={isImportingTenantMenu}
-                      style={{
-                        padding: "12px 24px",
-                        background: isImportingTenantMenu ? "#a78bfa" : "#7c3aed",
-                        color: "white",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "none",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      {isImportingTenantMenu ? (
-                        <>
-                          <span style={{ display: "inline-block" }} className="animate-spin">🔄</span>
-                          Importando...
-                        </>
-                      ) : (
-                        <>
+                      <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setImportConfirmStep(1)}
+                          disabled={!importSelectedTenantId}
+                          style={{
+                            padding: "12px 24px",
+                            background: !importSelectedTenantId ? "#a78bfa" : "#7c3aed",
+                            color: "white",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "none",
+                            cursor: !importSelectedTenantId ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.9rem",
+                            boxShadow: "0 4px 6px rgba(124, 58, 237, 0.15)"
+                          }}
+                        >
                           <span>📥</span>
-                          Confirmar e Importar Ahora
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setImportConfirmStep(0)}
-                      disabled={isImportingTenantMenu}
-                      style={{
-                        padding: "12px 20px",
-                        background: "white",
-                        color: "#64748b",
-                        fontWeight: "bold",
-                        borderRadius: "12px",
-                        border: "1.5px solid #cbd5e1",
-                        cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
+                          Confirmar e Importar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImportSelectedTenantId("");
+                            setManageMenuTab(null);
+                          }}
+                          style={{
+                            padding: "12px 20px",
+                            background: "white",
+                            color: "#64748b",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "1.5px solid #cbd5e1",
+                            cursor: "pointer",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {importConfirmStep === 1 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                      <div style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "12px", padding: "18px", color: "#991b1b" }}>
+                        <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
+                          ⚠️ ALERTA DE SEGURIDAD (Paso 1 de 2)
+                        </h4>
+                        <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
+                          Estás a punto de <strong>ARCHIVAR (BORRADO LÓGICO)</strong> todos los productos de esta sucursal (<strong>{selectedTenant?.name || ""}</strong>) e importar los productos de la sucursal/matriz <strong>"{COMPANY_CATALOG.find(c => c.id === importSelectedTenantId)?.name || importSelectedTenantId}"</strong>.
+                        </p>
+                        <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
+                          ¿Estás seguro de que deseas continuar? Los productos actuales serán marcados como eliminados (borrado lógico) y no se perderán de forma permanente.
+                        </p>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setImportConfirmStep(2)}
+                          style={{
+                            padding: "12px 24px",
+                            background: "#dc2626",
+                            color: "white",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          Sí, deseo continuar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportConfirmStep(0)}
+                          style={{
+                            padding: "12px 20px",
+                            background: "white",
+                            color: "#64748b",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "1.5px solid #cbd5e1",
+                            cursor: "pointer",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          Cancelar / Regresar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {importConfirmStep === 2 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "500px" }}>
+                      <div style={{ background: "#fff7ed", border: "1px solid #ffedd5", borderRadius: "12px", padding: "18px", color: "#c2410c" }}>
+                        <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "900", display: "flex", alignItems: "center", gap: "6px" }}>
+                          🛑 RECOMENDACIÓN DE RESPALDO (Paso 2 de 2)
+                        </h4>
+                        <p style={{ margin: 0, fontSize: "0.85rem", lineHeight: "1.5", fontWeight: "bold" }}>
+                          Antes de continuar, el sistema generará automáticamente una copia de respaldo del menú actual en tu historial de respaldos.
+                        </p>
+                        <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
+                          ¿Aún así deseas continuar con la importación y el borrado lógico de la carta actual?
+                        </p>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={handleImportTenantMenu}
+                          disabled={isImportingTenantMenu}
+                          style={{
+                            padding: "12px 24px",
+                            background: isImportingTenantMenu ? "#a78bfa" : "#7c3aed",
+                            color: "white",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "none",
+                            cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          {isImportingTenantMenu ? (
+                            <>
+                              <span style={{ display: "inline-block" }} className="animate-spin">🔄</span>
+                              Importando...
+                            </>
+                          ) : (
+                            <>
+                              <span>📥</span>
+                              Confirmar e Importar Ahora
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportConfirmStep(0)}
+                          disabled={isImportingTenantMenu}
+                          style={{
+                            padding: "12px 20px",
+                            background: "white",
+                            color: "#64748b",
+                            fontWeight: "bold",
+                            borderRadius: "12px",
+                            border: "1.5px solid #cbd5e1",
+                            cursor: isImportingTenantMenu ? "not-allowed" : "pointer",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5484,6 +5778,18 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
             );
           })()}
         </IonContent>
+
+        <PurgeZeroSalesProductsModal
+          isOpen={showPurgeModal}
+          onClose={() => setShowPurgeModal(false)}
+          selectedTenant={selectedTenant}
+          COMPANY_CATALOG={COMPANY_CATALOG}
+          products={products}
+          triggerAppNotification={triggerAppNotification}
+          onPurgeSuccess={() => {
+            setManageMenuTab(null);
+          }}
+        />
       </IonPage>
     );
 };

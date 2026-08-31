@@ -333,7 +333,7 @@ return (
                   >
                     {currentUser?.role !== "mesero" && (
                       <>
-                        {(isMasterAdmin || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas")) && (
+                        {(isMasterAdmin || isOwnerUnlocked || currentUser?.role === "admin" || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas")) && (
                           <button
                             onClick={() => {
                               setAppMode("manage-menu");
@@ -472,12 +472,12 @@ return (
 
                     <button
                       onClick={() => {
-                        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+                        try {
+                          localStorage.setItem("cocinet_preferred_tables_view", "floorplan");
+                        } catch (e) {}
+                        setAppMode("floorplan");
+                        setSelectedTableGestion(null);
+                        setCheckoutReturnMode(null);
                         setShowSidebar(false);
                       }}
                       className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
@@ -493,7 +493,12 @@ setCheckoutReturnMode(null);
                     </button>
                     <button
                       onClick={() => {
+                        try {
+                          localStorage.setItem("cocinet_preferred_tables_view", "gestion_cuentas");
+                        } catch (e) {}
                         setAppMode("gestion_cuentas");
+                        setSelectedTableGestion(null);
+                        setCheckoutReturnMode(null);
                         setShowSidebar(false);
                       }}
                       className={`flex items-center gap-3 w-full p-3 mt-2 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${

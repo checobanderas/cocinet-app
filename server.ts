@@ -118,6 +118,37 @@ try {
   db.prepare('ALTER TABLE print_queue ADD COLUMN printed_at TIMESTAMP').run();
 } catch (e) {}
 
+// Rutina de Auto-Depuración de Cola de Impresión
+function cleanupPrintQueue() {
+  try {
+    // 1. Expirar tickets pendientes que tengan más de 15 minutos
+    const expiredRes = db.prepare(`
+      UPDATE print_queue 
+      SET status = 'expired', updated_at = CURRENT_TIMESTAMP 
+      WHERE status = 'pending' AND created_at < datetime('now', '-15 minutes')
+    `).run();
+    if (expiredRes.changes > 0) {
+      console.log(`🧹 [print_queue] Se expiraron ${expiredRes.changes} tickets pendientes con más de 15 min.`);
+    }
+
+    // 2. Purgar historial antiguo con más de 3 días para liberar espacio
+    const purgedRes = db.prepare(`
+      DELETE FROM print_queue 
+      WHERE created_at < datetime('now', '-3 days')
+    `).run();
+    if (purgedRes.changes > 0) {
+      console.log(`🗑️ [print_queue] Se purgaron ${purgedRes.changes} registros de tickets antiguos (>3 días).`);
+    }
+  } catch (err) {
+    console.error("❌ Error en auto-depuración de print_queue:", err);
+  }
+}
+
+// Ejecutar limpieza al arrancar el servidor
+cleanupPrintQueue();
+// Programar limpieza periódica cada 4 horas
+setInterval(cleanupPrintQueue, 4 * 60 * 60 * 1000);
+
 // Seed Initial Data if empty
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as any;
 if (userCount.count === 0) {
@@ -558,6 +589,15 @@ async function startServer() {
     try {
       const pending = db.prepare("SELECT * FROM print_queue WHERE status = 'pending'").all();
       res.json(pending);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/print-queue/cleanup', (req, res) => {
+    try {
+      cleanupPrintQueue();
+      res.json({ success: true, message: 'Cola de impresión depurada exitosamente' });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

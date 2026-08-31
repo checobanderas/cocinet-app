@@ -21,7 +21,9 @@ import {
   getDefaultProductCategories,
   getProductReportName,
   getProductSortScore,
-  getCompanyCatalog
+  getCompanyCatalog,
+  getPreferredTablesMode,
+  setPreferredTablesMode
 } from "./utils/appHelpers";
 
 import { OwnerCrudModal } from './components/modals/OwnerCrudModal';
@@ -1041,11 +1043,10 @@ export default function App() {
               localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
             }
 
-            const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
             if (loggedUser.role === "admin" || loggedUser.id.endsWith("-sistemas")) {
               setAppMode("corte-tabla");
             } else {
-              setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+              setAppMode(getPreferredTablesMode());
             }
             setLoginSubStep("tenant");
             
@@ -1259,11 +1260,10 @@ export default function App() {
             };
             setCurrentUser((prev) => {
               if (!prev || prev.id !== autoUser.id || prev.role !== autoUser.role) {
-                const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
                 if (autoUser.role === "admin" || autoUser.id.endsWith("-sistemas")) {
                   setAppMode("corte-tabla");
                 } else {
-                  setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+                  setAppMode(getPreferredTablesMode());
                 }
                 return autoUser;
               }
@@ -2517,66 +2517,91 @@ export default function App() {
   const [formOwnerPin, setFormOwnerPin] = useState("");
   const [formOwnerSupervisorPin, setFormOwnerSupervisorPin] = useState("");
   const [formOwnerLogo, setFormOwnerLogo] = useState("");
+  const isSavingOwnerRef = useRef(false);
+  const [isSavingOwner, setIsSavingOwner] = useState(false);
 
   const handleSaveOwner = async () => {
+    if (isSavingOwnerRef.current) return;
     if (!formOwnerName.trim()) {
       triggerAppNotification("⚠️ Error", "El nombre del propietario es requerido.", "warning");
       return;
     }
 
-    let updatedOwners = [...customOwners];
-    let updatedPins = { ...customOwnerPins };
-    let updatedSupervisorPins = { ...customOwnerSupervisorPins };
-
-    if (editingOwner) {
-      // Edit existing
-      updatedOwners = updatedOwners.map(o => {
-        if (o.key === editingOwner.key) {
-          return { ...o, name: formOwnerName.toUpperCase(), avatar: formOwnerAvatar, accentColor: formOwnerAccent, logo: formOwnerLogo };
-        }
-        return o;
-      });
-      if (formOwnerPin) {
-        updatedPins[editingOwner.key] = formOwnerPin;
+    if (!editingOwner) {
+      const exists = customOwners.some(
+        o => o.name.trim().toUpperCase() === formOwnerName.trim().toUpperCase()
+      );
+      if (exists) {
+        triggerAppNotification(
+          "⚠️ Propietario Existente",
+          `Ya existe un propietario con el nombre "${formOwnerName.trim()}".`,
+          "warning"
+        );
+        return;
       }
-      if (formOwnerSupervisorPin) {
-        updatedSupervisorPins[editingOwner.key] = formOwnerSupervisorPin;
-      }
-      triggerAppNotification("💾 Propietario Actualizado", `Se guardaron los cambios para ${formOwnerName}`, "success");
-    } else {
-      // Add new
-      const nextKey = (Math.max(...updatedOwners.map(o => parseInt(o.key) || 0), 0) + 1).toString();
-      const newOwner = {
-        key: nextKey,
-        name: formOwnerName.toUpperCase(),
-        avatar: formOwnerAvatar,
-        company: `Grupo ${formOwnerName}`,
-        accentColor: formOwnerAccent,
-        logo: formOwnerLogo
-      };
-      updatedOwners.push(newOwner);
-      updatedPins[nextKey] = formOwnerPin || (2000 + parseInt(nextKey) * 10).toString();
-      updatedSupervisorPins[nextKey] = formOwnerSupervisorPin || (2001 + parseInt(nextKey) * 10).toString();
-      triggerAppNotification("👑 Propietario Registrado", `Se creó el propietario ${formOwnerName} (PIN Owner: ${updatedPins[nextKey]}, Supervisor: ${updatedSupervisorPins[nextKey]})`, "success");
     }
 
-    setCustomOwners(updatedOwners);
-    setCustomOwnerPins(updatedPins);
-    setCustomOwnerSupervisorPins(updatedSupervisorPins);
-    UNIQUE_OWNERS = updatedOwners;
-    OWNER_PINS = updatedPins;
-    OWNER_SUPERVISOR_PINS = updatedSupervisorPins;
-    localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(updatedOwners));
-    localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(updatedPins));
-    localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(updatedSupervisorPins));
-    setOwnersVersion(prev => prev + 1);
-    setShowOwnerCrudModal(false);
-    setEditingOwner(null);
+    isSavingOwnerRef.current = true;
+    setIsSavingOwner(true);
 
     try {
-      await saveCustomOwnersToFirebase(updatedOwners, updatedPins, updatedSupervisorPins);
-    } catch (err) {
-      console.error("Error al guardar propietarios en Firebase:", err);
+      let updatedOwners = [...customOwners];
+      let updatedPins = { ...customOwnerPins };
+      let updatedSupervisorPins = { ...customOwnerSupervisorPins };
+
+      if (editingOwner) {
+        // Edit existing
+        updatedOwners = updatedOwners.map(o => {
+          if (o.key === editingOwner.key) {
+            return { ...o, name: formOwnerName.toUpperCase(), avatar: formOwnerAvatar, accentColor: formOwnerAccent, logo: formOwnerLogo };
+          }
+          return o;
+        });
+        if (formOwnerPin) {
+          updatedPins[editingOwner.key] = formOwnerPin;
+        }
+        if (formOwnerSupervisorPin) {
+          updatedSupervisorPins[editingOwner.key] = formOwnerSupervisorPin;
+        }
+        triggerAppNotification("💾 Propietario Actualizado", `Se guardaron los cambios para ${formOwnerName}`, "success");
+      } else {
+        // Add new
+        const nextKey = (Math.max(...updatedOwners.map(o => parseInt(o.key) || 0), 0) + 1).toString();
+        const newOwner = {
+          key: nextKey,
+          name: formOwnerName.toUpperCase(),
+          avatar: formOwnerAvatar,
+          company: `Grupo ${formOwnerName}`,
+          accentColor: formOwnerAccent,
+          logo: formOwnerLogo
+        };
+        updatedOwners.push(newOwner);
+        updatedPins[nextKey] = formOwnerPin || (2000 + parseInt(nextKey) * 10).toString();
+        updatedSupervisorPins[nextKey] = formOwnerSupervisorPin || (2001 + parseInt(nextKey) * 10).toString();
+        triggerAppNotification("👑 Propietario Registrado", `Se creó el propietario ${formOwnerName} (PIN Owner: ${updatedPins[nextKey]}, Supervisor: ${updatedSupervisorPins[nextKey]})`, "success");
+      }
+
+      setCustomOwners(updatedOwners);
+      setCustomOwnerPins(updatedPins);
+      setCustomOwnerSupervisorPins(updatedSupervisorPins);
+      UNIQUE_OWNERS = updatedOwners;
+      OWNER_PINS = updatedPins;
+      OWNER_SUPERVISOR_PINS = updatedSupervisorPins;
+      localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(updatedOwners));
+      localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(updatedPins));
+      localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(updatedSupervisorPins));
+      setOwnersVersion(prev => prev + 1);
+      setShowOwnerCrudModal(false);
+      setEditingOwner(null);
+
+      try {
+        await saveCustomOwnersToFirebase(updatedOwners, updatedPins, updatedSupervisorPins);
+      } catch (err) {
+        console.error("Error al guardar propietarios en Firebase:", err);
+      }
+    } finally {
+      isSavingOwnerRef.current = false;
+      setIsSavingOwner(false);
     }
   };
 
@@ -2631,6 +2656,8 @@ export default function App() {
   const [transferStep, setTransferStep] = useState<0 | 1 | 2>(0);
   const [transferTargetOwnerKey, setTransferTargetOwnerKey] = useState("");
   const [transferIncludeBranches, setTransferIncludeBranches] = useState(true);
+  const isSavingTenantRef = useRef(false);
+  const [isSavingTenant, setIsSavingTenant] = useState(false);
 
   const resetTenantForm = () => {
     setEditingTenant(null);
@@ -2767,6 +2794,7 @@ export default function App() {
   };
 
   const handleSaveTenant = async () => {
+    if (isSavingTenantRef.current) return;
     if (!formTenantName.trim()) {
       triggerAppNotification("⚠️ Nombre Requerido", "Debes indicar el nombre de la sucursal/empresa.", "warning");
       return;
@@ -2792,81 +2820,103 @@ export default function App() {
       return;
     }
 
-    const tenantData: CompanyTenant = {
-      ...editingTenant,
-      id: editingTenant ? editingTenant.id : crypto.randomUUID(),
-      name: formTenantName.trim(),
-      rfc: formTenantRfc.trim().toUpperCase(),
-      ownerEmail: nextEmail.trim() || "contacto@cocinet.mx",
-      avatar: formTenantAvatar || "🏢",
-      accentColor: formTenantAccentColor || "#4f46e5",
-      lightColor: formTenantAccentColor + "33",
-      bgColor: "from-slate-50 to-indigo-100",
-      sucursalDefault: formTenantSucursal.trim(),
-      type: formTenantType,
-      propietario: nextPropietario || "PROPIETARIO",
-      ownerKey: nextOwnerKey || "1",
-      direccion: formTenantDireccion.trim(),
-      lat: formTenantLat !== "" ? Number(formTenantLat) : undefined,
-      lng: formTenantLng !== "" ? Number(formTenantLng) : undefined,
-      logoUrl: formTenantLogoUrl || "",
-      requireInternalFolio: formTenantRequireInternalFolio,
-      allowEfectivo: formTenantAllowEfectivo,
-      allowTarjeta: formTenantAllowTarjeta,
-      allowTransferencia: formTenantAllowTransferencia,
-      allowLupay: formTenantAllowLupay,
-      requireCardDigits: formTenantRequireCardDigits,
-      createdAt: editingTenant?.createdAt || getMexicoISOString(),
-      updatedAt: getMexicoISOString(),
-    };
-
-    if (editingTenant) {
-      const idx = COMPANY_CATALOG.findIndex(c => c.id === editingTenant.id);
-      if (idx !== -1) {
-        COMPANY_CATALOG[idx] = tenantData;
+    // Double-submit / duplicate branch check
+    if (!editingTenant) {
+      const isDuplicate = COMPANY_CATALOG.some(
+        c => c.name.trim().toLowerCase() === formTenantName.trim().toLowerCase() &&
+             (c.sucursalDefault || "").trim().toLowerCase() === formTenantSucursal.trim().toLowerCase() &&
+             c.ownerKey === (nextOwnerKey || "1")
+      );
+      if (isDuplicate) {
+        triggerAppNotification(
+          "⚠️ Sucursal Existente",
+          `Ya existe una sucursal registrada como "${formTenantName.trim()}" en este grupo. Si deseas editarla, pulsa el lápiz.`,
+          "warning"
+        );
+        return;
       }
-    } else {
-      COMPANY_CATALOG.push(tenantData);
-      // Auto-seed default 30 tables and standard products for new sucursal / tenant 🏢🌮
-      initializeDefaultTablesForTenant(tenantData.id).catch((err) => {
-        console.warn("Could not seed tables for new tenant:", err);
-      });
-      initializeDefaultProductsForTenant(tenantData.id).catch((err) => {
-        console.warn("Could not seed products for new tenant:", err);
-      });
     }
 
-    // Persist to Firestore as the source of truth 🏢🔥
+    isSavingTenantRef.current = true;
+    setIsSavingTenant(true);
+
     try {
-      await addTenantToFirebase(tenantData);
-    } catch (err) {
-      console.warn("Could not save tenant to Firebase:", err);
+      const tenantData: CompanyTenant = {
+        ...editingTenant,
+        id: editingTenant ? editingTenant.id : crypto.randomUUID(),
+        name: formTenantName.trim(),
+        rfc: formTenantRfc.trim().toUpperCase(),
+        ownerEmail: nextEmail.trim() || "contacto@cocinet.mx",
+        avatar: formTenantAvatar || "🏢",
+        accentColor: formTenantAccentColor || "#4f46e5",
+        lightColor: formTenantAccentColor + "33",
+        bgColor: "from-slate-50 to-indigo-100",
+        sucursalDefault: formTenantSucursal.trim(),
+        type: formTenantType,
+        propietario: nextPropietario || "PROPIETARIO",
+        ownerKey: nextOwnerKey || "1",
+        direccion: formTenantDireccion.trim(),
+        lat: formTenantLat !== "" ? Number(formTenantLat) : undefined,
+        lng: formTenantLng !== "" ? Number(formTenantLng) : undefined,
+        logoUrl: formTenantLogoUrl || "",
+        requireInternalFolio: formTenantRequireInternalFolio,
+        allowEfectivo: formTenantAllowEfectivo,
+        allowTarjeta: formTenantAllowTarjeta,
+        allowTransferencia: formTenantAllowTransferencia,
+        allowLupay: formTenantAllowLupay,
+        requireCardDigits: formTenantRequireCardDigits,
+        createdAt: editingTenant?.createdAt || getMexicoISOString(),
+        updatedAt: getMexicoISOString(),
+      };
+
+      if (editingTenant) {
+        const idx = COMPANY_CATALOG.findIndex(c => c.id === editingTenant.id);
+        if (idx !== -1) {
+          COMPANY_CATALOG[idx] = tenantData;
+        }
+      } else {
+        COMPANY_CATALOG.push(tenantData);
+        // Auto-seed default 30 tables for new sucursal / tenant 🏢🍽️
+        initializeDefaultTablesForTenant(tenantData.id).catch((err) => {
+          console.warn("Could not seed tables for new tenant:", err);
+        });
+      }
+
+      // Persist to Firestore as the source of truth 🏢🔥
+      try {
+        await addTenantToFirebase(tenantData);
+      } catch (err) {
+        console.warn("Could not save tenant to Firebase:", err);
+      }
+
+      localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
+      setTenantsVersion(prev => prev + 1);
+
+      // Persist company configuration in Firebase database (Firestore settings collection) 🏢🔥
+      try {
+        await saveCompanyConfigInFirebase(tenantData.id, {
+          businessName: tenantData.name,
+          rfc: tenantData.rfc,
+          sucursal: tenantData.sucursalDefault,
+          footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${tenantData.ownerEmail})`,
+          logoUrl: tenantData.logoUrl || "",
+        });
+      } catch (err) {
+        console.warn("Could not save to Firebase, will try again later:", err);
+      }
+
+      triggerAppNotification(
+        editingTenant ? "📝 Inquilino Actualizado" : "🏢 Inquilino Registrado",
+        `Se ha guardado la configuración para "${tenantData.name}" con éxito.`,
+        "success"
+      );
+
+      resetTenantForm();
+      setShowTenantCrudModal(false);
+    } finally {
+      isSavingTenantRef.current = false;
+      setIsSavingTenant(false);
     }
-
-    localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
-    setTenantsVersion(prev => prev + 1);
-
-    // Persist company configuration in Firebase database (Firestore settings collection) 🏢🔥
-    try {
-      await saveCompanyConfigInFirebase(tenantData.id, {
-        businessName: tenantData.name,
-        rfc: tenantData.rfc,
-        sucursal: tenantData.sucursalDefault,
-        footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${tenantData.ownerEmail})`,
-        logoUrl: tenantData.logoUrl || "",
-      });
-    } catch (err) {
-      console.warn("Could not save to Firebase, will try again later:", err);
-    }
-
-    triggerAppNotification(
-      editingTenant ? "📝 Inquilino Actualizado" : "🏢 Inquilino Registrado",
-      `Se ha guardado la configuración para "${tenantData.name}" con éxito.`,
-      "success"
-    );
-
-    resetTenantForm();
-    setShowTenantCrudModal(false);
   };
 
   const handleDeleteTenant = async (id: string) => {
@@ -2982,17 +3032,26 @@ export default function App() {
       return;
     }
 
-    // 3. Search through ALL users of ALL sucursales
+    // 3. Search ONLY users of the currently assigned/selected sucursal (Tenant Scoping)
     let matchedUser: User | null = null;
-    let matchedTenant: CompanyTenant | null = null;
+    let matchedTenant: CompanyTenant | null = selectedTenant || null;
 
-    for (const company of COMPANY_CATALOG) {
-      const companyUsers = getTenantUsers(company.id);
+    if (selectedTenant) {
+      const companyUsers = getTenantUsers(selectedTenant.id);
       const user = companyUsers.find((u) => u.pin === enteredPin);
       if (user) {
         matchedUser = user;
-        matchedTenant = company;
-        break;
+      }
+    } else {
+      // Fallback only if no tenant has ever been set on this device
+      for (const company of COMPANY_CATALOG) {
+        const companyUsers = getTenantUsers(company.id);
+        const user = companyUsers.find((u) => u.pin === enteredPin);
+        if (user) {
+          matchedUser = user;
+          matchedTenant = company;
+          break;
+        }
       }
     }
 
@@ -3048,12 +3107,11 @@ export default function App() {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) {}
 
-      // Redirect based on role and screen orientation
-      const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+      // Redirect based on role and preference
       if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
         setAppMode("corte-tabla");
       } else {
-        setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+        setAppMode(getPreferredTablesMode());
       }
     } else {
       const nextAttempts = pinAttempts + 1;
@@ -3066,7 +3124,7 @@ export default function App() {
       } else {
         triggerAppNotification(
           "❌ PIN Incorrecto",
-          `El PIN ingresado no corresponde a ningún propietario o empleado autorizado. Intento ${nextAttempts}/3.`,
+          `El PIN ingresado no corresponde a ningún usuario autorizado en ${selectedTenant?.name || "esta sucursal"}. Intento ${nextAttempts}/3.`,
           "warning"
         );
       }
@@ -4419,7 +4477,7 @@ export default function App() {
     | "reporte-movimientos"
     | "verify-menu"
     | "gestion_cuentas"
-  >("floorplan");
+  >(() => getPreferredTablesMode());
 
   const [systemLocalWindowsAutoPrint, setSystemLocalWindowsAutoPrint] = useState<boolean>(() => {
     const cached = localStorage.getItem("system_local_windows_autoprint");
@@ -5538,11 +5596,10 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (e) {}
 
-        const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
         if (adminUser && (adminUser.role === "admin" || adminUser.id.endsWith("-sistemas"))) {
           setAppMode("corte-tabla");
         } else {
-          setAppMode(isVertical ? "floorplan" : "gestion_cuentas");
+          setAppMode(getPreferredTablesMode());
         }
         triggerAppNotification(
           "🏢 Acceso Autorizado",
@@ -6189,7 +6246,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       
       // Redirect based on role
       if (selectedLoginUser.role === "mesero") {
-        setAppMode("floorplan");
+        setAppMode(getPreferredTablesMode());
       } else {
         setAppMode("corte-tabla");
       }
@@ -6251,7 +6308,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     setIsUrlTokenSession(false);
     localStorage.removeItem("cocinet_is_url_token");
     
-    setAppMode("floorplan");
+    setAppMode(getPreferredTablesMode());
   };
 
   const existingSubcategories = useMemo(() => {
@@ -7450,6 +7507,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
           searchCompanyQuery={searchCompanyQuery}
           setSearchCompanyQuery={setSearchCompanyQuery}
           setSelectedTenant={setSelectedTenant}
+          isSavingTenant={isSavingTenant}
+          isSavingOwner={isSavingOwner}
       
     />
   );;
@@ -8357,30 +8416,85 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     if (cart.length === 0) { alert("execute: El carrito está vacío"); return; }
     if (!selectedTable) { alert("execute: Mesa no seleccionada"); return; }
     if (isGeneratingOrder) { console.log("execute: Ya se está generando la orden"); return; }
-    setIsGeneratingOrder(true);
-    setMenuToastMessage("Procesando comanda...");
-    setShowMenuToast(true);
 
     const tableLabel = selectedTable.label;
+    const currentTable = selectedTable;
+    const currentSelectedId = selectedTableId;
+    if (!currentSelectedId) { alert("execute: Mesa no seleccionada"); return; }
+
     const comandaItems = [...cart];
     const notes = generalNotes;
+    const folio = Date.now();
+    const existingTableFolio = (currentTable as any)?.folioInterno || ((currentTable as any)?.comandas || []).find((c: any) => c.folioInterno)?.folioInterno || "";
+    const finalFolioInterno = folioInterno || existingTableFolio || "";
 
+    const newComanda: Comanda = {
+      folio: folio,
+      folioInterno: finalFolioInterno,
+      timestamp: new Date(),
+      items: comandaItems,
+      generalNotes: notes,
+      createdBy: currentUser || undefined,
+    };
+
+    // ⚡ 1. OPTIMISTIC UI: Update local React state & cache IMMEDIATELY (0ms latency)
+    setTables((prevTables) => {
+      const updated = prevTables.map((t) => {
+        if (t.id === currentSelectedId) {
+          const existing = t.comandas || [];
+          return {
+            ...t,
+            status: "occupied" as const,
+            comandas: deduplicateComandas([...existing, newComanda]),
+            folioInterno: finalFolioInterno || t.folioInterno,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return t;
+      });
+      try {
+        const tid = selectedTenant?.id || "default-tenant";
+        localStorage.setItem("pos_tables_" + tid, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // ⚡ 2. Clear inputs, close modals, and transition screens INSTANTLY (0ms)
+    setCart([]);
+    setGeneralNotes("");
+    setShowComensalPreview(false);
+    setIsGeneratingOrder(false);
+
+    const actualGoToCheckout = (goToCheckout === true) && currentUser?.role !== "mesero";
+
+    if (actualGoToCheckout) {
+      setCheckoutFallbackItems(comandaItems);
+      setShowTipInput(false);
+      setShowDiscountInput(false);
+      setShowPaymentOptions(false);
+      setPaymentTipValue(0);
+      setPaymentDiscountValue(0);
+      setPaymentAmountReceived("");
+      setPaymentMethod("cash");
+      setCheckoutReturnMode(appMode);
+      setAppMode("checkout");
+    } else {
+      const preferred = getPreferredTablesMode();
+      if (appMode === "gestion_cuentas" || preferred === "gestion_cuentas") {
+        setAppMode("gestion_cuentas");
+        setSelectedTableGestion(null);
+      } else {
+        setAppMode("floorplan");
+        setSelectedTableId(null);
+      }
+    }
+
+    // ⚡ 3. BACKGROUND TASKS: Firestore persistence, notifications & printing (non-blocking)
     try {
-      if (!selectedTableId) throw new Error("Mesa no seleccionada");
-
-      const folio = await addComandaToFirebase(
-        selectedTableId,
-        comandaItems,
-        notes,
-        currentUser,
-        selectedTable,
-        folioInterno,
-      );
-
-      const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
-      const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
-      const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
-      const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
+      const dClient = selectedDeliveryClient?.name || (currentTable as any)?.deliveryClientName || "";
+      const dPhone = selectedDeliveryClient?.phone || (currentTable as any)?.deliveryClientPhone || "";
+      const dAddr = selectedDeliveryAddress || (currentTable as any)?.deliveryAddress || "";
+      const dNotes = deliveryNotes || (currentTable as any)?.deliveryNotes || "";
       
       let deliverySubStr = "";
       if (dClient || dAddr) {
@@ -8406,12 +8520,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       triggerAppNotification(
         "🍳 COMANDA ENVIADA",
-        `Mesa ${tableLabel} | Folio Interno: #${folioInterno} | ${comandaItems.length} productos.${deliverySubStr}`,
+        `Mesa ${tableLabel} | Folio: #${finalFolioInterno || folio} | ${comandaItems.length} productos.${deliverySubStr}`,
         "success",
         {
           isComandaNotification: true,
           comandaFolio: folio,
-          folioInterno: folioInterno,
+          folioInterno: finalFolioInterno,
           tableLabel: tableLabel,
           deliveryClientName: dClient || null,
           deliveryClientPhone: dPhone || null,
@@ -8429,7 +8543,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
           pedidoData: {
             tipo: "comanda",
             folio: folio,
-            folioInterno: folioInterno,
+            folioInterno: finalFolioInterno,
             mesa: tableLabel,
             deliveryClientName: dClient || null,
             deliveryClientPhone: dPhone || null,
@@ -8448,38 +8562,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         }
       );
 
-      const newComanda: Comanda = {
-        folio: folio,
-        folioInterno: folioInterno,
-        timestamp: new Date(),
-        items: comandaItems,
-        generalNotes: notes,
-        createdBy: currentUser || undefined,
-      };
-
-      // Update local React state & cache OPTIMISTICALLY immediately! ⚡ (0ms UI latency)
-      const currentSelectedId = selectedTableId;
-      setTables((prevTables) => {
-        const updated = prevTables.map((t) => {
-          if (t.id === currentSelectedId) {
-            const existing = t.comandas || [];
-            return {
-              ...t,
-              status: "occupied",
-              comandas: deduplicateComandas([...existing, newComanda]),
-              folioInterno: folioInterno || t.folioInterno,
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return t;
-        });
-        try {
-          const tid = selectedTenant?.id || "default-tenant";
-          localStorage.setItem("pos_tables_" + tid, JSON.stringify(updated));
-        } catch (e) {}
-        return updated;
-      });
-
       // Trigger automatic printing for both destinations
       const destinations = getComandaDestinations(newComanda);
 
@@ -8495,39 +8577,20 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         printComanda(tableLabel, newComanda, "bar");
       }
 
-      const actualGoToCheckout = (goToCheckout === true) && currentUser?.role !== "mesero";
-
-      if (actualGoToCheckout) {
-        setCheckoutFallbackItems(comandaItems);
-        setShowTipInput(false);
-        setShowDiscountInput(false);
-        setShowPaymentOptions(false);
-        setPaymentTipValue(0);
-        setPaymentDiscountValue(0);
-        setPaymentAmountReceived("");
-        setPaymentMethod("cash");
-        setCheckoutReturnMode(appMode);
-        setAppMode("checkout");
-        setShowComensalPreview(false);
-        setCart([]);
-        setGeneralNotes("");
-      } else {
-        if (appMode === "gestion_cuentas") {
-          setSelectedTableGestion(null);
-        } else {
-          setAppMode("floorplan");
-          setSelectedTableId(null);
-        }
-        setCart([]);
-        setGeneralNotes("");
-      }
+      // Save to Firebase in background without blocking UI
+      addComandaToFirebase(
+        currentSelectedId,
+        comandaItems,
+        notes,
+        currentUser,
+        currentTable,
+        folioInterno,
+        folio
+      ).catch((err) => {
+        console.error("Error saving comanda in background to Firebase:", err);
+      });
     } catch (error: any) {
-      console.error("Error generating order:", error);
-      setMenuToastMessage(
-        `Error: ${error.message || "No se pudo generar la comanda"}`,
-      );
-    } finally {
-      setIsGeneratingOrder(false);
+      console.error("Error dispatching background tasks for comanda:", error);
     }
   };
 
@@ -8555,12 +8618,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const freshTable = tables.find(t => t.id === selectedTableId);
       if (!freshTable || freshTable.status === "available" || !freshTable.comandas || freshTable.comandas.length === 0) {
         alert("⚠️ Esta mesa ya ha sido cancelada o liberada por un administrador. No se puede cobrar.");
-        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+        setAppMode(nextMode);
+        if (nextMode === "gestion_cuentas") {
+          setSelectedTableGestion(null);
+        }
+        setCheckoutReturnMode(null);
         setSelectedTableId(null);
         setCheckoutFallbackItems([]);
         setShowPaymentOptions(false);
@@ -8631,12 +8694,12 @@ setCheckoutReturnMode(null);
       }
     }
 
-    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+    setAppMode(nextMode);
+    if (nextMode === "gestion_cuentas") {
+      setSelectedTableGestion(null);
+    }
+    setCheckoutReturnMode(null);
     setSelectedTableId(null);
     setPaymentTipValue(0);
     setPaymentDiscountValue(0);
@@ -8699,12 +8762,12 @@ setCheckoutReturnMode(null);
       }
     }
 
-    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+    setAppMode(nextMode);
+    if (nextMode === "gestion_cuentas") {
+      setSelectedTableGestion(null);
+    }
+    setCheckoutReturnMode(null);
     setSelectedTableId(null);
     setPaymentTipValue(0);
     setPaymentDiscountValue(0);
@@ -8746,12 +8809,12 @@ setCheckoutReturnMode(null);
 
       setShowTransferTableModal(false);
       setTransferTargetTableId("");
-      const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+      const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+      setAppMode(nextMode);
+      if (nextMode === "gestion_cuentas") {
+        setSelectedTableGestion(null);
+      }
+      setCheckoutReturnMode(null);
       setSelectedTableId(targetTable.id); // set target table as active so they can see it!
     } catch(err) {
       console.error("Error transferring table", err);
@@ -8831,12 +8894,12 @@ setCheckoutReturnMode(null);
        setShowMoveItemsModal(false);
        setMoveItemsSelection({});
        setMoveTargetTableId("");
-       const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+       const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+       setAppMode(nextMode);
+       if (nextMode === "gestion_cuentas") {
+         setSelectedTableGestion(null);
+       }
+       setCheckoutReturnMode(null);
        setSelectedTableId(null);
     } catch(err) {
        console.error("Error moving items", err);
@@ -10262,6 +10325,16 @@ setCheckoutReturnMode(null);
     />
   );;
 
+  const handleSwitchTablesMode = (targetMode: "floorplan" | "gestion_cuentas") => {
+    setPreferredTablesMode(targetMode);
+    setAppMode(targetMode);
+    if (targetMode === "floorplan") {
+      setSelectedTableGestion(null);
+    } else {
+      setSelectedTableId(null);
+    }
+  };
+
   const renderFloorplan = () => (
     <FloorplanView
       generalNotes={generalNotes}
@@ -10274,13 +10347,13 @@ setCheckoutReturnMode(null);
       selectedTenant={selectedTenant}
       setMainTab={setMainTab}
       tables={tables}
-          effectiveTables={effectiveTables}
-          getComandaDestinations={getComandaDestinations}
-          getComensalColor={getComensalColor}
-          printComanda={printComanda}
-          startVoiceRecognition={startVoiceRecognition}
-          zones={zones}
-      
+      effectiveTables={effectiveTables}
+      getComandaDestinations={getComandaDestinations}
+      getComensalColor={getComensalColor}
+      printComanda={printComanda}
+      startVoiceRecognition={startVoiceRecognition}
+      zones={zones}
+      onSwitchTablesMode={handleSwitchTablesMode}
     />
   );;
 
@@ -11430,6 +11503,79 @@ Instrucciones:
     }
   };
 
+  const handleReplicateMenuToTenants = async (targetTenantIds: string[]) => {
+    if (importInProgressRef.current) return;
+    if (!selectedTenant) return;
+    if (!targetTenantIds || targetTenantIds.length === 0) {
+      triggerAppNotification("Error ⚠️", "Selecciona al menos una sucursal destino.", "warning");
+      return;
+    }
+
+    const activeProducts = products.filter((p: any) => !p.isDeleted);
+    if (activeProducts.length === 0) {
+      triggerAppNotification("Advertencia ⚠️", "La sucursal actual no contiene productos activos para replicar.", "warning");
+      return;
+    }
+
+    importInProgressRef.current = true;
+    setIsImportingTenantMenu(true);
+    try {
+      // De-duplicate active products
+      const seenKeys = new Set<string>();
+      const cleanProducts: any[] = [];
+      activeProducts.forEach((p: any) => {
+        if (!p.name) return;
+        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          cleanProducts.push(p);
+        }
+      });
+
+      const replicatedNames: string[] = [];
+
+      for (const destId of targetTenantIds) {
+        const destTenant = COMPANY_CATALOG.find(c => c.id === destId);
+        const destName = destTenant ? destTenant.name : destId;
+        replicatedNames.push(destName);
+
+        // 1. Soft delete destination products (with backup)
+        await softDeleteAllProductsFromFirebase(destId, destName, []);
+
+        // 2. Prepare payload
+        const productsToInsert = cleanProducts.map((p: any) => {
+          const { id, uid, tenantId, sucursal, ...rest } = p;
+          const newRawId = `prod_${destId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+          return {
+            ...rest,
+            id: newRawId,
+            uid: newRawId,
+            tenantId: destId,
+            isDeleted: false,
+            sucursal: destName
+          };
+        });
+
+        // 3. Save to Firebase
+        await bulkAddProductsToFirebase(productsToInsert, false, destId);
+      }
+
+      setManageMenuTab(null);
+
+      triggerAppNotification(
+        "¡Replicación Exitosa! 📡",
+        `Se han replicado exitosamente ${cleanProducts.length} productos a ${replicatedNames.length} sucursal(es): ${replicatedNames.join(", ")}.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Error al replicar menú a sucursales:", error);
+      triggerAppNotification("Error ❌", error.message || "Ocurrió un error al replicar el menú.", "warning");
+    } finally {
+      setIsImportingTenantMenu(false);
+      importInProgressRef.current = false;
+    }
+  };
+
   const renderManageMenu = () => (
     <ManageMenuView
       COMPANY_CATALOG={COMPANY_CATALOG}
@@ -11462,6 +11608,7 @@ Instrucciones:
       handleExcelUpload={handleExcelUpload}
       handleGenerateAdHocNotes={handleGenerateAdHocNotes}
       handleImportTenantMenu={handleImportTenantMenu}
+      handleReplicateMenuToTenants={handleReplicateMenuToTenants}
       handleMenuImageUpload={handleMenuImageUpload}
       handleResetMenuAndRefill={handleResetMenuAndRefill}
       handleTreeDragOver={handleTreeDragOver}
@@ -12669,7 +12816,7 @@ Instrucciones:
             setCompanyConfig(updated);
             saveCompanyConfigInFirebase(selectedTenant.id, updated).catch(console.error);
           }}
-      
+          onSwitchTablesMode={handleSwitchTablesMode}
     />
   );;
 

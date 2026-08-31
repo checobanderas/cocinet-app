@@ -56,6 +56,7 @@ interface TenantCrudModalProps {
   transferIncludeBranches: boolean;
   setTransferIncludeBranches: (v: boolean) => void;
   handleSaveTenant: () => Promise<void>;
+  isSavingTenant?: boolean;
   handleDeleteTenant: () => Promise<void>;
   executeTenantTransfer: () => Promise<void>;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
@@ -116,6 +117,7 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   transferIncludeBranches,
   setTransferIncludeBranches,
   handleSaveTenant,
+  isSavingTenant,
   handleDeleteTenant,
   executeTenantTransfer,
   triggerAppNotification,
@@ -906,11 +908,14 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                 </button>
                 <button
                   type="button"
+                  disabled={isSavingTenant}
                   onClick={handleSaveTenant}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-md border-none uppercase tracking-wider"
+                  className={`px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-md border-none uppercase tracking-wider ${
+                    isSavingTenant ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                  }`}
                   style={{ backgroundColor: "#10b981" }}
                 >
-                  💾 Guardar Cambios
+                  {isSavingTenant ? "⏳ Guardando..." : "💾 Guardar Cambios"}
                 </button>
               </div>
             </div>

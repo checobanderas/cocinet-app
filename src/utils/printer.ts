@@ -387,7 +387,7 @@ export class WindowsSpoolerTransport {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 900);
 
         const res = await fetch(`http://localhost:${port}/print`, {
           method: "POST",
@@ -411,7 +411,7 @@ export class WindowsSpoolerTransport {
       }
 
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 80));
       }
     }
 
@@ -424,13 +424,17 @@ export class WindowsSpoolerTransport {
       type: "error",
     });
 
-    // Intentar encolar en el backend local por contingencia
+    // Intentar encolar en el backend local por contingencia de forma segura
     try {
+      const qCtrl = new AbortController();
+      const qTimeout = setTimeout(() => qCtrl.abort(), 1000);
       await fetch(`/api/print-queue`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ printer_key: key, raw_data: prn }),
+        signal: qCtrl.signal,
       });
+      clearTimeout(qTimeout);
       console.log(`📌 [Printer Fallback] Ticket guardado en la cola de contingencia de la base de datos.`);
     } catch (e) {
       console.warn(`[Printer Fallback] Tampoco se pudo guardar en la cola de contingencia:`, e);

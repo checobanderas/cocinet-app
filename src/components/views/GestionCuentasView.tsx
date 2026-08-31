@@ -25,6 +25,7 @@ interface GestionCuentasViewProps {
   companyConfig?: any;
   currentUser?: any;
   updateCompanyConfig?: (updates: any) => void;
+  onSwitchTablesMode?: (mode: "floorplan" | "gestion_cuentas") => void;
 }
 
 export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
@@ -48,7 +49,8 @@ export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
   onScaleChange,
   companyConfig,
   currentUser,
-  updateCompanyConfig
+  updateCompanyConfig,
+  onSwitchTablesMode
 }) => {
   const [presentAlert] = useIonAlert();
   const [isEditingLayout, setIsEditingLayout] = React.useState(false);
@@ -232,23 +234,39 @@ return (
           showBack: !!selectedTableGestion,
           onBack: () => setSelectedTableGestion(null),
           showMenu: !selectedTableGestion,
-          actions: (selectedTableGestion && isOnline) ? (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={startVoiceRecognition}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-black text-[10px] sm:text-xs transition-all cursor-pointer border-none shadow-md ${
-                isListening
-                  ? "bg-red-500 text-white animate-pulse"
-                  : "bg-amber-400 text-slate-900"
-              }`}
-              title={isListening ? "Detener..." : "Pedir por Voz"}
-            >
-              <span className="flex items-center gap-1 select-none">
-                {isListening ? "⏹️ Detener" : "🎙️ Voz"}
-              </span>
-            </motion.button>
-          ) : null
+          actions: (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {!selectedTableGestion && onSwitchTablesMode && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onSwitchTablesMode("floorplan")}
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-black text-[11px] sm:text-xs transition-all cursor-pointer border border-blue-500/40 shadow-sm"
+                  title="Cambiar a Mapa de Mesas (Pestañas)"
+                >
+                  <span>🍽️</span>
+                  <span className="hidden sm:inline">Mapa de Mesas</span>
+                </motion.button>
+              )}
+              {isOnline && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={startVoiceRecognition}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-black text-[10px] sm:text-xs transition-all cursor-pointer border-none shadow-md ${
+                    isListening
+                      ? "bg-red-500 text-white animate-pulse"
+                      : "bg-amber-400 text-slate-900"
+                  }`}
+                  title={isListening ? "Detener..." : "Pedir por Voz"}
+                >
+                  <span className="flex items-center gap-1 select-none">
+                    {isListening ? "⏹️ Detener" : "🎙️ Voz"}
+                  </span>
+                </motion.button>
+              )}
+            </div>
+          )
         })}
         <IonContent
           className="ion-padding"

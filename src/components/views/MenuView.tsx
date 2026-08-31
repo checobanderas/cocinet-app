@@ -87,6 +87,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
   addToCart, getComensalColor, openItemNoteModal, startVoiceRecognition, totalItems, totalPrice, updateQuantity
 }) => {
 const safeProductSalesMap = productSalesMap || {};
+
 const subcategories = Array.from(
       new Set(
         products
@@ -104,7 +105,20 @@ const subcategories = Array.from(
         subtitle: `Tomando pedido: ${currentUser?.name || "Mesero"}`,
         showBack: true,
         minimal: appMode === "gestion_cuentas",
-        onBack: () => appMode === "gestion_cuentas" ? setSelectedTableGestion(null) : setAppMode("floorplan"),
+        onBack: () => {
+          if (appMode === "gestion_cuentas") {
+            setSelectedTableGestion(null);
+          } else {
+            try {
+              const saved = localStorage.getItem("cocinet_preferred_tables_view");
+              const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+              const nextMode = saved || (isVertical ? "floorplan" : "gestion_cuentas");
+              setAppMode(nextMode);
+            } catch (e) {
+              setAppMode("floorplan");
+            }
+          }
+        },
         actions: isOnline ? (
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -311,12 +325,9 @@ const subcategories = Array.from(
               ),
             );
 
-            const isLargeList = filteredProducts.length > 5;
-            const options = isLargeList
-              ? ["Todos", "⭐ Favoritos", ...availableSubgroups]
-              : availableSubgroups.length > 1
-                ? ["Todos", ...availableSubgroups]
-                : [];
+            const options = availableSubgroups.length > 0
+              ? ["Todos", ...availableSubgroups]
+              : [];
 
             if (options.length <= 1) return null;
 
@@ -355,13 +366,11 @@ const subcategories = Array.from(
                           fontWeight: "bold",
                           border: isSelected ? "none" : "1px solid #cbd5e1",
                           background: isSelected
-                            ? subgroup === "⭐ Favoritos"
-                              ? "#eab308"
-                              : activeCategory === "food"
-                                ? "#ef4444"
-                                : activeCategory === "drinks"
-                                  ? "#3b82f6"
-                                  : "#f59e0b"
+                            ? activeCategory === "food"
+                              ? "#ef4444"
+                              : activeCategory === "drinks"
+                                ? "#3b82f6"
+                                : "#f59e0b"
                             : "#f8fafc",
                           color: isSelected ? "white" : "#475569",
                           cursor: "pointer",
@@ -376,6 +385,8 @@ const subcategories = Array.from(
               </IonToolbar>
             );
           })()}
+
+
 
         </IonHeader>
 
@@ -420,18 +431,9 @@ const subcategories = Array.from(
 
             let displayProducts = baseProducts;
 
-            if (activeSubgroup === "⭐ Favoritos") {
-              displayProducts = [...baseProducts].sort(
-                (a, b) => (safeProductSalesMap[b.id] || 0) - (safeProductSalesMap[a.id] || 0)
-              ).slice(0, 12);
-            } else if (activeSubgroup !== "Todos") {
+            if (activeSubgroup !== "Todos") {
               displayProducts = baseProducts.filter(
                 (item) => (item.subgroup || "") === activeSubgroup
-              );
-            } else if (baseProducts.length > 5) {
-              // Pre-sort large lists by top-sold items so popular items stay at top
-              displayProducts = [...baseProducts].sort(
-                (a, b) => (safeProductSalesMap[b.id] || 0) - (safeProductSalesMap[a.id] || 0)
               );
             }
 
@@ -509,62 +511,73 @@ const subcategories = Array.from(
                   const invStatus = getProductInventoryStatus(product, inventory);
                   const salesCount = safeProductSalesMap[product.id] || 0;
 
+                  // Total de este producto ya pedido en comandas previas de la mesa/cuenta
+                  const alreadyOrderedCount = (selectedTable?.comandas || [])
+                    .flatMap((c: any) => c.items || [])
+                    .filter((i: any) => (i.product?.id === product.id) || (i.productId === product.id))
+                    .reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
+
+                  const isBeingOrdered = totalQty > 0;
+                  const wasAlreadyOrdered = alreadyOrderedCount > 0;
+
+                  // Estilos dinámicos según estado del producto
+                  let cardBg = "white";
+                  let cardBorder = "1px solid #e2e8f0";
+                  let cardShadow = "0 2px 8px rgba(0,0,0,0.04)";
+
+                  if (isBeingOrdered) {
+                    // Fondo y borde destacados cuando se está ordenando ahora
+                    cardBg = "#eff6ff";
+                    cardBorder = "2px solid #2563eb";
+                    cardShadow = "0 4px 14px rgba(37, 99, 235, 0.20)";
+                  } else if (wasAlreadyOrdered) {
+                    // Fondo y borde cuando ya se había pedido previamente
+                    cardBg = "#f0fdf4";
+                    cardBorder = "1.5px solid #86efac";
+                    cardShadow = "0 2px 8px rgba(16, 185, 129, 0.10)";
+                  }
+
                   return (
                     <div
                       key={product.id}
+                      onClick={() => addToCart(product)}
                       style={{
                         margin: appMode === "gestion_cuentas" ? "4px 6px" : "8px 12px",
                         padding: appMode === "gestion_cuentas" ? "8px 10px" : "10px 14px",
                         borderRadius: "16px",
-                        background: "white",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                        border: totalQty > 0 ? "2px solid #3b82f6" : "1px solid #e2e8f0",
+                        background: cardBg,
+                        boxShadow: cardShadow,
+                        border: cardBorder,
                         display: "flex",
                         alignItems: "center",
                         gap: appMode === "gestion_cuentas" ? "8px" : "12px",
-                        transition: "all 0.2s ease",
+                        transition: "all 0.15s ease",
+                        cursor: "pointer",
+                        userSelect: "none",
                       }}
+                      className="active:scale-[0.98] hover:shadow-md transition-transform"
                     >
-                      {/* 1. LEFT FIXED ACTION COLUMN (width: 120px) */}
-                      <div
-                        style={{
-                          width: appMode === "gestion_cuentas" ? "90px" : "120px",
-                          minWidth: appMode === "gestion_cuentas" ? "90px" : "120px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-start",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {totalQty === 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => addToCart(product)}
-                            style={{
-                              width: appMode === "gestion_cuentas" ? "38px" : "48px",
-                              height: appMode === "gestion_cuentas" ? "36px" : "44px",
-                              background: "#2563eb",
-                              color: "white",
-                              borderRadius: "14px",
-                              border: "none",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.35)",
-                              transition: "transform 0.1s ease, background-color 0.2s ease",
-                            }}
-                            className="active:scale-90 hover:bg-blue-700"
-                            title="Agregar 1"
-                          >
-                            <IonIcon icon={addOutline} style={{ fontSize: appMode === "gestion_cuentas" ? "1.4rem" : "1.8rem", fontWeight: "bold" }} />
-                          </button>
-                        ) : (
+                      {/* 1. BOTONERA DE CONTROL (+, CANTIDAD, -): SOLO APARECE CUANDO SE ESTÁ PIDIENDO (totalQty > 0) */}
+                      {isBeingOrdered && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            width: appMode === "gestion_cuentas" ? "90px" : "120px",
+                            minWidth: appMode === "gestion_cuentas" ? "90px" : "120px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                            flexShrink: 0,
+                          }}
+                        >
                           <div style={{ display: "flex", alignItems: "center", gap: appMode === "gestion_cuentas" ? "3px" : "6px" }}>
-                            {/* BOTÓN + SIEMPRE EN LA EXTREMA IZQUIERDA */}
+                            {/* BOTÓN + */}
                             <button
                               type="button"
-                              onClick={() => addToCart(product)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(product);
+                              }}
                               style={{
                                 width: appMode === "gestion_cuentas" ? "30px" : "40px",
                                 height: appMode === "gestion_cuentas" ? "36px" : "44px",
@@ -578,16 +591,19 @@ const subcategories = Array.from(
                                 cursor: "pointer",
                                 boxShadow: "0 4px 12px rgba(37, 99, 235, 0.35)",
                               }}
-                              className="active:scale-90 hover:bg-blue-700 transition-all"
+                              className="active:scale-90 hover:bg-blue-700 transition-all flex items-center justify-center"
                               title="Agregar 1"
                             >
                               <IonIcon icon={addOutline} style={{ fontSize: appMode === "gestion_cuentas" ? "1.2rem" : "1.6rem", fontWeight: "bold" }} />
                             </button>
 
-                            {/* BOTÓN VERDE DE CANTIDAD EN EL CENTRO: CLICK SUMA DE 5 EN 5 */}
+                            {/* BOTÓN / BADGE DE CANTIDAD EN EL CENTRO: CLICK SUMA DE 5 EN 5 */}
                             <button
                               type="button"
-                              onClick={() => addToCart(product, 5)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(product, 5);
+                              }}
                               style={{
                                 background: getComensalColor(currentComensal),
                                 color: "white",
@@ -613,7 +629,10 @@ const subcategories = Array.from(
                             {/* BOTÓN - EN EL LADO DERECHO */}
                             <button
                               type="button"
-                              onClick={() => updateQuantity(product.id, currentComensal, -1)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(product.id, currentComensal, -1);
+                              }}
                               style={{
                                 width: appMode === "gestion_cuentas" ? "26px" : "34px",
                                 height: appMode === "gestion_cuentas" ? "36px" : "44px",
@@ -632,15 +651,31 @@ const subcategories = Array.from(
                               <IonIcon icon={removeOutline} style={{ fontSize: appMode === "gestion_cuentas" ? "1rem" : "1.3rem" }} />
                             </button>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
-                      {/* 2. MIDDLE PRODUCT DETAILS */}
+                      {/* 2. MIDDLE PRODUCT DETAILS: Nombre, precio y etiquetas */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: "900", fontSize: "1.05rem", color: "#0f172a", lineHeight: 1.2 }}>
+                          <span style={{ fontWeight: "900", fontSize: "1.05rem", color: isBeingOrdered ? "#1e40af" : "#0f172a", lineHeight: 1.2 }}>
                             {product.name}
                           </span>
+                          {wasAlreadyOrdered && (
+                            <span
+                              style={{
+                                fontSize: "0.68rem",
+                                fontWeight: "900",
+                                background: "#dcfce7",
+                                color: "#166534",
+                                border: "1px solid #86efac",
+                                padding: "1px 6px",
+                                borderRadius: "10px",
+                              }}
+                              title={`Ya ordenado en la cuenta: ${alreadyOrderedCount}`}
+                            >
+                              ✓ Pedidos: {alreadyOrderedCount}
+                            </span>
+                          )}
                           {salesCount > 0 && (
                             <span
                               style={{
@@ -659,7 +694,7 @@ const subcategories = Array.from(
                           )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
-                          <span style={{ color: getComensalColor(currentComensal), fontWeight: "900", fontSize: "1rem" }}>
+                          <span style={{ color: isBeingOrdered ? "#2563eb" : getComensalColor(currentComensal), fontWeight: "900", fontSize: "1rem" }}>
                             ${product.price.toFixed(2)}
                           </span>
                           {invStatus.status === "out_of_stock" && (
@@ -676,17 +711,21 @@ const subcategories = Array.from(
                       </div>
 
                       {/* 3. RIGHT SECONDARY ACTIONS (Notes & Delete) */}
-                      {totalQty > 0 && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                      {isBeingOrdered && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}
+                        >
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               openItemNoteModal(
                                 product.id,
                                 currentComensal,
                                 primaryItem?.notes,
-                              )
-                            }
+                              );
+                            }}
                             style={{
                               height: "40px",
                               padding: "0 10px",
@@ -708,7 +747,10 @@ const subcategories = Array.from(
                           </button>
                           <button
                             type="button"
-                            onClick={() => updateQuantity(product.id, currentComensal, -totalQty)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(product.id, currentComensal, -totalQty);
+                            }}
                             style={{
                               height: "40px",
                               width: "40px",

@@ -60,6 +60,8 @@ interface LoginViewProps {
   handleOwnerPinSubmit: any;
   handleSaveOwner: any;
   handleSaveTenant: any;
+  isSavingTenant?: boolean;
+  isSavingOwner?: boolean;
   handleSelectCompanyWithPinCheck: any;
   handleSupportAction: any;
   history: any;
@@ -198,6 +200,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   handleOwnerPinSubmit,
   handleSaveOwner,
   handleSaveTenant,
+  isSavingTenant,
+  isSavingOwner,
   handleSelectCompanyWithPinCheck,
   handleSupportAction,
   history,
@@ -363,6 +367,7 @@ return (
           handleDeleteTenant={handleDeleteTenant}
           executeTenantTransfer={executeTenantTransfer}
           triggerAppNotification={triggerAppNotification}
+          isSavingTenant={isSavingTenant}
         />
         <OwnerCrudModal
           showOwnerCrudModal={showOwnerCrudModal}
@@ -384,6 +389,7 @@ return (
           handleSaveOwner={handleSaveOwner}
           handleDeleteOwner={handleDeleteOwner}
           triggerAppNotification={triggerAppNotification}
+          isSavingOwner={isSavingOwner}
         />
         {/* Device Requests Modal (Master Admin only) */}
         <DeviceRequestsModal
@@ -854,9 +860,28 @@ return (
                       <h4 className="text-lg font-black text-slate-800 tracking-tight">
                         Ingrese su PIN de Seguridad 🔑
                       </h4>
-                      <p className="text-[14px] text-slate-500 font-semibold leading-relaxed">
-                        Introduce tu PIN de 4 dígitos asignado por tu administrador para iniciar sesión en tu sucursal.
-                      </p>
+                      {selectedTenant ? (
+                        <div className="p-3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-2 border-indigo-500/40 rounded-2xl text-white my-3 shadow-md">
+                          <div className="flex items-center justify-center gap-3">
+                            <span className="text-2xl">🏢</span>
+                            <div className="text-left">
+                              <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest block">
+                                Sucursal Asignada:
+                              </span>
+                              <h3 className="text-sm font-black text-white uppercase tracking-tight m-0">
+                                {selectedTenant.name}
+                              </h3>
+                              <span className="text-[11px] text-slate-300 font-bold block">
+                                📍 {selectedTenant.sucursalDefault || "Matriz"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[14px] text-slate-500 font-semibold leading-relaxed">
+                          Introduce tu PIN de 4 dígitos asignado por tu administrador para iniciar sesión en tu sucursal.
+                        </p>
+                      )}
                     </div>
 
                     {/* Display Dots */}
@@ -929,6 +954,12 @@ return (
                       >
                         ⌫
                       </button>
+                    </div>
+
+                    <div className="pt-2 text-center">
+                      <p className="text-[11px] text-slate-400 font-semibold m-0">
+                        🛡️ Terminal aislada y segura para {selectedTenant?.name || "esta sucursal"}
+                      </p>
                     </div>
                   </div>
                 ) : (

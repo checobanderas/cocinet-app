@@ -37,6 +37,7 @@ export interface Product {
   category: "food" | "drinks" | "desserts" | string;
   subcategory: string;
   subgroup?: string;
+  subsubgroup?: string;
   drinkType?: "hot" | "cold";
   destination: Destination;
   quickNotes?: string[];
@@ -445,5 +446,22 @@ export function getProductSortScore(product: any): number {
   else if (name.includes("champiñon") || name.includes("champiñón")) score += 11;
   
   return score;
+}
+
+export function getPreferredTablesMode(): "floorplan" | "gestion_cuentas" {
+  try {
+    const saved = localStorage.getItem("cocinet_preferred_tables_view");
+    if (saved === "floorplan" || saved === "gestion_cuentas") {
+      return saved;
+    }
+  } catch (e) {}
+  const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+  return isVertical ? "floorplan" : "gestion_cuentas";
+}
+
+export function setPreferredTablesMode(mode: "floorplan" | "gestion_cuentas"): void {
+  try {
+    localStorage.setItem("cocinet_preferred_tables_view", mode);
+  } catch (e) {}
 }
 

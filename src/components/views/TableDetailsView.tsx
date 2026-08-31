@@ -163,12 +163,18 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
           if (appMode === "gestion_cuentas") {
             setSelectedTableGestion(null);
           } else {
-            const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : "floorplan";
-setAppMode(nextMode);
-if (checkoutReturnMode === "gestion_cuentas") {
-  setSelectedTableGestion(null);
-}
-setCheckoutReturnMode(null);
+            try {
+              const saved = localStorage.getItem("cocinet_preferred_tables_view");
+              const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
+              const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : (saved || (isVertical ? "floorplan" : "gestion_cuentas")));
+              setAppMode(nextMode);
+              if (nextMode === "gestion_cuentas") {
+                setSelectedTableGestion(null);
+              }
+              setCheckoutReturnMode(null);
+            } catch (e) {
+              setAppMode("floorplan");
+            }
           }
           setPrecuentaComensal(1);
           setPrecuentaTab("resumen");

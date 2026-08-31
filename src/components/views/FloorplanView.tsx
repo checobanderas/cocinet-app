@@ -21,6 +21,7 @@ interface FloorplanViewProps {
   printComanda: any;
   startVoiceRecognition: any;
   zones: any;
+  onSwitchTablesMode?: (mode: "floorplan" | "gestion_cuentas") => void;
 }
 
 export const FloorplanView: React.FC<FloorplanViewProps> = ({
@@ -34,7 +35,8 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
   selectedTenant,
   setMainTab,
   tables,
-  effectiveTables, getComandaDestinations, getComensalColor, printComanda, startVoiceRecognition, zones
+  effectiveTables, getComandaDestinations, getComensalColor, printComanda, startVoiceRecognition, zones,
+  onSwitchTablesMode
 }) => {
   return (
 <IonPage>
@@ -43,23 +45,39 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
         subtitle: `📍 ${selectedTenant?.sucursalDefault || "Matriz"}`,
         showBack: false,
         showMenu: true,
-        actions: isOnline ? (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={startVoiceRecognition}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-black text-xs transition-all cursor-pointer border-none shadow-md ${
-              isListening
-                ? "bg-red-500 text-white animate-pulse"
-                : "bg-amber-400 text-slate-900"
-            }`}
-            title={isListening ? "Detener..." : "Pedir por Voz"}
-          >
-            <span className="flex items-center gap-1 select-none">
-              {isListening ? "⏹️ Detener" : "🎙️ Voz"}
-            </span>
-          </motion.button>
-        ) : null
+        actions: (
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {onSwitchTablesMode && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onSwitchTablesMode("gestion_cuentas")}
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-black text-[11px] sm:text-xs transition-all cursor-pointer border border-emerald-500/40 shadow-sm"
+                title="Cambiar a Gestión de Cuentas (Pantalla Dividida)"
+              >
+                <span>💻</span>
+                <span className="hidden sm:inline">Gestión Cuentas</span>
+              </motion.button>
+            )}
+            {isOnline && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={startVoiceRecognition}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-black text-xs transition-all cursor-pointer border-none shadow-md ${
+                  isListening
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-amber-400 text-slate-900"
+                }`}
+                title={isListening ? "Detener..." : "Pedir por Voz"}
+              >
+                <span className="flex items-center gap-1 select-none">
+                  {isListening ? "⏹️ Detener" : "🎙️ Voz"}
+                </span>
+              </motion.button>
+            )}
+          </div>
+        )
       })}
       <IonHeader className="ion-no-border">
         <IonToolbar

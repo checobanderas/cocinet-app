@@ -1239,6 +1239,15 @@ def purge_stuck_windows_jobs(printer_name: str):
     except Exception as e:
         notify_step("SPOOLER_CLEANUP_ERR", f"No se pudo limpiar el spooler de {printer_name}: {e}", status="WARNING")
 
+def purge_all_installed_spoolers():
+    """Purga preventivamente trabajos atascados en todas las impresoras instaladas al arrancar."""
+    try:
+        printers = get_installed_printers()
+        for p in printers:
+            purge_stuck_windows_jobs(p)
+    except Exception as e:
+        notify_step("SPOOLER_INIT_CLEANUP_ERR", f"Error en purga preventiva inicial del spooler: {e}", status="WARNING")
+
 def internal_print_worker():
     notify_step("WORKER_START", "Hilo de cola de impresión interna iniciado.", status="INFO")
     while True:
@@ -1447,13 +1456,18 @@ def check_duplicate_and_register(raw_bytes: bytes, job_id: str = None) -> bool:
     _recent_ticket_hashes[ticket_hash] = now
     return False
 
-# ─── Polling DB ───────────────────────────────────────────────────
+# ─── Polling DB & Auto-Depuración ──────────────────────────────────
 def db_polling_loop():
     db_path = os.path.join(BASE_DIR, "restaurant.db")
     notify_step("DB_POLL_START", f"Iniciando polling de base de datos SQLite en: {db_path}")
+    
+    last_cleanup_ts = 0
+    
     while True:
         try:
-            conn = sqlite3.connect(db_path, timeout=30)
+            conn = sqlite3.connect(db_path, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA busy_timeout=5000;")
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS print_queue (
@@ -1468,12 +1482,43 @@ def db_polling_loop():
                 )
             """)
             conn.commit()
+            
+            now_ts = time.time()
+            # 1. Limpieza periódica cada hora: purgar historial con más de 3 días
+            if now_ts - last_cleanup_ts > 3600:
+                cursor.execute("DELETE FROM print_queue WHERE created_at < datetime('now', '-3 days')")
+                purged_count = cursor.rowcount
+                if purged_count > 0:
+                    conn.commit()
+                    notify_step("DB_PURGE_OLD", f"Se purgaron {purged_count} registros antiguos (>3 días) de la cola de impresión.", status="INFO")
+                last_cleanup_ts = now_ts
+
+            # 2. Expirar tickets pendientes que llevan más de 15 minutos (evita arrojar rollos de tickets al abrir/reiniciar)
+            cursor.execute("""
+                UPDATE print_queue 
+                SET status='expired', updated_at=CURRENT_TIMESTAMP 
+                WHERE status='pending' AND created_at < datetime('now', '-15 minutes')
+            """)
+            expired_count = cursor.rowcount
+            if expired_count > 0:
+                conn.commit()
+                notify_step("DB_POLL_EXPIRED", f"Se descartaron {expired_count} tickets pendientes antiguos (>15 min) para evitar sobreimpresión masiva.", status="WARNING")
+
             conn.close()
             
-            conn = sqlite3.connect(db_path, timeout=30)
+            # 3. Consultar únicamente tickets pendientes recientes (creados en los últimos 15 minutos)
+            conn = sqlite3.connect(db_path, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA busy_timeout=5000;")
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
-            cursor.execute("SELECT id, printer_key, raw_data FROM print_queue WHERE status='pending'")
+            cursor.execute("""
+                SELECT id, printer_key, raw_data 
+                FROM print_queue 
+                WHERE status='pending' AND created_at >= datetime('now', '-15 minutes')
+                ORDER BY created_at ASC
+                LIMIT 5
+            """)
             jobs = cursor.fetchall()
             
             if jobs:
@@ -1492,6 +1537,12 @@ def db_polling_loop():
                     
                     if check_duplicate_and_register(raw_bytes, job_id):
                         notify_step("2_PROCESS_DB_DUP", f"Ticket duplicado omitido en DB cola (ID: {job_id})", status="WARNING")
+                        conn2 = sqlite3.connect(db_path, timeout=10)
+                        conn2.execute("PRAGMA journal_mode=WAL;")
+                        cursor2 = conn2.cursor()
+                        cursor2.execute("UPDATE print_queue SET status='ignored_duplicate', updated_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
+                        conn2.commit()
+                        conn2.close()
                         continue
                     
                     printer_name = resolve_printer_name(printer_key)
@@ -1499,7 +1550,8 @@ def db_polling_loop():
                     with print_lock:
                         print_data(printer_name, raw_bytes, ticket_type=printer_key)
                     
-                    conn2 = sqlite3.connect(db_path, timeout=30)
+                    conn2 = sqlite3.connect(db_path, timeout=10)
+                    conn2.execute("PRAGMA journal_mode=WAL;")
                     cursor2 = conn2.cursor()
                     cursor2.execute("""
                         UPDATE print_queue
@@ -1512,7 +1564,8 @@ def db_polling_loop():
                     
                 except Exception as ex:
                     notify_step("4_ERROR_DB", f"❌ Error procesando trabajo DB {job_id}: {ex}", status="ERROR")
-                    conn2 = sqlite3.connect(db_path, timeout=30)
+                    conn2 = sqlite3.connect(db_path, timeout=10)
+                    conn2.execute("PRAGMA journal_mode=WAL;")
                     cursor2 = conn2.cursor()
                     cursor2.execute("UPDATE print_queue SET status='failed', updated_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
                     conn2.commit()
@@ -1562,6 +1615,7 @@ def serve_react_app(path):
 
 def run_flask():
     try:
+        purge_all_installed_spoolers()
         db_thread = threading.Thread(target=db_polling_loop, daemon=True)
         db_thread.start()
         

@@ -437,6 +437,27 @@ export async function updateProductInFirebase(productId: string, data: any) {
   );
 }
 
+export async function bulkUpdateProductsSubgroupsInFirebase(
+  updates: { productId: string; updates: { category?: string; subcategory?: string; subgroup?: string; subsubgroup?: string } }[]
+) {
+  if (!updates || updates.length === 0) return;
+  const chunks = [];
+  for (let i = 0; i < updates.length; i += 400) {
+    chunks.push(updates.slice(i, i + 400));
+  }
+  for (const chunk of chunks) {
+    const batch = writeBatch(db);
+    chunk.forEach(({ productId, updates: up }) => {
+      const ref = doc(db, "products", productId);
+      batch.update(ref, cleanUndefined({
+        ...up,
+        updatedAt: getMexicoISOString(),
+      }));
+    });
+    await runWrite(batch.commit());
+  }
+}
+
 export async function deleteProductFromFirebase(productId: string) {
   const ref = doc(db, "products", productId);
   await runWrite(deleteDoc(ref));
@@ -510,6 +531,18 @@ export async function deleteAllProductsFromFirebase(tenantId: string, sucursal: 
   } catch (error) {
     console.error("Error deleting products from Firebase:", error);
     throw new Error("No se pudo completar la eliminación de productos en Firebase.");
+  }
+}
+
+export async function checkTenantSalesCount(tenantId: string): Promise<number> {
+  try {
+    const ordersSnap = await getDocs(query(collection(db, "orders"), where("tenantId", "==", tenantId)));
+    const closedSnap = await getDocs(query(collection(db, "closed_accounts"), where("tenantId", "==", tenantId)));
+    const historySnap = await getDocs(query(collection(db, "history"), where("tenantId", "==", tenantId)));
+    return ordersSnap.size + closedSnap.size + historySnap.size;
+  } catch (err) {
+    console.warn("Error checking sales count:", err);
+    return 0;
   }
 }
 
@@ -611,9 +644,10 @@ export async function addComandaToFirebase(
   createdBy: any,
   tableInfo: any,
   folioInterno?: string,
+  precalculatedFolio?: number,
 ) {
-  const folio = Date.now();
-  const currentTenant = tableInfo.tenantId || getCurrentTenantId();
+  const folio = precalculatedFolio || Date.now();
+  const currentTenant = tableInfo?.tenantId || getCurrentTenantId();
   const now = getMexicoISOString();
 
   const existingTableFolio = tableInfo?.folioInterno || (tableInfo?.comandas || []).find((c: any) => c.folioInterno)?.folioInterno;
@@ -630,24 +664,8 @@ export async function addComandaToFirebase(
     createdBy: createdBy || null,
   });
 
-  // Update the table to include this new comanda securely by checking live document first
   const tableRef = doc(db, "tables", tableId);
-  let liveComandas = tableInfo.comandas || [];
-  try {
-    const snapDoc = await getDoc(tableRef);
-    if (snapDoc.exists()) {
-      const liveData = snapDoc.data();
-      if (liveData && Array.isArray(liveData.comandas) && liveData.comandas.length > 0) {
-        const comandasMap = new Map<number, any>();
-        liveComandas.forEach((c: any) => comandasMap.set(c.folio, c));
-        liveData.comandas.forEach((c: any) => comandasMap.set(c.folio, c));
-        liveComandas = Array.from(comandasMap.values());
-      }
-    }
-  } catch (err) {
-    console.warn("Could not read live table doc before adding comanda:", err);
-  }
-
+  const liveComandas = tableInfo?.comandas || [];
   const mergedComandas = deduplicateComandas([...liveComandas, newComanda]);
 
   const tableDataToSave = cleanUndefined({
@@ -658,7 +676,7 @@ export async function addComandaToFirebase(
     status: "occupied",
     comandas: mergedComandas,
     folioInterno: finalFolioInterno,
-    updatedAt: getMexicoISOString(),
+    updatedAt: now,
   });
 
   await runWrite(
@@ -668,7 +686,7 @@ export async function addComandaToFirebase(
   if (folioInterno) {
     try {
       const tenantRef = doc(db, "tenants", currentTenant);
-      await runWrite(updateDoc(tenantRef, { lastInternalFolio: folioInterno }));
+      runWrite(updateDoc(tenantRef, { lastInternalFolio: folioInterno })).catch(() => {});
     } catch (err) {
       console.warn("No se pudo actualizar lastInternalFolio en tenant doc:", err);
     }
@@ -2436,79 +2454,8 @@ export async function initializeDefaultTablesForTenant(tenantId: string) {
 }
 
 export async function initializeDefaultProductsForTenant(tenantId: string) {
-  const defaultProducts = [
-    {
-      id: "e1",
-      name: "Guacamole con Totopos",
-      price: 65,
-      category: "food",
-      subcategory: "Entradas",
-      destination: "kitchen",
-    },
-    {
-      id: "e2",
-      name: "Queso Fundido",
-      price: 85,
-      category: "food",
-      subcategory: "Entradas",
-      destination: "kitchen",
-    },
-    {
-      id: "t1",
-      name: "Taco al Pastor",
-      price: 15,
-      category: "food",
-      subcategory: "Tacos",
-      destination: "kitchen",
-    },
-    {
-      id: "t2",
-      name: "Taco de Bistec",
-      price: 18,
-      category: "food",
-      subcategory: "Tacos",
-      destination: "kitchen",
-    },
-    {
-      id: "c1",
-      name: "Café Americano",
-      price: 25,
-      category: "drinks",
-      subcategory: "Café",
-      destination: "bar",
-    },
-    {
-      id: "ce1",
-      name: "Cerveza Corona",
-      price: 45,
-      category: "drinks",
-      subcategory: "Cerveza",
-      destination: "bar",
-    },
-    {
-      id: "s1",
-      name: "Flan Napolitano",
-      price: 35,
-      category: "desserts",
-      subcategory: "Postres",
-      destination: "bar",
-    },
-  ];
-
-  const batch = writeBatch(db);
-  defaultProducts.forEach((p) => {
-    const id = `prod_${tenantId}_${p.id}`;
-    const ref = doc(db, "products", id);
-    batch.set(ref, {
-      ...p,
-      id,
-      uid: id,
-      tenantId: tenantId,
-      updatedAt: getMexicoISOString(),
-    });
-  });
-
-  await runWrite(batch.commit());
+  // Empty catalog by default for new tenants so owner can replicate or import cleanly
+  return;
 }
 
 export interface DeviceRequest {
