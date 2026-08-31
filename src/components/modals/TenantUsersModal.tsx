@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
-import { closeOutline } from 'ionicons/icons';
+import { closeOutline, settingsOutline } from 'ionicons/icons';
 import { formatMexicoPhone } from '../../utils/appHelpers';
 import { requestFCMToken, triggerDeviceNotification } from '../../utils/fcm';
+import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { MetaWhatsAppConfigModal } from './MetaWhatsAppConfigModal';
 
 interface TenantUsersModalProps {
   showTenantUsersModal: boolean;
@@ -29,6 +31,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
   setRevealedPins,
   triggerAppNotification
 }) => {
+    const [showMetaConfigModal, setShowMetaConfigModal] = useState(false);
 
     const cycleAvatar = (userId: string, currentAvatar: string) => {
       const avatars = [
@@ -46,9 +49,13 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       handleCellChange(userId, "avatar", avatars[nextIndex], modalTenant?.id);
     };
 
-    const handleSendTestCorteWA = (user: any) => {
+    const handleSendTestCorteWA = async (user: any) => {
       const phoneTarget = formatMexicoPhone(user.phone || "");
-      
+      if (!phoneTarget) {
+        triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular de 10 dígitos.`, "warning");
+        return;
+      }
+
       const text = `📊 *REPORTE DE CORTE DE CAJA (PRUEBA)*\n` +
         `🏪 *${(modalTenant?.name || "COCINET").toUpperCase()}*\n` +
         `📍 Sucursal: ${modalTenant?.sucursalDefault || "Matriz"}\n` +
@@ -62,16 +69,43 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         `📎 Archivo Excel: [Reporte_Diario_${(modalTenant?.name || "Cocinet").replace(/\s+/g, "_")}.xlsx]\n` +
         `✨ _Prueba de envío automático configurada correctamente (Lada +52)._`;
 
+      const metaConfig = getWhatsAppCloudConfig();
+      if (metaConfig.phoneNumberId && metaConfig.accessToken) {
+        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Conectando con Meta para entregar reporte a ${user.name}...`, "info");
+        const res = await sendSilentWhatsAppMessage(user.phone, text);
+        if (res.success) {
+          triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte de corte entregado en segundo plano a +52 ${user.phone}.`, "success");
+          return;
+        } else {
+          console.warn("Fallo Meta silent send, abriendo web como fallback:", res.error);
+        }
+      }
+
       const encoded = encodeURIComponent(text);
-      const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+      const waUrl = `https://wa.me/${phoneTarget}?text=${encoded}`;
       window.open(waUrl, "_blank");
-      triggerAppNotification("WhatsApp Enviado 📲", `Corte de prueba preparado para ${user.name} (+52 ${user.phone || ""}).`, "success");
+      triggerAppNotification("WhatsApp Preparado 📲", `Corte de prueba preparado para ${user.name} (+52 ${user.phone || ""}).`, "success");
     };
 
-    const handleSendDirectWA = (user: any) => {
+    const handleSendDirectWA = async (user: any) => {
       const phoneTarget = formatMexicoPhone(user.phone || "");
-      const msg = encodeURIComponent(`Hola ${user.name}! Mensaje operativo de Cocinet Pro:\n\nTu acceso a la sucursal ${modalTenant?.name || ''} está activo.`);
-      const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${msg}` : `https://wa.me/?text=${msg}`;
+      if (!phoneTarget) {
+        triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular.`, "warning");
+        return;
+      }
+      const msg = `Hola ${user.name}! Mensaje operativo de Cocinet Pro:\n\nTu acceso a la sucursal ${modalTenant?.name || ''} está activo.`;
+
+      const metaConfig = getWhatsAppCloudConfig();
+      if (metaConfig.phoneNumberId && metaConfig.accessToken) {
+        const res = await sendSilentWhatsAppMessage(user.phone, msg);
+        if (res.success) {
+          triggerAppNotification("Aviso Entregado ✅", `Mensaje silencioso enviado al WhatsApp de ${user.name}.`, "success");
+          return;
+        }
+      }
+
+      const encoded = encodeURIComponent(msg);
+      const waUrl = `https://wa.me/${phoneTarget}?text=${encoded}`;
       window.open(waUrl, "_blank");
     };
 
@@ -141,7 +175,16 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                   Configura PINs de acceso, teléfonos celulares (Lada +52 automática), horarios de envío y pruebas Push.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowMetaConfigModal(true)}
+                  className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-slate-300 border-none cursor-pointer"
+                  title="Configurar credenciales de WhatsApp Cloud API de Meta"
+                >
+                  <i className="fa-solid fa-gear text-[11px]" />
+                  <span>Configurar WhatsApp API (Meta)</span>
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
@@ -152,14 +195,14 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       triggerAppNotification("Aviso ⚠️", "Permiso de notificaciones no concedido o no soportado en esta ventana.", "warning");
                     }
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-emerald-200 border-none cursor-pointer"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-emerald-200 border-none cursor-pointer"
                 >
                   <i className="fa-solid fa-bell text-[11px]" />
-                  <span>Activar Notificaciones en este Celular</span>
+                  <span>Activar Notificaciones Push</span>
                 </button>
                 <button
                   onClick={() => handleAddRow(modalTenant.id)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-indigo-200 border-none cursor-pointer"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3.5 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-indigo-200 border-none cursor-pointer"
                 >
                   <i className="fa-solid fa-plus text-[10px]" />
                   Agregar Fila
@@ -426,6 +469,12 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
             </div>
           </div>
         </IonContent>
+
+        <MetaWhatsAppConfigModal
+          isOpen={showMetaConfigModal}
+          onClose={() => setShowMetaConfigModal(false)}
+          triggerAppNotification={triggerAppNotification}
+        />
       </IonModal>
     );
 };

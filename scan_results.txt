@@ -1,0 +1,1202 @@
+﻿=== SCANNING ALL COMPONENT FILES ===
+
+­ƒôü AccountCancellationModal.tsx:
+   ÔÜá´©Å  MISSING PROP: accountCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: accountCancellationReason
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: handleMarkAccountForCancellation
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: selectedAccountForCancellation
+   ÔÜá´©Å  MISSING PROP: setAccountCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: setAccountCancellationPin
+   ÔÜá´©Å  MISSING PROP: setAccountCancellationReason
+   ÔÜá´©Å  MISSING PROP: setSelectedAccountForCancellation
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ArqKeyboardModal.tsx:
+   ÔÜá´©Å  MISSING PROP: activeExpressDenom
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: expressArq100
+   ÔÜá´©Å  MISSING PROP: expressArq1000
+   ÔÜá´©Å  MISSING PROP: expressArq20
+   ÔÜá´©Å  MISSING PROP: expressArq200
+   ÔÜá´©Å  MISSING PROP: expressArq50
+   ÔÜá´©Å  MISSING PROP: expressArq500
+   ÔÜá´©Å  MISSING PROP: expressArqM05
+   ÔÜá´©Å  MISSING PROP: expressArqM1
+   ÔÜá´©Å  MISSING PROP: expressArqM10
+   ÔÜá´©Å  MISSING PROP: expressArqM2
+   ÔÜá´©Å  MISSING PROP: expressArqM5
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: text
+
+­ƒôü ArqueoFormModal.tsx:
+   ÔÜá´©Å  MISSING PROP: arq100
+   ÔÜá´©Å  MISSING PROP: arq1000
+   ÔÜá´©Å  MISSING PROP: arq20
+   ÔÜá´©Å  MISSING PROP: arq200
+   ÔÜá´©Å  MISSING PROP: arq50
+   ÔÜá´©Å  MISSING PROP: arq500
+   ÔÜá´©Å  MISSING PROP: arqM05
+   ÔÜá´©Å  MISSING PROP: arqM1
+   ÔÜá´©Å  MISSING PROP: arqM10
+   ÔÜá´©Å  MISSING PROP: arqM2
+   ÔÜá´©Å  MISSING PROP: arqM5
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: setArq100
+   ÔÜá´©Å  MISSING PROP: setArq1000
+   ÔÜá´©Å  MISSING PROP: setArq20
+   ÔÜá´©Å  MISSING PROP: setArq200
+   ÔÜá´©Å  MISSING PROP: setArq50
+   ÔÜá´©Å  MISSING PROP: setArq500
+   ÔÜá´©Å  MISSING PROP: setArqM05
+   ÔÜá´©Å  MISSING PROP: setArqM1
+   ÔÜá´©Å  MISSING PROP: setArqM10
+   ÔÜá´©Å  MISSING PROP: setArqM2
+   ÔÜá´©Å  MISSING PROP: setArqM5
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü AuthorizeCancellationModal.tsx:
+   ÔÜá´©Å  MISSING PROP: account
+   ÔÜá´©Å  MISSING PROP: authorizationPin
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: handleAuthorizeAccountCancellation
+   ÔÜá´©Å  MISSING PROP: pendingCancellationTarget
+   ÔÜá´©Å  MISSING PROP: renderCancellationPinPad
+   ÔÜá´©Å  MISSING PROP: selectedTable
+   ÔÜá´©Å  MISSING PROP: setAuthorizationPin
+   ÔÜá´©Å  MISSING PROP: setPendingCancellationTarget
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: validateAdminPin
+
+­ƒôü BluetoothConfigModal.tsx:
+   ÔÜá´©Å  MISSING PROP: App
+   ÔÜá´©Å  MISSING PROP: activeBtConnections
+   ÔÜá´©Å  MISSING PROP: availableWindowsPrinters
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: fetchWindowsPrinters
+   ÔÜá´©Å  MISSING PROP: handleSaveTenantPrinters
+   ÔÜá´©Å  MISSING PROP: handleScanBluetoothDevice
+   ÔÜá´©Å  MISSING PROP: handleTestPrinter
+   ÔÜá´©Å  MISSING PROP: isScanningBt
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: printers
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü BranchSwitcherModal.tsx:
+   ÔÜá´©Å  MISSING PROP: MAPS_API_KEY
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü BulkItemCancellationReasonModal.tsx:
+   ÔÜá´©Å  MISSING PROP: bulkItemCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: bulkItemCancellationReason
+   ÔÜá´©Å  MISSING PROP: currentUser
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: itemsSelectedForCancellation
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: pending
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: selected
+   ÔÜá´©Å  MISSING PROP: selectedTable
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setBulkItemCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: setBulkItemCancellationReason
+   ÔÜá´©Å  MISSING PROP: setItemsSelectedForCancellation
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ComandaCancelModal.tsx:
+   ÔÜá´©Å  MISSING PROP: cancelEntireComanda
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: comandaCancelPin
+   ÔÜá´©Å  MISSING PROP: comandaCancelReason
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: handleMarkEntireComandaForCancellation
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: renderCancellationPinPad
+   ÔÜá´©Å  MISSING PROP: setComandaCancelPin
+   ÔÜá´©Å  MISSING PROP: setComandaCancelReason
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: validateAdminPin
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ComensalPreview.tsx:
+   ÔÜá´©Å  MISSING PROP: cart
+   ÔÜá´©Å  MISSING PROP: currentComensal
+   ÔÜá´©Å  MISSING PROP: currentUser
+   ÔÜá´©Å  MISSING PROP: generateOrder
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: isGeneratingOrder
+   ÔÜá´©Å  MISSING PROP: isListening
+   ÔÜá´©Å  MISSING PROP: isOnline
+   ÔÜá´©Å  MISSING PROP: isProcessingVoice
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: openItemNoteModal
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: selectedTable
+   ÔÜá´©Å  MISSING PROP: setAppMode
+   ÔÜá´©Å  MISSING PROP: setCheckoutFallbackItems
+   ÔÜá´©Å  MISSING PROP: setCurrentComensal
+   ÔÜá´©Å  MISSING PROP: setPaymentAmountReceived
+   ÔÜá´©Å  MISSING PROP: setPaymentDiscountValue
+   ÔÜá´©Å  MISSING PROP: setPaymentMethod
+   ÔÜá´©Å  MISSING PROP: setPaymentTipValue
+   ÔÜá´©Å  MISSING PROP: setRequiresInvoice
+   ÔÜá´©Å  MISSING PROP: setShowDiscountInput
+   ÔÜá´©Å  MISSING PROP: setShowPaymentOptions
+   ÔÜá´©Å  MISSING PROP: setShowTipInput
+   ÔÜá´©Å  MISSING PROP: startVoiceRecognition
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: u
+   ÔÜá´©Å  MISSING PROP: updateQuantity
+
+­ƒôü ConfigurePrefixModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CorteModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: efectivoCount
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: handleDownloadCorteReport
+   ÔÜá´©Å  MISSING PROP: handlePrintCorte
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: setEfectivoCount
+   ÔÜá´©Å  MISSING PROP: setShowResetSalesConfirm
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: totalArqueo
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CustomerModal.tsx:
+   ÔÜá´©Å  MISSING PROP: customerModalAddresses
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: newAddressInput
+   ÔÜá´©Å  MISSING PROP: newAddressRefInput
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: setCustomerModalAddresses
+   ÔÜá´©Å  MISSING PROP: setNewAddressInput
+   ÔÜá´©Å  MISSING PROP: setNewAddressRefInput
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü DeliverySetupModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: filteredCustomers
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü DeviceRequestsModal.tsx:
+   ÔÜá´©Å  MISSING PROP: deviceId
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: pending
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü EditFondoModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: corteTablaSessionSelected
+   ÔÜá´©Å  MISSING PROP: dotacionInicial
+   ÔÜá´©Å  MISSING PROP: editFondoValue
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setCashierSessions
+   ÔÜá´©Å  MISSING PROP: setCorteTablaSessionSelected
+   ÔÜá´©Å  MISSING PROP: setCorteXFondoApertura
+   ÔÜá´©Å  MISSING PROP: setEditFondoValue
+   ÔÜá´©Å  MISSING PROP: setSelectedTenant
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+
+­ƒôü EditPaymentModal.tsx:
+   ÔÜá´©Å  MISSING PROP: accountToEditPayment
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: handleUpdatePaymentMethod
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: setAccountToEditPayment
+   ÔÜá´©Å  MISSING PROP: setTempCardLastFour
+   ÔÜá´©Å  MISSING PROP: setTempPaymentCardType
+   ÔÜá´©Å  MISSING PROP: setTempPaymentMethod
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tempCardLastFour
+   ÔÜá´©Å  MISSING PROP: tempPaymentCardType
+   ÔÜá´©Å  MISSING PROP: tempPaymentMethod
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ExpenseModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: expenseAmount
+   ÔÜá´©Å  MISSING PROP: expenseCategory
+   ÔÜá´©Å  MISSING PROP: expenseConcept
+   ÔÜá´©Å  MISSING PROP: expenseReference
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: selectedExpenseForEdit
+   ÔÜá´©Å  MISSING PROP: setExpenseAmount
+   ÔÜá´©Å  MISSING PROP: setExpenseCategory
+   ÔÜá´©Å  MISSING PROP: setExpenseConcept
+   ÔÜá´©Å  MISSING PROP: setExpenseReference
+   ÔÜá´©Å  MISSING PROP: setSelectedExpenseForEdit
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ExportSessionModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: exportModalStep
+   ÔÜá´©Å  MISSING PROP: exportTargetTenantId
+   ÔÜá´©Å  MISSING PROP: isExportingSession
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setExportModalStep
+   ÔÜá´©Å  MISSING PROP: setExportTargetTenantId
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü FolioModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü GastoRegisterModal.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: cashierSessions
+   ÔÜá´©Å  MISSING PROP: currentUser
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: gastoCategory
+   ÔÜá´©Å  MISSING PROP: gastoDescription
+   ÔÜá´©Å  MISSING PROP: gastoItemName
+   ÔÜá´©Å  MISSING PROP: gastoItemPrice
+   ÔÜá´©Å  MISSING PROP: gastoItemQty
+   ÔÜá´©Å  MISSING PROP: gastoItems
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: sessionId
+   ÔÜá´©Å  MISSING PROP: setGastoCategory
+   ÔÜá´©Å  MISSING PROP: setGastoDescription
+   ÔÜá´©Å  MISSING PROP: setGastoItemName
+   ÔÜá´©Å  MISSING PROP: setGastoItemPrice
+   ÔÜá´©Å  MISSING PROP: setGastoItemQty
+   ÔÜá´©Å  MISSING PROP: setGastoItems
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü InvoiceModal.tsx:
+   ÔÜá´©Å  MISSING PROP: text
+
+­ƒôü InvoicePhoneModal.tsx:
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: handleConfirmInvoicePhone
+   ÔÜá´©Å  MISSING PROP: inputInvoicePhone
+   ÔÜá´©Å  MISSING PROP: inputInvoicePhoneConfirm
+   ÔÜá´©Å  MISSING PROP: invoicePhoneError
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: setInputInvoicePhone
+   ÔÜá´©Å  MISSING PROP: setInputInvoicePhoneConfirm
+   ÔÜá´©Å  MISSING PROP: setPendingInvoiceTarget
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü ItemCancelModal.tsx:
+   ÔÜá´©Å  MISSING PROP: accountCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: handleCancelItem
+   ÔÜá´©Å  MISSING PROP: handleMarkItemForCancellation
+   ÔÜá´©Å  MISSING PROP: itemCancelPin
+   ÔÜá´©Å  MISSING PROP: itemCancelReason
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: renderCancellationPinPad
+   ÔÜá´©Å  MISSING PROP: setAccountCancellationOtherReason
+   ÔÜá´©Å  MISSING PROP: setItemCancelPin
+   ÔÜá´©Å  MISSING PROP: setItemCancelReason
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: validateAdminPin
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ItemNoteModal.tsx:
+   ÔÜá´©Å  MISSING PROP: isListeningNote
+   ÔÜá´©Å  MISSING PROP: isOnline
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: noteProduct
+   ÔÜá´©Å  MISSING PROP: saveItemNote
+   ÔÜá´©Å  MISSING PROP: setTempNote
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tempNote
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: toggleNoteVoiceRecognition
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ManageCompaniesModal.tsx:
+   ÔÜá´©Å  MISSING PROP: companiesConfig
+   ÔÜá´©Å  MISSING PROP: defaults
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: searchCompanyQuery
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setCompaniesConfig
+   ÔÜá´©Å  MISSING PROP: setSearchCompanyQuery
+   ÔÜá´©Å  MISSING PROP: setSelectedTenant
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü MultiTurnModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: multiTurnEndDate
+   ÔÜá´©Å  MISSING PROP: multiTurnPreviewReady
+   ÔÜá´©Å  MISSING PROP: multiTurnStartDate
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setMultiTurnEndDate
+   ÔÜá´©Å  MISSING PROP: setMultiTurnPreviewReady
+   ÔÜá´©Å  MISSING PROP: setMultiTurnStartDate
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü NumpadModal.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: text
+
+­ƒôü PaymentModal.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: modalDiscountAmount
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: openNumpad
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: subtotal
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü PinModalOverlay.tsx:
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü PinsStructureModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü PrintPreviewModal.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: corteData
+   ÔÜá´©Å  MISSING PROP: currentUser
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: mexicoTime
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: purchases
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: totalOutflowsAmt
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ProductCrudModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: existing
+   ÔÜá´©Å  MISSING PROP: existingSubcategories
+   ÔÜá´©Å  MISSING PROP: existingSubgroups
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: ownerKey
+   ÔÜá´©Å  MISSING PROP: setRelationMatches
+   ÔÜá´©Å  MISSING PROP: tId
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: tid
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ReceiptPreviewModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: companyConfig
+   ÔÜá´©Å  MISSING PROP: generateCorteExpressTicketText
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: setMenuToastMessage
+   ÔÜá´©Å  MISSING PROP: setShowMenuToast
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü SupplierModal.tsx:
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü SupplierPurchaseModal.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: cashierSessions
+   ÔÜá´©Å  MISSING PROP: currentUser
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: inventory
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: selectedScheduleSupplier
+   ÔÜá´©Å  MISSING PROP: sessionId
+   ÔÜá´©Å  MISSING PROP: setSelectedScheduleSupplier
+   ÔÜá´©Å  MISSING PROP: setSupplierPurchaseIsPaid
+   ÔÜá´©Å  MISSING PROP: setSupplierPurchaseItems
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: supplierPurchaseIsPaid
+   ÔÜá´©Å  MISSING PROP: supplierPurchaseItems
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü SwitchTenantOverlay.tsx:
+   ÔÜá´©Å  MISSING PROP: name
+
+­ƒôü SystemsChoiceAlert.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setCashMovements
+   ÔÜá´©Å  MISSING PROP: setCashierSessions
+   ÔÜá´©Å  MISSING PROP: setExpenses
+   ÔÜá´©Å  MISSING PROP: setHistory
+   ÔÜá´©Å  MISSING PROP: setShowDeleteAllHistoryConfirm
+   ÔÜá´©Å  MISSING PROP: setTables
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü TablaArqueoModal.tsx:
+   ÔÜá´©Å  MISSING PROP: activeTablaDenom
+   ÔÜá´©Å  MISSING PROP: arqueoBilletes
+   ÔÜá´©Å  MISSING PROP: arqueoMonedas
+   ÔÜá´©Å  MISSING PROP: arqueoTotal
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: estimatedCash
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: setActiveTablaDenom
+   ÔÜá´©Å  MISSING PROP: setShowTablaKeypadOverlay
+   ÔÜá´©Å  MISSING PROP: setTablaArq100
+   ÔÜá´©Å  MISSING PROP: setTablaArq1000
+   ÔÜá´©Å  MISSING PROP: setTablaArq20
+   ÔÜá´©Å  MISSING PROP: setTablaArq200
+   ÔÜá´©Å  MISSING PROP: setTablaArq50
+   ÔÜá´©Å  MISSING PROP: setTablaArq500
+   ÔÜá´©Å  MISSING PROP: setTablaArqM05
+   ÔÜá´©Å  MISSING PROP: setTablaArqM1
+   ÔÜá´©Å  MISSING PROP: setTablaArqM10
+   ÔÜá´©Å  MISSING PROP: setTablaArqM2
+   ÔÜá´©Å  MISSING PROP: setTablaArqM5
+   ÔÜá´©Å  MISSING PROP: showTablaKeypadOverlay
+   ÔÜá´©Å  MISSING PROP: tablaArq100
+   ÔÜá´©Å  MISSING PROP: tablaArq1000
+   ÔÜá´©Å  MISSING PROP: tablaArq20
+   ÔÜá´©Å  MISSING PROP: tablaArq200
+   ÔÜá´©Å  MISSING PROP: tablaArq50
+   ÔÜá´©Å  MISSING PROP: tablaArq500
+   ÔÜá´©Å  MISSING PROP: tablaArqM05
+   ÔÜá´©Å  MISSING PROP: tablaArqM1
+   ÔÜá´©Å  MISSING PROP: tablaArqM10
+   ÔÜá´©Å  MISSING PROP: tablaArqM2
+   ÔÜá´©Å  MISSING PROP: tablaArqM5
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü TenantBackupConfirm.tsx:
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: isTenantBackupLoading
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: selectedTenant
+   ÔÜá´©Å  MISSING PROP: setIsTenantBackupLoading
+   ÔÜá´©Å  MISSING PROP: setTenantBackupDate
+   ÔÜá´©Å  MISSING PROP: setTenantBackupMode
+   ÔÜá´©Å  MISSING PROP: setTenantBackupMoveTarget
+   ÔÜá´©Å  MISSING PROP: setTenantBackupNote
+   ÔÜá´©Å  MISSING PROP: setTenantBackupProgress
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantBackupDate
+   ÔÜá´©Å  MISSING PROP: tenantBackupMode
+   ÔÜá´©Å  MISSING PROP: tenantBackupMoveTarget
+   ÔÜá´©Å  MISSING PROP: tenantBackupNote
+   ÔÜá´©Å  MISSING PROP: tenantBackupProgress
+   ÔÜá´©Å  MISSING PROP: tenantBackupSnapshots
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: triggerAppNotification
+
+­ƒôü TenantCrudModal.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: files
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: ownerKey
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: setSelectedTenant
+   ÔÜá´©Å  MISSING PROP: setShowBluetoothConfigModal
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü TenantUsersModal.tsx:
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: ownerKey
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: token
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü AdminPanelView.tsx:
+   ÔÜá´©Å  MISSING PROP: account
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: cancelEntireComanda
+   ÔÜá´©Å  MISSING PROP: cancelled
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: corteData
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: generateCorteTicketText
+   ÔÜá´©Å  MISSING PROP: generatePrecorteTicketText
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: qty
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: sanitizeBusinessName
+   ÔÜá´©Å  MISSING PROP: sanitizeEmail
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: subtotal
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: topSold
+   ÔÜá´©Å  MISSING PROP: u
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CancellationPinPadView.tsx:
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CheckoutView.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: finalizePayment
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: openNumpad
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ClosedAccountsListView.tsx:
+   ÔÜá´©Å  MISSING PROP: account
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: cancelled
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: historyForCuentasTab
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: markAsPaid
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: reprintAccount
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: subtotal
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CorteExpressView.tsx:
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: corteData
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: estimated
+   ÔÜá´©Å  MISSING PROP: filteredCashMovementsForCorte
+   ÔÜá´©Å  MISSING PROP: filteredExpensesForCorte
+   ÔÜá´©Å  MISSING PROP: generateCorteExpressTicketText
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: qty
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: today
+   ÔÜá´©Å  MISSING PROP: u
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CorteTabla2View.tsx:
+   ÔÜá´©Å  MISSING PROP: account
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: cancelled
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: reprintAccount
+   ÔÜá´©Å  MISSING PROP: saved
+   ÔÜá´©Å  MISSING PROP: selected
+   ÔÜá´©Å  MISSING PROP: sorted
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CorteTablaView.tsx:
+   ÔÜá´©Å  MISSING PROP: activeSessionForCorte
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: arqueoBilletes
+   ÔÜá´©Å  MISSING PROP: arqueoMonedas
+   ÔÜá´©Å  MISSING PROP: arqueoTotal
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: cancelled
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: corteData
+   ÔÜá´©Å  MISSING PROP: doc
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: estimatedCash
+   ÔÜá´©Å  MISSING PROP: filteredCashMovementsForCorte
+   ÔÜá´©Å  MISSING PROP: filteredExpensesForCorte
+   ÔÜá´©Å  MISSING PROP: filteredHistoryForCorte
+   ÔÜá´©Å  MISSING PROP: filteredPurchasesForCorte
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: grouped
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: isValidated
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: occupied
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: selected
+   ÔÜá´©Å  MISSING PROP: sessionId
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: targetTenantId
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: validateOwnerKey
+   ÔÜá´©Å  MISSING PROP: validatedBy
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü CorteXView.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: productSalesMap
+   ÔÜá´©Å  MISSING PROP: saveCorteXFondoApertura
+   ÔÜá´©Å  MISSING PROP: selected
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü CustomersView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü DashboardView.tsx:
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: corteData
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: filteredCashMovementsForCorte
+   ÔÜá´©Å  MISSING PROP: filteredExpensesForCorte
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: sessionId
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: u
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü DeliveryPanelView.tsx:
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü ExpensesView.tsx:
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: sessionId
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü FloorplanView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: effectiveTables
+   ÔÜá´©Å  MISSING PROP: file
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: getComandaDestinations
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: occupied
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: printComanda
+   ÔÜá´©Å  MISSING PROP: startVoiceRecognition
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: zones
+
+­ƒôü GestionCuentasView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: effectiveTables
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: occupied
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: startVoiceRecognition
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: zones
+
+­ƒôü LoginView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: executeTenantTransfer
+   ÔÜá´©Å  MISSING PROP: files
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: ownerKey
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: resetTenantForm
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: url
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: z
+
+­ƒôü ManageMenuView.tsx:
+   ÔÜá´©Å  MISSING PROP: App
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: amount
+   ÔÜá´©Å  MISSING PROP: analyzeMenuImage
+   ÔÜá´©Å  MISSING PROP: applyBulkCaseToggle
+   ÔÜá´©Å  MISSING PROP: applyBulkSubcategory
+   ÔÜá´©Å  MISSING PROP: applyBulkSubgroup
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: collapseAllTreeNodes
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: expandAllTreeNodes
+   ÔÜá´©Å  MISSING PROP: files
+   ÔÜá´©Å  MISSING PROP: loadAutoFormattedList
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: match
+   ÔÜá´©Å  MISSING PROP: message
+   ÔÜá´©Å  MISSING PROP: moveSelectedDown
+   ÔÜá´©Å  MISSING PROP: moveSelectedToBottom
+   ÔÜá´©Å  MISSING PROP: moveSelectedToTop
+   ÔÜá´©Å  MISSING PROP: moveSelectedUp
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: parseSplitProducts
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: prompt
+   ÔÜá´©Å  MISSING PROP: saveRelationChanges
+   ÔÜá´©Å  MISSING PROP: subcategory
+   ÔÜá´©Å  MISSING PROP: subgroup
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: targetId
+   ÔÜá´©Å  MISSING PROP: targetName
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: toggleTextCase
+   ÔÜá´©Å  MISSING PROP: toggleTreeSectionCollapse
+   ÔÜá´©Å  MISSING PROP: toggleTreeSubgroupCollapse
+   ÔÜá´©Å  MISSING PROP: token
+   ÔÜá´©Å  MISSING PROP: w
+   ÔÜá´©Å  MISSING PROP: ws
+
+­ƒôü MaterialHeaderView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü MenuView.tsx:
+   ÔÜá´©Å  MISSING PROP: addToCart
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: now
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: openItemNoteModal
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: startVoiceRecognition
+   ÔÜá´©Å  MISSING PROP: status
+   ÔÜá´©Å  MISSING PROP: subcategory
+   ÔÜá´©Å  MISSING PROP: subgroup
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: token
+   ÔÜá´©Å  MISSING PROP: totalItems
+   ÔÜá´©Å  MISSING PROP: totalPrice
+   ÔÜá´©Å  MISSING PROP: updateQuantity
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü PrecuentaItemView.tsx:
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: line
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ReporteMovimientosView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: subtotal
+   ÔÜá´©Å  MISSING PROP: tableLabel
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ReportsView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: body
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: qty
+   ÔÜá´©Å  MISSING PROP: selected
+   ÔÜá´©Å  MISSING PROP: subtotal
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tel
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: today
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü ReviewItemView.tsx:
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: openItemNoteModal
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: updateQuantity
+
+­ƒôü ReviewView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: generateOrder
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: subcategory
+   ÔÜá´©Å  MISSING PROP: target
+
+­ƒôü SidebarView.tsx:
+   ÔÜá´©Å  MISSING PROP: activeOwnerBranchesCount
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: ownerKey
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü SuppliersView.tsx:
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: confirm
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: notes
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: w
+
+­ƒôü SwitchingTenantOverlayView.tsx:
+   ÔÜá´©Å  MISSING PROP: name
+
+­ƒôü TableDetailsView.tsx:
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: cancelEntireComanda
+   ÔÜá´©Å  MISSING PROP: comanda
+   ÔÜá´©Å  MISSING PROP: folio
+   ÔÜá´©Å  MISSING PROP: getComandaDestinations
+   ÔÜá´©Å  MISSING PROP: getComensalColor
+   ÔÜá´©Å  MISSING PROP: idx
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: num
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: price
+   ÔÜá´©Å  MISSING PROP: printComanda
+   ÔÜá´©Å  MISSING PROP: printTicket
+   ÔÜá´©Å  MISSING PROP: reason
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+
+­ƒôü UserHeaderInfoView.tsx:
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: padding
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: user
+
+­ƒôü UsersManagementPanelView.tsx:
+   ÔÜá´©Å  MISSING PROP: admin
+   ÔÜá´©Å  MISSING PROP: b
+   ÔÜá´©Å  MISSING PROP: el
+   ÔÜá´©Å  MISSING PROP: map
+   ÔÜá´©Å  MISSING PROP: name
+   ÔÜá´©Å  MISSING PROP: target
+   ÔÜá´©Å  MISSING PROP: tenant
+   ÔÜá´©Å  MISSING PROP: tenantId
+   ÔÜá´©Å  MISSING PROP: text
+   ÔÜá´©Å  MISSING PROP: title
+   ÔÜá´©Å  MISSING PROP: user
+   ÔÜá´©Å  MISSING PROP: w
+

@@ -6,6 +6,7 @@ import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printe
 import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
 import { getCompanyCatalog, getTenantUsers } from '../../utils/appHelpers';
+import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
@@ -1422,8 +1423,39 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
 
         // Disparo de WhatsApp
         const text = generateCorteText(matchedUser.name, matchedUser.role, isReopening);
-        const encodedText = encodeURIComponent(text);
-        window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        const metaConfig = getWhatsAppCloudConfig();
+
+        if (metaConfig.phoneNumberId && metaConfig.accessToken) {
+          const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+          const recipients = tenantUsers.filter(
+            (u) =>
+              (u.isReportRecipient ||
+                u.id.endsWith("-admin") ||
+                u.id.endsWith("-manager") ||
+                u.id.endsWith("-sistemas") ||
+                u.role === "admin") &&
+              u.phone
+          );
+
+          if (recipients.length > 0) {
+            recipients.forEach((r) => {
+              sendSilentWhatsAppMessage(r.phone!, text).catch((e) =>
+                console.error("Error silent send:", e)
+              );
+            });
+            triggerAppNotification(
+              "WhatsApp Silencioso Entregado 🚀✅",
+              `Corte entregado en segundo plano a los administradores (${recipients.map((r) => r.name).join(", ")}).`,
+              "success"
+            );
+          } else {
+            const encodedText = encodeURIComponent(text);
+            window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+          }
+        } else {
+          const encodedText = encodeURIComponent(text);
+          window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        }
       } catch (err) {
         console.error(err);
         triggerAppNotification("Error", "No se pudo cerrar el turno en Firebase.", "warning");
@@ -1456,10 +1488,22 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       }
     };
 
-    const handleSendTestWhatsApp = (customPhone?: string) => {
+    const handleSendTestWhatsApp = async (customPhone?: string) => {
       const text = generateCorteText("Prueba de Cajero", "cajero", false);
       const cleanPhone = (customPhone || "").replace(/\D/g, "");
       const phoneTarget = cleanPhone ? (cleanPhone.length === 10 ? `52${cleanPhone}` : cleanPhone) : "";
+
+      const metaConfig = getWhatsAppCloudConfig();
+      if (metaConfig.phoneNumberId && metaConfig.accessToken && cleanPhone) {
+        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Conectando con Meta para entregar corte a +52 ${cleanPhone}...`, "info");
+        const res = await sendSilentWhatsAppMessage(cleanPhone, text);
+        setShowTestWhatsappModal(false);
+        if (res.success) {
+          triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte de prueba entregado en segundo plano a +52 ${cleanPhone}.`, "success");
+          return;
+        }
+      }
+
       const encodedText = encodeURIComponent(`🧪 [CORTE DE PRUEBA]\n\n${text}`);
       const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;
       window.open(waUrl, "_blank");
