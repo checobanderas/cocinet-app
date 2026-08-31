@@ -135,10 +135,11 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
       return method.includes("lupay") || (acc as any).isLupay || (acc as any).paymentCategory === "lupay";
     };
 
-    // Group history accounts by shift date (excluding cancelled & Lupay accounts)
+    // Group history accounts by shift date (excluding cancelled, Lupay, and $0.00 accounts)
     const shiftAccountsMap: Record<string, ClosedAccount[]> = {};
     (history || []).forEach((acc) => {
-      if (acc.status === "cancelled" || isLupayAccount(acc)) return;
+      const amt = Number(acc.total || 0);
+      if (acc.status === "cancelled" || isLupayAccount(acc) || amt <= 0) return;
       const key = getShiftKey(acc.timestamp);
       if (!key) return;
       if (!shiftAccountsMap[key]) shiftAccountsMap[key] = [];
@@ -187,8 +188,9 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
 
     const montoObjetivo = corte2MontoObjetivo || (existingRecord ? existingRecord.montoObjetivo : 0);
 
-    // Mandatory accounts: requiresInvoice OR Card OR Transfer/Bank
+    // Mandatory accounts: requiresInvoice OR Card OR Transfer/Bank (only with total > $0)
     const isMandatoryAccount = (acc: ClosedAccount) => {
+      if (Number(acc.total || 0) <= 0) return false;
       if (acc.requiresInvoice) return true;
       const method = (acc.paymentMethod || "").toLowerCase();
       return ["card", "tarjeta", "transfer", "transferencia", "banco"].some((m) => method.includes(m));
@@ -486,9 +488,9 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
         let runningFolio = r.folioAnterior || 0;
 
         shiftAccounts.forEach(acc => {
-          if (selectedSet.has(acc.id)) {
+          const amt = Number(acc.total || 0);
+          if (selectedSet.has(acc.id) && amt > 0) {
             runningFolio++;
-            const amt = Number(acc.total || 0);
             const method = (acc.paymentMethod || (acc as any).metodoPago || (acc as any).payment_method || (acc as any).formaPago || (acc as any).tipoPago || "").toLowerCase().trim();
             
             let paymentCategory: "Efectivo" | "Tarjeta" | "Transferencia / Bancos" = "Efectivo";
