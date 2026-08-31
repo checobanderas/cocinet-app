@@ -28,6 +28,21 @@ export interface User {
   pin: string;
   avatar: string;
   tenantId?: string;
+  phone?: string;
+  email?: string;
+  reportSchedule?: string;
+  isReportRecipient?: boolean;
+  fcmToken?: string;
+}
+
+/** Formatea automáticamente cualquier número mexicano a formato internacional con lada 52 */
+export function formatMexicoPhone(input: string): string {
+  const digits = (input || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return `52${digits}`;
+  if (digits.length === 12 && digits.startsWith("52")) return digits;
+  if (digits.length === 13 && digits.startsWith("521")) return digits;
+  return digits;
 }
 
 export interface Product {

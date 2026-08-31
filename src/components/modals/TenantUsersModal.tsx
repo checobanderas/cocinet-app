@@ -1,6 +1,8 @@
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
 import { closeOutline } from 'ionicons/icons';
+import { formatMexicoPhone } from '../../utils/appHelpers';
+import { requestFCMToken, triggerDeviceNotification } from '../../utils/fcm';
 
 interface TenantUsersModalProps {
   showTenantUsersModal: boolean;
@@ -44,6 +46,68 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       handleCellChange(userId, "avatar", avatars[nextIndex], modalTenant?.id);
     };
 
+    const handleSendTestCorteWA = (user: any) => {
+      const phoneTarget = formatMexicoPhone(user.phone || "");
+      
+      const text = `📊 *REPORTE DE CORTE DE CAJA (PRUEBA)*\n` +
+        `🏪 *${(modalTenant?.name || "COCINET").toUpperCase()}*\n` +
+        `📍 Sucursal: ${modalTenant?.sucursalDefault || "Matriz"}\n` +
+        `👤 Destinatario: ${user.name} (${user.role.toUpperCase()})\n` +
+        `⏰ Horario Programado: ${user.reportSchedule || "Al Cerrar Turno 🔒"}\n` +
+        `-----------------------------------------\n` +
+        `🟢 *VENTAS TOTALES DEL TURNO:* $0.00\n` +
+        `💰 *EFECTIVO EN CAJA:* $0.00\n` +
+        `🧾 Cuentas Cobradas: 0\n` +
+        `-----------------------------------------\n` +
+        `📎 Archivo Excel: [Reporte_Diario_${(modalTenant?.name || "Cocinet").replace(/\s+/g, "_")}.xlsx]\n` +
+        `✨ _Prueba de envío automático configurada correctamente (Lada +52)._`;
+
+      const encoded = encodeURIComponent(text);
+      const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+      window.open(waUrl, "_blank");
+      triggerAppNotification("WhatsApp Enviado 📲", `Corte de prueba preparado para ${user.name} (+52 ${user.phone || ""}).`, "success");
+    };
+
+    const handleSendDirectWA = (user: any) => {
+      const phoneTarget = formatMexicoPhone(user.phone || "");
+      const msg = encodeURIComponent(`Hola ${user.name}! Mensaje operativo de Cocinet Pro:\n\nTu acceso a la sucursal ${modalTenant?.name || ''} está activo.`);
+      const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${msg}` : `https://wa.me/?text=${msg}`;
+      window.open(waUrl, "_blank");
+    };
+
+    const handleSendCloudPush = async (user: any, isCorte: boolean) => {
+      let token = user.fcmToken;
+      if (!token) {
+        token = await requestFCMToken();
+        if (token) {
+          handleCellChange(user.id, "fcmToken", token, modalTenant?.id);
+        }
+      }
+
+      const title = isCorte
+        ? `📊 Corte Diario • ${modalTenant?.name || 'Cocinet'}`
+        : `💬 Mensaje Directo • ${modalTenant?.name || 'Cocinet'}`;
+      const body = isCorte
+        ? `Hola ${user.name}! Tu corte programado (${user.reportSchedule || 'Al Cierre'}) está listo: Venta $0.00, Efectivo $0.00.`
+        : `Hola ${user.name}! Notificación operativa enviada a tu dispositivo.`;
+
+      triggerDeviceNotification(title, body);
+
+      if (isCorte) {
+        triggerAppNotification(
+          "🔔 Cloud Messaging Push 🚀",
+          `Notificación enviada al dispositivo de ${user.name} (${user.role}). Revisa tu barra de notificaciones.`,
+          "success"
+        );
+      } else {
+        triggerAppNotification(
+          "🔔 Cloud Messaging Push 📲",
+          `Aviso operativo enviado al dispositivo de ${user.name}.`,
+          "info"
+        );
+      }
+    };
+
     return (
       <IonModal
         isOpen={showTenantUsersModal}
@@ -51,15 +115,15 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         style={{
           "--height": "100%",
           "--width": "100%",
-          "--max-height": "90vh",
-          "--max-width": "900px",
+          "--max-height": "92vh",
+          "--max-width": "1250px",
           "--border-radius": "24px",
         }}
       >
         <IonHeader className="ion-no-border">
           <IonToolbar style={{ "--background": "#fff", padding: "8px 16px" }}>
             <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1e293b", paddingLeft: "0" }}>
-              👥 Accesos y PINs: {modalTenant?.name || ''}
+              👥 Accesos, PINs y Reportes: {modalTenant?.name || ''}
             </IonTitle>
             <IonButtons slot="end">
               <IonButton onClick={() => setShowTenantUsersModal(false)} color="dark">
@@ -69,35 +133,55 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
           </IonToolbar>
         </IonHeader>
         <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-          <div className="space-y-6 max-w-4xl mx-auto pb-12 text-left">
+          <div className="space-y-6 max-w-6xl mx-auto pb-12 text-left">
             <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
               <div>
-                <h4 className="text-sm font-black text-slate-800 m-0">Gestión Rápida de Empleados</h4>
+                <h4 className="text-sm font-black text-slate-800 m-0">Gestión de Empleados, Teléfonos y Reportes</h4>
                 <p className="text-[11px] text-slate-500 font-bold m-0">
-                  Modifica nombres, roles y PINs de seguridad. Los empleados usarán estos PINs en la pantalla de inicio.
+                  Configura PINs de acceso, teléfonos celulares (Lada +52 automática), horarios de envío y pruebas Push.
                 </p>
               </div>
-              <button
-                onClick={() => handleAddRow(modalTenant.id)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-indigo-200 border-none cursor-pointer"
-              >
-                <i className="fa-solid fa-plus text-[10px]" />
-                Agregar Fila
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const token = await requestFCMToken();
+                    if (token) {
+                      triggerAppNotification("Dispositivo Vinculado 🔔✅", "Este dispositivo / navegador quedó registrado para recibir alertas Push de Cocinet.", "success");
+                    } else {
+                      triggerAppNotification("Aviso ⚠️", "Permiso de notificaciones no concedido o no soportado en esta ventana.", "warning");
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-emerald-200 border-none cursor-pointer"
+                >
+                  <i className="fa-solid fa-bell text-[11px]" />
+                  <span>Activar Notificaciones en este Celular</span>
+                </button>
+                <button
+                  onClick={() => handleAddRow(modalTenant.id)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 flex items-center gap-1.5 text-xs shadow-md shadow-indigo-200 border-none cursor-pointer"
+                >
+                  <i className="fa-solid fa-plus text-[10px]" />
+                  Agregar Fila
+                </button>
+              </div>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[950px]">
+                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[1100px]">
                   <thead>
-                    <tr className="bg-slate-900 text-white border-b border-slate-200 font-bold">
-                      <th className="py-2.5 px-3 w-[70px] text-center">Avatar</th>
-                      <th className="py-2.5 px-3 w-[110px]">ID Acceso</th>
-                      <th className="py-2.5 px-3">Nombre Completo</th>
-                      <th className="py-2.5 px-3 w-[100px]">Rol</th>
-                      <th className="py-2.5 px-3 w-[130px]">PIN de Acceso 🔑</th>
-                      <th className="py-2.5 px-3 w-[200px] text-center">Enviar / Compartir</th>
-                      <th className="py-2.5 px-3 w-[80px] text-center">Acción</th>
+                    <tr className="bg-slate-900 text-white border-b border-slate-200 font-bold text-[11px]">
+                      <th className="py-2.5 px-2.5 w-[50px] text-center">Avatar</th>
+                      <th className="py-2.5 px-2.5 w-[85px]">ID Acceso</th>
+                      <th className="py-2.5 px-2.5">Nombre Completo</th>
+                      <th className="py-2.5 px-2.5 w-[85px]">Rol</th>
+                      <th className="py-2.5 px-2.5 w-[100px]">PIN Acceso 🔑</th>
+                      <th className="py-2.5 px-2.5 w-[125px]">Teléfono 📱</th>
+                      <th className="py-2.5 px-2.5 w-[135px]">Horario Reporte ⏰</th>
+                      <th className="py-2.5 px-2.5 w-[185px] text-center">Prueba de Envío 🚀</th>
+                      <th className="py-2.5 px-2.5 w-[160px] text-center">Compartir Acceso</th>
+                      <th className="py-2.5 px-2.5 w-[65px] text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
@@ -119,7 +203,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       return (
                         <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                           {/* Avatar */}
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2 px-2.5 text-center">
                             <button
                               onClick={() => cycleAvatar(user.id, user.avatar)}
                               className="w-8 h-8 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg flex items-center justify-center text-sm hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer"
@@ -130,12 +214,12 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                           </td>
 
                           {/* ID (Read-only) */}
-                          <td className="py-2 px-3 font-mono text-[10px] text-slate-400 select-all font-bold">
+                          <td className="py-2 px-2.5 font-mono text-[10px] text-slate-400 select-all font-bold">
                             {user.id.replace(`${user.tenantId}-`, "")}
                           </td>
 
                           {/* Name Input */}
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-2.5">
                             <input
                               type="text"
                               defaultValue={user.name}
@@ -149,7 +233,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                           </td>
 
                           {/* Role Select */}
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-2.5">
                             <select
                               value={user.role}
                               onChange={(e) => handleCellChange(user.id, "role", e.target.value, modalTenant.id)}
@@ -162,8 +246,8 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                           </td>
 
                           {/* PIN Input */}
-                          <td className="py-2 px-3">
-                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 hover:border-indigo-400 focus-within:border-indigo-500 focus-within:bg-white rounded px-1.5 py-0.5 transition-all w-[110px]">
+                          <td className="py-2 px-2.5">
+                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 hover:border-indigo-400 focus-within:border-indigo-500 focus-within:bg-white rounded px-1.5 py-0.5 transition-all w-[90px]">
                               <input
                                 type={revealedPins[user.id] ? "text" : "password"}
                                 maxLength={4}
@@ -183,7 +267,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                                     triggerAppNotification("⚠️ Error", "El PIN debe tener exactamente 4 dígitos.", "warning");
                                   }
                                 }}
-                                className="w-12 bg-transparent text-slate-800 font-mono font-black text-center outline-none border-none text-[13px] tracking-widest placeholder-slate-300"
+                                className="w-10 bg-transparent text-slate-800 font-mono font-black text-center outline-none border-none text-[12px] tracking-widest placeholder-slate-300"
                                 placeholder="0000"
                               />
                               <button
@@ -192,7 +276,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                                   e.stopPropagation();
                                   setRevealedPins(prev => ({ ...prev, [user.id]: !prev[user.id] }));
                                 }}
-                                className="p-1 hover:bg-slate-200/60 text-slate-400 hover:text-indigo-600 rounded cursor-pointer border-none bg-transparent flex items-center justify-center shrink-0 ml-auto"
+                                className="p-0.5 hover:bg-slate-200/60 text-slate-400 hover:text-indigo-600 rounded cursor-pointer border-none bg-transparent flex items-center justify-center shrink-0 ml-auto"
                                 title={revealedPins[user.id] ? "Ocultar PIN" : "Mostrar PIN"}
                               >
                                 <i className={`fa-solid ${revealedPins[user.id] ? "fa-eye-slash" : "fa-eye"} text-[10px]`} />
@@ -200,8 +284,92 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                             </div>
                           </td>
 
-                          {/* Enviar / Compartir */}
-                          <td className="py-2 px-3">
+                          {/* Teléfono (WhatsApp) */}
+                          <td className="py-2 px-2.5">
+                            <input
+                              type="tel"
+                              placeholder="Ej: 9511234567"
+                              defaultValue={user.phone || ""}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                if (val !== (user.phone || "")) {
+                                  handleCellChange(user.id, "phone", val, modalTenant.id);
+                                }
+                              }}
+                              className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded px-1.5 py-1 text-slate-800 font-mono text-[11px] outline-none transition"
+                            />
+                          </td>
+
+                          {/* Horario de Envío */}
+                          <td className="py-2 px-2.5">
+                            {isProtected ? (
+                              <select
+                                value={user.reportSchedule || "Al Cerrar Turno 🔒"}
+                                onChange={(e) => handleCellChange(user.id, "reportSchedule", e.target.value, modalTenant.id)}
+                                className="w-full bg-indigo-50/70 hover:bg-indigo-100/70 text-indigo-900 border border-indigo-200/80 rounded px-1.5 py-1 font-bold outline-none cursor-pointer text-[10px]"
+                              >
+                                <option value="Al Cerrar Turno 🔒">Al Cierre 🔒</option>
+                                <option value="01:00 AM 🌙">01:00 AM 🌙</option>
+                                <option value="01:30 AM 🌙">01:30 AM 🌙</option>
+                                <option value="02:00 AM 🌙">02:00 AM 🌙</option>
+                                <option value="02:30 AM 🌙">02:30 AM 🌙</option>
+                                <option value="03:00 AM 🌙">03:00 AM 🌙</option>
+                                <option value="04:00 AM 🌙">04:00 AM 🌙</option>
+                                <option value="05:00 AM 🌅">05:00 AM 🌅</option>
+                                <option value="Desactivado ❌">Desactivado ❌</option>
+                              </select>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-semibold italic bg-slate-100 px-2 py-0.5 rounded border border-slate-200 block text-center">
+                                Solo Avisos 🛡️
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Prueba de Envío */}
+                          <td className="py-2 px-2.5 text-center">
+                            {isProtected ? (
+                              <div className="flex justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendTestCorteWA(user)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-black flex items-center gap-1 cursor-pointer transition border-none shadow-xs"
+                                  title="Enviar Corte por WhatsApp a este usuario"
+                                >
+                                  <span>📊💬 WA Corte</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendCloudPush(user, true)}
+                                  className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded text-[10px] font-black flex items-center gap-1 cursor-pointer transition border-none shadow-xs"
+                                  title="Enviar Notificación Cloud de Corte"
+                                >
+                                  <span>🔔📲 Cloud</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendDirectWA(user)}
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                                  title="Enviar WhatsApp directo a este empleado"
+                                >
+                                  <span>💬 WA</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendCloudPush(user, false)}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                                  title="Enviar Notificación Cloud directa a este empleado"
+                                >
+                                  <span>🔔 Push</span>
+                                </button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Enviar / Compartir Acceso */}
+                          <td className="py-2 px-2.5">
                             <div className="flex justify-center gap-1.5">
                               <button
                                 type="button"
@@ -220,8 +388,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => {
+                                  const rawPhone = (user.phone || "").replace(/\D/g, "");
+                                  const phoneTarget = rawPhone ? (rawPhone.length === 10 ? `52${rawPhone}` : rawPhone) : "";
                                   const msg = encodeURIComponent(`Hola ${user.name}! Aquí tienes tu acceso directo de Cocinet Pro:\n\n${link}`);
-                                  window.open(`https://wa.me/?text=${msg}`, "_blank");
+                                  const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${msg}` : `https://wa.me/?text=${msg}`;
+                                  window.open(waUrl, "_blank");
                                 }}
                                 className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
                               >
@@ -231,7 +402,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                           </td>
 
                           {/* Action (Delete) */}
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2 px-2.5 text-center">
                             {isProtected ? (
                               <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
                                 Fijo

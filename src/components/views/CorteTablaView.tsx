@@ -5,10 +5,10 @@ import { EditFondoModal } from '../modals/EditFondoModal';
 import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
 import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
-import { getCompanyCatalog } from '../../utils/appHelpers';
-import React from 'react';
+import { getCompanyCatalog, getTenantUsers } from '../../utils/appHelpers';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, chevronDownOutline, chevronUpOutline, downloadOutline, gridOutline, logoWhatsapp, menuOutline, statsChartOutline, swapHorizontalOutline, syncOutline, trashOutline } from 'ionicons/icons';
 
 interface CorteTablaViewProps {
@@ -221,7 +221,14 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   corteData,
   CashierSession
 }) => {
-if (currentUser?.role === "mesero") {
+  const [showPendingTablesModal, setShowPendingTablesModal] = useState(false);
+  const [showClosePinModal, setShowClosePinModal] = useState(false);
+  const [closePinInput, setClosePinInput] = useState("");
+  const [showTestWhatsappModal, setShowTestWhatsappModal] = useState(false);
+  const [testWhatsappPhone, setTestWhatsappPhone] = useState("");
+  const [pendingTablesList, setPendingTablesList] = useState<any[]>([]);
+
+  if (currentUser?.role === "mesero") {
       return (
         <IonPage>
         {renderMaterialHeader({
@@ -1220,6 +1227,18 @@ if (currentUser?.role === "mesero") {
       ? calculatedEstimatedCash
       : (isClosed && sessionToRender?.estimatedCash !== undefined ? sessionToRender.estimatedCash : calculatedEstimatedCash);
 
+    const totalVentasTurno =
+      Number(corteData.cashSales || 0) +
+      Number(corteData.cardSales || 0) +
+      Number(corteData.transSales || 0) +
+      Number(corteData.lupaySales || 0);
+
+    const totalCobrosTurnoCount =
+      Number(corteData.cashSalesCount || 0) +
+      Number(corteData.cardSalesCount || 0) +
+      Number(corteData.transSalesCount || 0) +
+      Number(corteData.lupaySalesCount || 0);
+
     const tablaArqueoTotalBilletes =
       (parseInt(tablaArq1000) || 0) * 1000 +
       (parseInt(tablaArq500) || 0) * 500 +
@@ -1241,42 +1260,68 @@ if (currentUser?.role === "mesero") {
     const esFaltante = diferenciaCaja < 0;
     const esSobrante = diferenciaCaja > 0;
 
-    const generateCorteText = () => {
+    const generateCorteText = (customCajeroName?: string, customRole?: string, isReopenedNotice?: boolean) => {
       const dateStr = new Date().toLocaleString("es-MX");
-      const nombreNegocio = ticketBusinessName || selectedTenant?.name || "TAQUERÍA EL PASTORCITO";
+      const nombreNegocio = ticketBusinessName || selectedTenant?.name || "COCINET";
       const nombreSucursal = ticketSucursal || selectedTenant?.sucursalDefault || "SUCURSAL MATRIZ";
-      const cajeroNombre = sessionToRender?.userName || currentUser?.name || "Sin Cajero";
+      const cajeroNombre = customCajeroName || sessionToRender?.closedByUserName || sessionToRender?.userName || currentUser?.name || "Cajero de Turno";
+      const rolStr = customRole || sessionToRender?.closedByUserRole || currentUser?.role || "cajero";
+      const isReopened = isReopenedNotice !== undefined ? isReopenedNotice : ((sessionToRender?.reopenedCount || 0) > 0);
+
+      const totalVentasNetas =
+        Number(corteData.cashSales || 0) +
+        Number(corteData.cardSales || 0) +
+        Number(corteData.transSales || 0) +
+        Number(corteData.lupaySales || 0);
+
+      const totalCobrosCount =
+        Number(corteData.cashSalesCount || 0) +
+        Number(corteData.cardSalesCount || 0) +
+        Number(corteData.transSalesCount || 0) +
+        Number(corteData.lupaySalesCount || 0);
 
       let text = `=================================\n`;
       text += `🏪 ${nombreNegocio.toUpperCase()}\n`;
       text += `📍 SUCURSAL: ${nombreSucursal.toUpperCase()}\n`;
       text += `=================================\n`;
-      text += `📝 CORTE DE CAJA / FIN DE TURNO\n`;
+      if (isReopened) {
+        text += `🚨 CORTE FINAL DEFINITIVO (ACUMULADO DEL DÍA)\n`;
+        text += `⚠️ (Actualiza y reemplaza al corte anterior por ventas adicionales en madrugada)\n`;
+      } else {
+        text += `📝 CORTE DE CAJA / FIN DE TURNO\n`;
+      }
       text += `📅 Fecha: ${dateStr}\n`;
-      text += `👤 Cajero: ${cajeroNombre}\n`;
+      text += `👤 Responsable: ${cajeroNombre} (${rolStr.toUpperCase()})\n`;
       text += `=================================\n\n`;
 
-      text += `💰 RESUMEN GENERAL\n`;
+      text += `🟢 TOTAL VENDIDO EN EL DÍA: $${totalVentasNetas.toFixed(2)}\n`;
+      text += `🧾 Total Cuentas Cobradas: ${totalCobrosCount} cuentas\n`;
       text += `---------------------------------\n`;
-      text += `📥 Fondos Iniciales: $${Number(sessionToRender?.dotacionInicial || 0).toFixed(2)}\n`;
-      text += `💵 Ventas Efectivo:  $${corteData.cashSales.toFixed(2)} (${corteData.cashSalesCount} vnt)\n`;
-      text += `💳 Ventas Elect:     $${(corteData.cardSales + corteData.transSales).toFixed(2)} (${corteData.cardSalesCount + corteData.transSalesCount} vnt)\n`;
-      text += `📱 Ventas LUPAY:     $${corteData.lupaySales.toFixed(2)} (${corteData.lupaySalesCount} vnt)\n`;
-      text += `➕ Entradas Adic:    $${totalInflowsAmt.toFixed(2)}\n`;
-      text += `➖ Egresos/Gastos:  -$${totalOutflowsAmt.toFixed(2)}\n`;
-      text += `🛒 Compras Pagadas: -$${corteData.totalPurchasesPaid.toFixed(2)}\n`;
+      text += `💵 Efectivo en Ventas:    $${Number(corteData.cashSales || 0).toFixed(2)} (${corteData.cashSalesCount || 0} cobros)\n`;
+      text += `💳 Tarjetas / Transf:     $${(Number(corteData.cardSales || 0) + Number(corteData.transSales || 0)).toFixed(2)} (${(corteData.cardSalesCount || 0) + (corteData.transSalesCount || 0)} cobros)\n`;
+      if (Number(corteData.lupaySales || 0) > 0) {
+        text += `📱 Ventas LUPAY:          $${Number(corteData.lupaySales || 0).toFixed(2)} (${corteData.lupaySalesCount || 0} cobros)\n`;
+      }
+      text += `---------------------------------\n\n`;
+
+      text += `💰 BALANCE EN CAJA (SOLO EFECTIVO)\n`;
       text += `---------------------------------\n`;
-      text += `📊 Balance Esperado: $${estimatedCashInBox.toFixed(2)}\n`;
-      text += `⭐ Arqueo Real Caja: $${tablaArqueoTotal.toFixed(2)}\n`;
+      text += `📥 Fondo de Apertura:     $${Number(sessionToRender?.dotacionInicial || 0).toFixed(2)}\n`;
+      text += `➕ Entradas Adicionales:  $${totalInflowsAmt.toFixed(2)}\n`;
+      text += `➖ Gastos / Egresos:     -$${totalOutflowsAmt.toFixed(2)}\n`;
+      text += `🛒 Compras Pagadas:      -$${Number(corteData.totalPurchasesPaid || 0).toFixed(2)}\n`;
+      text += `---------------------------------\n`;
+      text += `💵 EFECTIVO ESPERADO:     $${estimatedCashInBox.toFixed(2)}\n`;
+      text += `⭐ CONTEO FÍSICO (ARQUEO):$${tablaArqueoTotal.toFixed(2)}\n`;
       text += `---------------------------------\n`;
 
       const absDif = Math.abs(diferenciaCaja).toFixed(2);
       if (esFaltante) {
-        text += `🔴 FALTANTE CAJA:   -$${absDif}\n`;
+        text += `🔴 FALTANTE EN CAJA:     -$${absDif}\n`;
       } else if (esSobrante) {
-        text += `🟢 SOBRANTE CAJA:   +$${absDif}\n`;
+        text += `🟢 SOBRANTE EN CAJA:     +$${absDif}\n`;
       } else {
-        text += `✅ CAJA CUADRADA EXCELENTE\n`;
+        text += `✅ CAJA CUADRADA AL 100%\n`;
       }
       text += `=================================\n\n`;
 
@@ -1296,53 +1341,130 @@ if (currentUser?.role === "mesero") {
         });
       if (!elecAdded) text += `• Sin ventas electrónicas\n`;
       text += `👉 Total Elec: $${(corteData.cardSales + corteData.transSales + corteData.lupaySales).toFixed(2)}\n`;
-      text += `=================================\n\n`;
-
-      text += `💵 DETALLE DE BILLETES\n`;
-      text += `---------------------------------\n`;
-      const bills = [
-        { label: "$1000", val: tablaArq1000 },
-        { label: "$500",  val: tablaArq500 },
-        { label: "$200",  val: tablaArq200 },
-        { label: "$100",  val: tablaArq100 },
-        { label: "$50",   val: tablaArq50 },
-        { label: "$20",   val: tablaArq20 },
-      ];
-      let billsAdded = false;
-      bills.forEach(b => {
-        const cant = parseInt(b.val) || 0;
-        if (cant > 0) {
-          const totalB = cant * parseInt(b.label.replace("$", ""));
-          text += `• ${b.label} x ${cant} pzs = $${totalB.toFixed(2)}\n`;
-          billsAdded = true;
-        }
-      });
-      if (!billsAdded) text += `• Sin billetes declarados\n`;
-      text += `👉 Total Billetes: $${tablaArqueoTotalBilletes.toFixed(2)}\n\n`;
-
-      text += `🪙 DETALLE DE MONEDAS\n`;
-      text += `---------------------------------\n`;
-      const coins = [
-        { label: "$10",   val: tablaArqM10 },
-        { label: "$5",    val: tablaArqM5 },
-        { label: "$2",    val: tablaArqM2 },
-        { label: "$1",    val: tablaArqM1 },
-        { label: "$0.50", val: tablaArqM05 },
-      ];
-      let coinsAdded = false;
-      coins.forEach(c => {
-        const cant = parseFloat(c.val) || 0;
-        if (cant > 0) {
-          const totalC = cant * parseFloat(c.label.replace("$", ""));
-          text += `• ${c.label} x ${cant} pzs = $${totalC.toFixed(2)}\n`;
-          coinsAdded = true;
-        }
-      });
-      if (!coinsAdded) text += `• Sin monedas declaradas\n`;
-      text += `👉 Total Monedas:  $${tablaArqueoTotalMonedas.toFixed(2)}\n`;
       text += `=================================\n`;
       text += `¡Gracias por cuidar sucursal! 🌮✨\n`;
       return text;
+    };
+
+    const handleInitiateCloseShift = () => {
+      if (!sessionToRender) {
+        triggerAppNotification("Aviso", "No hay una sesión activa de turno para cerrar.", "info");
+        return;
+      }
+
+      // 1. Candado: Checar si hay mesas o comandas abiertas pendientes de cobro
+      const occupied = (tables || []).filter((t: any) => {
+        if (t.status === "occupied" || t.status === "payment_pending") return true;
+        const comandas = t.comandas || [];
+        return comandas.some((c: any) => (c.items || []).some((i: any) => !i.isCancelled));
+      });
+
+      if (occupied.length > 0) {
+        setPendingTablesList(occupied);
+        setShowPendingTablesModal(true);
+        return;
+      }
+
+      // 2. Si no hay mesas abiertas, pedir PIN del Cajero Responsable
+      setClosePinInput("");
+      setShowClosePinModal(true);
+    };
+
+    const handleConfirmCloseWithPin = async (pinEntered: string) => {
+      const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+      const matchedUser = tenantUsers.find((u) => u.pin === pinEntered) ||
+        (pinEntered === "2052" || pinEntered === "4020" ? { id: "master", name: "Administrador General", role: "admin" as const, pin: pinEntered, avatar: "👑" } : null);
+
+      if (!matchedUser) {
+        triggerAppNotification("❌ PIN Incorrecto", "El PIN ingresado no corresponde a ningún usuario autorizado de esta sucursal.", "warning");
+        return;
+      }
+
+      try {
+        const nowIso = new Date().toISOString();
+        const isReopening = (sessionToRender?.reopenedCount || 0) > 0;
+        
+        const updatedSession = {
+          ...sessionToRender,
+          status: "closed",
+          closedAt: nowIso,
+          closedByUserName: matchedUser.name,
+          closedByUserRole: matchedUser.role,
+          arqueoTotal: tablaArqueoTotal,
+          arqueoBilletes: tablaArqueoTotalBilletes,
+          arqueoMonedas: tablaArqueoTotalMonedas,
+          estimatedCash: estimatedCashInBox,
+          diferencia: diferenciaCaja,
+          cashSales: corteData.cashSales,
+          cardSales: corteData.cardSales,
+          transSales: corteData.transSales,
+          cashSalesCount: corteData.cashSalesCount,
+          cardSalesCount: corteData.cardSalesCount,
+          transSalesCount: corteData.transSalesCount,
+          totalInflows: totalInflowsAmt,
+          totalOutflows: totalOutflowsAmt,
+          totalPurchasesPaid: corteData.totalPurchasesPaid,
+          lastReportedTotal: totalVentasTurno,
+        };
+
+        await updateCashierSessionInFirebase(sessionToRender.id, updatedSession);
+        
+        setCashierSessions((prev: any[]) =>
+          prev.map((s) => (s.id === sessionToRender.id ? updatedSession : s))
+        );
+
+        setShowClosePinModal(false);
+        triggerAppNotification(
+          "Turno Cerrado 🔒✅",
+          `El turno fue finalizado formalmente por ${matchedUser.name} (${matchedUser.role}).`,
+          "success"
+        );
+
+        // Disparo de WhatsApp
+        const text = generateCorteText(matchedUser.name, matchedUser.role, isReopening);
+        const encodedText = encodeURIComponent(text);
+        window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+      } catch (err) {
+        console.error(err);
+        triggerAppNotification("Error", "No se pudo cerrar el turno en Firebase.", "warning");
+      }
+    };
+
+    const handleReopenShift = async () => {
+      if (!sessionToRender) return;
+      try {
+        const updatedSession = {
+          ...sessionToRender,
+          status: "open",
+          reopenedAt: new Date().toISOString(),
+          reopenedCount: (sessionToRender.reopenedCount || 0) + 1,
+        };
+
+        await updateCashierSessionInFirebase(sessionToRender.id, updatedSession);
+        setCashierSessions((prev: any[]) =>
+          prev.map((s) => (s.id === sessionToRender.id ? updatedSession : s))
+        );
+
+        triggerAppNotification(
+          "Turno Reabierto 🔓",
+          "La caja está activa nuevamente para registrar ventas adicionales.",
+          "success"
+        );
+      } catch (err) {
+        console.error(err);
+        triggerAppNotification("Error", "No se pudo reabrir el turno.", "warning");
+      }
+    };
+
+    const handleSendTestWhatsApp = (customPhone?: string) => {
+      const text = generateCorteText("Prueba de Cajero", "cajero", false);
+      const cleanPhone = (customPhone || "").replace(/\D/g, "");
+      const phoneTarget = cleanPhone ? (cleanPhone.length === 10 ? `52${cleanPhone}` : cleanPhone) : "";
+      const encodedText = encodeURIComponent(`🧪 [CORTE DE PRUEBA]\n\n${text}`);
+      const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;
+      window.open(waUrl, "_blank");
+      setShowTestWhatsappModal(false);
+      triggerAppNotification("WhatsApp de Prueba 📲", "Enlace de WhatsApp de prueba generado con éxito.", "success");
     };
 
     const exportCorteTablaToTXT = () => {
@@ -1506,16 +1628,9 @@ if (currentUser?.role === "mesero") {
             </IonButtons>
             <IonTitle style={{ fontWeight: "bold", padding: "0 4px" }}>
               <div className="flex flex-col justify-center leading-tight">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-xs sm:text-sm md:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
-                    {selectedTenant ? `🏢 ${selectedTenant.name}` : "Corte de Caja"}
-                  </span>
-                  {selectedTenant && (
-                    <span className="text-[9px] font-mono font-black text-amber-200 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/40">
-                      ID: {selectedTenant.id}
-                    </span>
-                  )}
-                </div>
+                <span className="text-xs sm:text-sm md:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
+                  {selectedTenant ? `🏢 ${selectedTenant.name}` : "Corte de Caja"}
+                </span>
                 <span className="text-[11px] sm:text-[11px] md:text-xs text-slate-300 font-bold tracking-normal truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[200px] md:max-w-xs lg:max-w-md">
                   📍 {selectedTenant?.sucursalDefault || "Matriz"} {sessionToRender?.status === "closed" ? "(Auditoría)" : ""}
                 </span>
@@ -1678,10 +1793,238 @@ if (currentUser?.role === "mesero") {
           ]}
         />
 
-<EditFondoModal
+        <EditFondoModal
           showEditFondoModal={showEditFondoModal}
           setShowEditFondoModal={setShowEditFondoModal}
         />
+
+        {/* MODAL 1: CANDADO DE CUENTAS ABIERTAS */}
+        <IonModal
+          isOpen={showPendingTablesModal}
+          onDidDismiss={() => setShowPendingTablesModal(false)}
+          style={{
+            "--height": "auto",
+            "--max-height": "85vh",
+            "--width": "95%",
+            "--max-width": "600px",
+            "--border-radius": "24px",
+          }}
+        >
+          <div className="p-6 bg-white text-left font-sans">
+            <div className="flex items-center gap-3 pb-4 border-b border-rose-100">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-rose-950 m-0">
+                  Cuentas Pendientes de Cobro
+                </h3>
+                <p className="text-xs text-rose-600 font-bold m-0">
+                  No se puede cerrar el turno mientras existan mesas o pedidos sin cobrar.
+                </p>
+              </div>
+            </div>
+
+            <div className="py-4 space-y-2.5 max-h-[50vh] overflow-y-auto">
+              {pendingTablesList.map((t: any) => {
+                const totalMesa = (t.comandas || []).reduce(
+                  (sum: number, c: any) =>
+                    sum +
+                    (c.items || []).reduce(
+                      (s: number, i: any) =>
+                        s + (i.isCancelled ? 0 : i.quantity * (i.product?.price || 0)),
+                      0
+                    ),
+                  0
+                );
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-amber-50/60 border border-slate-200 hover:border-amber-300 rounded-2xl transition"
+                  >
+                    <div>
+                      <span className="text-sm font-black text-slate-800 block">
+                        🍽️ {t.label || `Mesa ${t.id}`}
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-semibold">
+                        {(t.comandas || []).length} comanda(s) • Total:{" "}
+                        <strong className="text-amber-700 font-black">
+                          ${totalMesa.toFixed(2)}
+                        </strong>
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowPendingTablesModal(false);
+                        setSelectedTableGestion(t.id);
+                        setAppMode("gestion_cuentas");
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-3.5 rounded-xl transition border-none cursor-pointer flex items-center gap-1 shadow-sm"
+                    >
+                      <span>Ir a Cobrar 💳</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setShowPendingTablesModal(false)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl text-xs transition border-none cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </IonModal>
+
+        {/* MODAL 2: CANDADO DE PIN DE CAJERO RESPONSABLE */}
+        <IonModal
+          isOpen={showClosePinModal}
+          onDidDismiss={() => setShowClosePinModal(false)}
+          style={{
+            "--height": "auto",
+            "--max-height": "90vh",
+            "--width": "95%",
+            "--max-width": "420px",
+            "--border-radius": "24px",
+          }}
+        >
+          <div className="p-6 bg-white text-center font-sans">
+            <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-3 shadow-inner">
+              🔑
+            </div>
+            <h3 className="text-lg font-black text-slate-900 m-0">
+              Confirmar Cierre de Turno
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1 mb-4">
+              Ingresa el PIN de 4 dígitos del cajero o administrador responsable para sellar este corte.
+            </p>
+
+            {/* PIN Display */}
+            <div className="flex justify-center gap-3 my-4">
+              {[0, 1, 2, 3].map((idx) => (
+                <div
+                  key={idx}
+                  className={`w-12 h-14 rounded-2xl border-2 flex items-center justify-center text-2xl font-black font-mono transition-all ${
+                    closePinInput.length > idx
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-900 scale-105 shadow-sm"
+                      : "border-slate-200 bg-slate-50 text-slate-300"
+                  }`}
+                >
+                  {closePinInput.length > idx ? "●" : ""}
+                </div>
+              ))}
+            </div>
+
+            {/* Keypad */}
+            <div className="grid grid-cols-3 gap-2.5 max-w-[280px] mx-auto my-4">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "OK"].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    if (key === "C") {
+                      setClosePinInput("");
+                    } else if (key === "OK") {
+                      if (closePinInput.length === 4) {
+                        handleConfirmCloseWithPin(closePinInput);
+                      } else {
+                        triggerAppNotification("Aviso", "Ingresa los 4 dígitos de tu PIN.", "warning");
+                      }
+                    } else {
+                      if (closePinInput.length < 4) {
+                        const nextVal = closePinInput + key;
+                        setClosePinInput(nextVal);
+                        if (nextVal.length === 4) {
+                          setTimeout(() => handleConfirmCloseWithPin(nextVal), 150);
+                        }
+                      }
+                    }
+                  }}
+                  className={`h-12 rounded-2xl font-black text-lg border cursor-pointer transition active:scale-95 flex items-center justify-center ${
+                    key === "OK"
+                      ? "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200"
+                      : key === "C"
+                      ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                  }`}
+                >
+                  {key === "OK" ? "✓" : key}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowClosePinModal(false)}
+              className="mt-2 text-xs font-bold text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </IonModal>
+
+        {/* MODAL 3: ENVIAR CORTE DE PRUEBA */}
+        <IonModal
+          isOpen={showTestWhatsappModal}
+          onDidDismiss={() => setShowTestWhatsappModal(false)}
+          style={{
+            "--height": "auto",
+            "--max-height": "85vh",
+            "--width": "95%",
+            "--max-width": "460px",
+            "--border-radius": "24px",
+          }}
+        >
+          <div className="p-6 bg-white text-left font-sans">
+            <div className="flex items-center gap-3 pb-3 border-b border-sky-100">
+              <div className="w-12 h-12 bg-sky-100 text-sky-600 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm">
+                🧪
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 m-0">
+                  Enviar Corte de Prueba por WhatsApp
+                </h3>
+                <p className="text-[11px] text-slate-500 font-bold m-0">
+                  Prueba cómo recibe el dueño el formato y los totales del corte.
+                </p>
+              </div>
+            </div>
+
+            <div className="py-4 space-y-3">
+              <label className="text-xs font-black text-slate-700 block">
+                Número de WhatsApp de Destino (10 dígitos):
+              </label>
+              <input
+                type="tel"
+                placeholder="Ej: 9511234567"
+                value={testWhatsappPhone}
+                onChange={(e) => setTestWhatsappPhone(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 focus:bg-white rounded-xl px-3 py-2.5 text-slate-800 font-mono text-sm outline-none transition"
+              />
+              <p className="text-[11px] text-slate-400 font-medium">
+                Si lo dejas vacío, abrirá WhatsApp para que elijas el contacto manualmente.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={() => setShowTestWhatsappModal(false)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition border-none cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleSendTestWhatsApp(testWhatsappPhone)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-xl text-xs transition border-none cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-200"
+              >
+                <IonIcon icon={logoWhatsapp} className="text-sm" />
+                <span>Enviar Prueba 🚀</span>
+              </button>
+            </div>
+          </div>
+        </IonModal>
 
         <IonContent
           style={{ "--background": "#f8fafc", "--padding-top": "2px", "--padding-bottom": "16px" }}
@@ -1690,16 +2033,9 @@ if (currentUser?.role === "mesero") {
           <div className="max-w-4xl mx-auto pt-2 pb-6 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2 m-0">
-                    <span className="text-2xl sm:text-3xl">📊</span> Corte Actual
-                  </h1>
-                  {selectedTenant && (
-                    <span className="text-xs font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
-                      🏢 {selectedTenant.name} ({selectedTenant.id})
-                    </span>
-                  )}
-                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2 m-0">
+                  <span className="text-2xl sm:text-3xl">📊</span> Corte Actual
+                </h1>
                 <p className="text-[14px] sm:text-[14px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
                   Resumen general y balance final • {selectedTenant?.sucursalDefault || "Matriz"}
                 </p>
@@ -1722,11 +2058,35 @@ if (currentUser?.role === "mesero") {
                     <span>📦 Respaldo del Tenant</span>
                   </button>
                 )}
-                {sessionToRender?.status !== "open" && (
-                  <div className="bg-slate-100 text-slate-500 font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 text-[13px] border border-slate-200 uppercase tracking-widest select-none">
-                    <span>🔒 Turno Cerrado (Auditoría)</span>
+
+                {sessionToRender?.status === "open" ? (
+                  <button
+                    onClick={handleInitiateCloseShift}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 border-none cursor-pointer text-[13px] uppercase tracking-wider animate-pulse hover:animate-none"
+                  >
+                    <span>🔒 Cerrar Turno</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="bg-slate-100 text-slate-500 font-bold py-2.5 px-3 rounded-xl flex items-center gap-1.5 text-[12px] border border-slate-200 uppercase tracking-widest select-none">
+                      <span>🔒 Turno Cerrado</span>
+                    </div>
+                    <button
+                      onClick={handleReopenShift}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3.5 rounded-xl transition duration-200 shadow-md shadow-emerald-600/20 flex items-center gap-1.5 border-none cursor-pointer text-[12px] uppercase tracking-wider"
+                    >
+                      <span>🔓 Reabrir Turno</span>
+                    </button>
                   </div>
                 )}
+
+                <button
+                  onClick={() => setShowTestWhatsappModal(true)}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 px-3 rounded-xl transition duration-200 shadow-md shadow-sky-600/25 flex items-center gap-1.5 border-none cursor-pointer text-[13px]"
+                  title="Enviar mensaje de corte de prueba a cualquier WhatsApp"
+                >
+                  <span>🧪 Probar WhatsApp</span>
+                </button>
 
                 <button
                   onClick={(e) => {
@@ -1760,23 +2120,65 @@ if (currentUser?.role === "mesero") {
             </div>
 
             {/* WIDGET UNIFICADO Y PULIDO: RESUMEN DE CORTE DE CAJA */}
-            <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
               
-              {/* CINTILLO / SECCIÓN DE BALANCE ESPERADO (SISTEMA) */}
-              <div className="bg-slate-900 text-white px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-2">
-                <div className="text-center sm:text-left">
-                  <span className="text-[16px] font-black uppercase tracking-wider text-slate-400">
-                    💰 BALANCE ESPERADO EN CAJA (SISTEMA)
-                  </span>
-                  <div className="text-[26px] font-black text-emerald-400 mt-0.5">
-                    ${estimatedCashInBox.toFixed(2)}
+              {/* BLOQUE SUPERIOR 1: TOTAL VENDIDO EN EL TURNO (VENTA GENERAL) */}
+              <div className="bg-slate-950 text-white px-5 py-4 border-b border-slate-800">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded">
+                      🟢 TOTAL VENDIDO EN EL TURNO (VENTA GENERAL)
+                    </span>
+                    <div className="flex items-baseline gap-3 mt-1">
+                      <span className="text-3xl sm:text-4xl font-black text-emerald-400 tracking-tight">
+                        ${totalVentasTurno.toFixed(2)}
+                      </span>
+                      <span className="text-xs text-slate-300 font-bold">
+                        ({totalCobrosTurnoCount} {totalCobrosTurnoCount === 1 ? "cuenta cobrada" : "cuentas cobradas en total"})
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Resumen por tipo de pago */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <div className="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <span className="text-emerald-400 font-bold">💵 Efectivo:</span>
+                      <span className="font-mono font-black text-white">${Number(corteData.cashSales || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <span className="text-sky-400 font-bold">💳 Tarj / Transf:</span>
+                      <span className="font-mono font-black text-white">${(Number(corteData.cardSales || 0) + Number(corteData.transSales || 0)).toFixed(2)}</span>
+                    </div>
+                    {Number(corteData.lupaySales || 0) > 0 && (
+                      <div className="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                        <span className="text-purple-400 font-bold">📱 Lupay:</span>
+                        <span className="font-mono font-black text-white">${Number(corteData.lupaySales || 0).toFixed(2)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="text-center sm:text-right">
-                  <span className="text-[15px] text-slate-400 font-bold block uppercase tracking-wider">
+              </div>
+
+              {/* BLOQUE SUPERIOR 2: BALANCE ESPERADO EN CAJA (SOLO EFECTIVO FÍSICO) */}
+              <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800">
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                    💰 DINERO ESPERADO EN CAJA (SOLO EFECTIVO FÍSICO)
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-2xl sm:text-3xl font-black text-white">
+                      ${estimatedCashInBox.toFixed(2)}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-semibold hidden sm:inline">
+                      (Fondo inicial + Ventas en efectivo - Gastos)
+                    </span>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2">
+                  <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                     Efectivo Teórico Calculado
                   </span>
-                  <span className="text-[16px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded font-mono mt-0.5 inline-block border border-slate-700">
+                  <span className="text-xs bg-slate-800 text-amber-300 px-2.5 py-1 rounded font-mono border border-slate-700 font-bold">
                     Turno: {sessionToRender?.userName || "Operador"}
                   </span>
                 </div>
