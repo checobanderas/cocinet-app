@@ -2091,6 +2091,35 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                 />
               )}
 
+              {manageMenuTab === "import_excel_ai" && (
+                <div
+                  style={{
+                    background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)",
+                    color: "#ffffff",
+                    padding: "16px 20px",
+                    borderRadius: "14px",
+                    marginBottom: "20px",
+                    textAlign: "center",
+                    boxShadow: "0 4px 12px rgba(30, 58, 138, 0.25)",
+                    border: "1px solid #3b82f6",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "1.15rem",
+                      fontWeight: "bold",
+                      letterSpacing: "0.3px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    📢 Se tomará el orden consecutivo del listado de Excel para los reportes de auditoría tal cual.
+                  </div>
+                  <div style={{ fontSize: "0.88rem", opacity: 0.95 }}>
+                    Se respetará estrictamente la numeración consecutiva (1 al 210) y precios para la Matriz y Sucursales sin alteraciones.
+                  </div>
+                </div>
+              )}
+
               <div
                 style={{
                   display: "flex",
@@ -2523,6 +2552,17 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                         >
                           <th
                             style={{
+                              padding: "12px 12px",
+                              fontWeight: "600",
+                              color: "#1e3a8a",
+                              textAlign: "center",
+                              width: "70px",
+                            }}
+                          >
+                            # Orden
+                          </th>
+                          <th
+                            style={{
                               padding: "12px 16px",
                               fontWeight: "600",
                               color: "#475569",
@@ -2589,6 +2629,18 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
                             key={p.id || idx}
                             style={{ borderBottom: "1px solid #f1f5f9" }}
                           >
+                            <td
+                              style={{
+                                padding: "10px 8px",
+                                textAlign: "center",
+                                fontWeight: "bold",
+                                color: "#1e3a8a",
+                                fontSize: "0.95rem",
+                                background: "#f8fafc",
+                              }}
+                            >
+                              #{p.sortOrder || p.consecutive || idx + 1}
+                            </td>
                             <td style={{ padding: "10px 16px" }}>
                               <input
                                 type="text"

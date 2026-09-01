@@ -320,19 +320,39 @@ export const getTenantUsers = (tenantId: string): User[] => {
 };
 
 export const SUBCATEGORY_ORDER = [
-  "queso fundido",
-  "quesadilla, gringas, sincronizada y burras harina",
-  "quesadilla, gringas, sincronizada y burras maiz",
-  "quesadilla, gringas, sincronizada y burras maíz",
-  "guarniciones",
   "tacos maiz",
   "tacos maíz",
+  "tacos de maíz",
+  "tacos de maiz",
   "tacos harina",
+  "tacos de harina",
   "extras",
   "tostadas",
   "volcanes",
   "pozoles",
-  "carnes"
+  "carnes",
+  "preparados maiz",
+  "preparados maíz",
+  "preparados harina",
+  "alambres maiz",
+  "alambres maíz",
+  "alambres harina",
+  "alambres",
+  "quesos fundidos maiz",
+  "quesos fundidos maíz",
+  "quesos fundidos harina",
+  "queso fundido",
+  "quesadillas, gringas, sincronizada y burras harina",
+  "quesadilla, gringas, sincronizada y burras harina",
+  "quesadillas, gringas, sincronizada y burras maiz",
+  "quesadillas, gringas, sincronizada y burras maíz",
+  "quesadilla, gringas, sincronizada y burras maiz",
+  "quesadilla, gringas, sincronizada y burras maíz",
+  "guarniciones",
+  "postres",
+  "bebidas",
+  "bebidas frías",
+  "bebidas calientes"
 ];
 
 export function getProductReportName(product: any): string {

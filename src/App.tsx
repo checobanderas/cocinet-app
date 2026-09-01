@@ -828,7 +828,7 @@ function ensureAll35TablesForTenant(existingTables: any[], tenantId: string) {
 }
 
 export default function App() {
-  const [selectedTenant, setSelectedTenant] = useState<CompanyTenant>(() => {
+  const [selectedTenant, setSelectedTenant] = useState<CompanyTenant | null>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       let tenantParam =
@@ -854,30 +854,8 @@ export default function App() {
         if (found) {
           return found;
         }
-      }
-
-      const cached = localStorage.getItem("pos_selected_tenant");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && parsed.id) {
-          const found = COMPANY_CATALOG.find((c) => c.id === parsed.id);
-          if (found) return found;
-          return {
-            id: parsed.id,
-            name: parsed.name || "Sucursal",
-            rfc: parsed.rfc || "XAXX010101000",
-            ownerEmail: parsed.ownerEmail || "",
-            avatar: parsed.avatar || "🏢",
-            accentColor: parsed.accentColor || "#4f46e5",
-            lightColor: parsed.lightColor || "#4f46e533",
-            bgColor: parsed.bgColor || "from-slate-50 to-indigo-100",
-            sucursalDefault: parsed.sucursalDefault || parsed.name || "Sucursal",
-            type: parsed.type || "Sucursal",
-            propietario: parsed.propietario || "PROPIETARIO",
-            ownerKey: parsed.ownerKey || "1",
-            ...parsed,
-          };
-        }
+        // If specified in URL but not found, remain strictly neutral
+        return null;
       }
 
       const ownerParam =
@@ -896,14 +874,18 @@ export default function App() {
       // Ignore
     }
 
-    const santaMaria = COMPANY_CATALOG.find((c) => c.id === "tenant-7") || COMPANY_CATALOG[0];
-    return santaMaria;
+    // Without a valid URL parameter, start 100% clean and neutral (Cocinet)
+    return null;
   });
 
   useEffect(() => {
     if (selectedTenant) {
       try {
         localStorage.setItem("pos_selected_tenant", JSON.stringify(selectedTenant));
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.removeItem("pos_selected_tenant");
       } catch (e) {}
     }
   }, [selectedTenant]);
@@ -4216,6 +4198,131 @@ export default function App() {
     setShowMenuToast(true);
   };
 
+  const parseStructuredExcelCatalog = (rawGrid: any[][]) => {
+    if (!rawGrid || rawGrid.length < 2) return null;
+
+    let currentSection = "";
+    const parsed: any[] = [];
+
+    for (let r = 0; r < rawGrid.length; r++) {
+      const row = rawGrid[r];
+      if (!Array.isArray(row) || row.length === 0) continue;
+
+      const col0 = String(row[0] || "").trim();
+      if (!col0) continue;
+
+      // Skip table header row
+      if (
+        col0.toUpperCase() === "PRODUCTO" ||
+        col0.toUpperCase() === "PRODUCTO / DESCRIPCIÓN" ||
+        col0.toUpperCase() === "NOMBRE" ||
+        col0.toUpperCase() === "PRODUCTO / PLATILLO"
+      ) {
+        continue;
+      }
+
+      // Check if it's a section header (no numbers in other columns)
+      let consecNum = NaN;
+      let priceNum = NaN;
+
+      for (let c = 1; c < row.length; c++) {
+        const cellRaw = String(row[c] || "").replace(/[$,]/g, "").trim();
+        if (cellRaw !== "") {
+          const val = parseFloat(cellRaw);
+          if (!isNaN(val)) {
+            if (isNaN(consecNum)) {
+              consecNum = val;
+            } else if (isNaN(priceNum)) {
+              priceNum = val;
+            }
+          }
+        }
+      }
+
+      // If row has no numeric consec or price, treat as section header
+      if (isNaN(consecNum) && isNaN(priceNum)) {
+        currentSection = col0;
+        continue;
+      }
+
+      // If only one numeric value was found
+      if (!isNaN(consecNum) && isNaN(priceNum)) {
+        if (consecNum >= 1 && consecNum <= 999 && Number.isInteger(consecNum) && row[1] !== undefined && String(row[1]).trim() !== "") {
+          priceNum = 0;
+        } else {
+          priceNum = consecNum;
+          consecNum = parsed.length + 1;
+        }
+      }
+
+      const sortOrder = !isNaN(consecNum) ? consecNum : parsed.length + 1;
+      const finalPrice = !isNaN(priceNum) ? priceNum : 0;
+
+      const nameLower = col0.toLowerCase();
+      const secLower = (currentSection || "").toLowerCase();
+
+      let category = "food";
+      let destination: "kitchen" | "bar" = "kitchen";
+
+      if (
+        secLower.includes("bebida") ||
+        secLower.includes("refresco") ||
+        secLower.includes("cerveza") ||
+        secLower.includes("agua") ||
+        secLower.includes("caf") ||
+        secLower.includes("te") ||
+        nameLower.includes("coca") ||
+        nameLower.includes("refresco") ||
+        nameLower.includes("cerveza") ||
+        nameLower.includes("barrilito") ||
+        nameLower.includes("agua") ||
+        nameLower.includes("limonada") ||
+        nameLower.includes("naranjada") ||
+        nameLower.includes("topo chico") ||
+        nameLower.includes("ponche") ||
+        nameLower.includes("soda") ||
+        nameLower.includes("atole") ||
+        nameLower.includes("tizana") ||
+        nameLower.includes("choco milk") ||
+        nameLower.includes("frape") ||
+        nameLower.includes("matcha") ||
+        nameLower.includes("taro") ||
+        nameLower.includes("suero") ||
+        nameLower.includes("michelada")
+      ) {
+        category = "drinks";
+        destination = "bar";
+      } else if (
+        secLower.includes("postre") ||
+        secLower.includes("flan") ||
+        secLower.includes("panque") ||
+        secLower.includes("tarta") ||
+        nameLower.includes("postre") ||
+        nameLower.includes("flan") ||
+        nameLower.includes("panque") ||
+        nameLower.includes("tarta") ||
+        nameLower.includes("pay")
+      ) {
+        category = "desserts";
+        destination = "kitchen";
+      }
+
+      parsed.push({
+        id: `ai_excel_${Date.now()}_${sortOrder}`,
+        name: col0,
+        sortOrder,
+        consecutive: sortOrder,
+        price: finalPrice,
+        category,
+        subcategory: currentSection || (category === "drinks" ? "Bebidas" : category === "desserts" ? "Postres" : "Alimentos"),
+        subgroup: currentSection || "General",
+        destination,
+      });
+    }
+
+    return parsed.length > 0 ? parsed : null;
+  };
+
   const handleExcelUpload = async (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -4227,10 +4334,41 @@ export default function App() {
         const ab = evt.target?.result;
         if (!ab) return;
         const wb = XLSX.read(ab, { type: "array" });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
         
+        // Pick structured import sheet if available, or first sheet
+        const sheetNames = wb.SheetNames;
+        const targetSheetName = sheetNames.find(s => 
+          s.toLowerCase().includes("importar") || 
+          s.toLowerCase().includes("catalogo") || 
+          s.toLowerCase().includes("lista")
+        ) || sheetNames[0];
+        
+        const ws = wb.Sheets[targetSheetName];
+        const rawGrid: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        
+        if (!rawGrid || rawGrid.length === 0) {
+          setMenuToastMessage("El archivo está vacío o no se pudo leer.");
+          setShowMenuToast(true);
+          return;
+        }
+
+        // Direct Structured Parsing to preserve strict sortOrder and avoid AI drops
+        const directParsed = parseStructuredExcelCatalog(rawGrid);
+        if (directParsed && directParsed.length > 0) {
+          setDetectedProducts(directParsed);
+          setAnalysisStatus({
+            total: 1,
+            current: 1,
+            completedImages: [{ index: 1, count: directParsed.length }],
+            isAnalyzing: false,
+          });
+          setMenuToastMessage(`✅ ¡Lectura directa exitosa! Se cargaron ${directParsed.length} productos con su orden consecutivo exacto (1 al ${directParsed.length}).`);
+          setShowMenuToast(true);
+          return;
+        }
+
+        // Fallback to AI analysis if unstructured
+        const data = XLSX.utils.sheet_to_json(ws);
         if (data && data.length > 0) {
           analyzeExcelMenu(data);
         } else {
@@ -8005,11 +8143,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     return Array.from(dests);
   };
 
-  const printComanda = (
+  const printComanda = async (
     tableLabel: string,
     comanda: Comanda,
     target?: Destination,
-  ) => {
+  ): Promise<boolean> => {
     setPrintLoading(comanda.folio);
 
     const filteredItems = target
@@ -8020,191 +8158,183 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
     if (filteredItems.length === 0) {
       setPrintLoading(null);
-      return;
+      return false;
     }
 
-    setTimeout(async () => {
-      try {
-        // Parallel sync with Firestore Printer Queue (Centinela) 🖨️
-        if (selectedTenant) {
-          const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null;
-          const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null;
-          const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null;
-          const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || null;
+    try {
+      // Parallel sync with Firestore Printer Queue (Centinela) 🖨️
+      if (selectedTenant) {
+        const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null;
+        const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null;
+        const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null;
+        const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || null;
 
-          addPedidoToPrinter(selectedTenant.id, {
-            folio: comanda.folio,
-            mesa: tableLabel,
-            items: filteredItems.map((i) => ({
-              nombre: getFormattedProductName(i.product),
-              cantidad: i.quantity,
-              notas: i.notes || "",
-              comensal: i.plate,
-            })),
-            tipo: "comanda",
-            area: target || "general",
-            timestamp: getMexicoISOString(),
-            mesero: comanda.createdBy?.name || "S/M",
-            deliveryClientName: dClient,
-            deliveryClientPhone: dPhone,
-            deliveryAddress: dAddr,
-            deliveryNotes: dNotes,
-          }).catch((err) => console.warn("Centinela Sync Error:", err));
-        }
-
-        if (systemLocalWindowsAutoPrint) {
-          setPrintLoading(null);
-          return;
-        }
-
-        const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
-        const transport = await createTransport(printerArea, selectedTenant?.id);
-        const driver = new EscPosDriver();
-        const job = new PosPrinterJob(driver, transport as any);
-
-        job.initialize();
-
-        job.center();
-        job.setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED).bold(true);
-        job.printLine(comanda.folioInterno ? `COMANDA INTERNA #${comanda.folioInterno}` : `COMANDA #${comanda.folio}`);
-        if (comanda.createdBy) {
-          job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
-          job.printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`);
-        }
-        job.setPrintMode(job.FONT_SIZE_NORMAL).bold(false);
-
-        const destName =
-          target === "kitchen"
-            ? "COCINA"
-            : target === "bar"
-              ? "BARRA"
-              : "GENERAL";
-        job.bold(true).printLine(`DESTINO: ${destName}`).bold(false);
-        job.printLine(`MESA: ${tableLabel}`);
-        job.printLine(
-          `HORA: ${new Date(comanda.timestamp).toLocaleTimeString()}`,
-        );
-
-        const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
-        if (isDelivery) {
-          const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
-          const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
-          const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
-          const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
-          
-          job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
-          if (dClient) job.printLine(`CLIENTE: ${dClient.toUpperCase()}`);
-          if (dPhone) job.printLine(`TEL: ${dPhone}`);
-          
-          if (dAddr) {
-            let cleanAddr = dAddr;
-            let refText = "";
-            if (dAddr.includes("(Ref:")) {
-              const parts = dAddr.split("(Ref:");
-              cleanAddr = parts[0].trim();
-              refText = parts[1].replace(")", "").trim();
-            } else if (dAddr.includes("| Ref:")) {
-              const parts = dAddr.split("| Ref:");
-              cleanAddr = parts[0].trim();
-              refText = parts[1].trim();
-            }
-            job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
-            if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
-          }
-          if (dNotes) job.printLine(`NOTAS: ${dNotes.toUpperCase()}`);
-        }
-
-        job.printLine("--------------------------------");
-
-        job.left();
-
-        if (target === "kitchen") {
-          // COCINA: Group by comensal (plate)
-          const plates = Array.from(
-            new Set(filteredItems.map((i) => i.plate)),
-          ).sort((a, b) => a - b);
-          plates.forEach((plateNum) => {
-            job
-              .center()
-              .bold(true)
-              .printLine(`*** COMENSAL ${plateNum} ***`)
-              .bold(false)
-              .left();
-            filteredItems
-              .filter((i) => i.plate === plateNum)
-              .forEach((item) => {
-                job.printLine(
-                  `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`,
-                );
-                if (item.notes) {
-                  job.printLine(`   > ${item.notes}`);
-                }
-              });
-            job.printLine("--------------------------------");
-          });
-        } else if (target === "bar") {
-          // BARRA: Group by product (sum quantities), comensal doesn't matter
-          const grouped: {
-            [key: string]: { name: string; quantity: number; notes: string[] };
-          } = {};
-          filteredItems.forEach((item) => {
-            const key = item.product.id + (item.notes || "");
-            if (!grouped[key]) {
-              grouped[key] = {
-                name: getFormattedProductName(item.product),
-                quantity: 0,
-                notes: [],
-              };
-            }
-            grouped[key].quantity += item.quantity;
-            if (item.notes) grouped[key].notes.push(item.notes);
-          });
-
-          Object.values(grouped).forEach((item) => {
-            job.printLine(`${item.quantity}x ${item.name.toUpperCase()}`);
-            const uniqueNotes = Array.from(new Set(item.notes));
-            uniqueNotes.forEach((n) => {
-              job.printLine(`   > ${n}`);
-            });
-          });
-        } else {
-          // Fallback/General
-          filteredItems.forEach((item) => {
-            job.printLine(
-              `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`,
-            );
-            if (item.notes) {
-              job.printLine(`   > ${item.notes}`);
-            }
-          });
-        }
-
-        if (comanda.generalNotes) {
-          job
-            .feed(1)
-            .bold(true)
-            .printLine(`OBS: ${comanda.generalNotes}`)
-            .bold(false);
-        }
-
-        job.feed(3).cut();
-        job.execute();
-      } catch (e) {
-        console.error("Error printing to RawBT:", e);
-        // Fallback: Simple print window
-        const printWindow = window.open("", "_blank");
-        if (printWindow) {
-          printWindow.document.write(
-            `<html><body style="font-family:monospace; white-space:pre;">Error printing. Check console.</body></html>`,
-          );
-          printWindow.document.close();
-          printWindow.focus();
-          printWindow.print();
-          printWindow.close();
-        }
+        addPedidoToPrinter(selectedTenant.id, {
+          folio: comanda.folio,
+          mesa: tableLabel,
+          items: filteredItems.map((i) => ({
+            nombre: getFormattedProductName(i.product),
+            cantidad: i.quantity,
+            notas: i.notes || "",
+            comensal: i.plate,
+          })),
+          tipo: "comanda",
+          area: target || "general",
+          timestamp: getMexicoISOString(),
+          mesero: comanda.createdBy?.name || "S/M",
+          deliveryClientName: dClient,
+          deliveryClientPhone: dPhone,
+          deliveryAddress: dAddr,
+          deliveryNotes: dNotes,
+        }).catch((err) => console.warn("Centinela Sync Error:", err));
       }
+
+      if (systemLocalWindowsAutoPrint) {
+        setPrintLoading(null);
+        return true;
+      }
+
+      const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
+      const transport = await createTransport(printerArea, selectedTenant?.id);
+      const driver = new EscPosDriver();
+      const job = new PosPrinterJob(driver, transport as any);
+
+      job.initialize();
+
+      const destName =
+        target === "kitchen"
+          ? "COCINA"
+          : target === "bar"
+            ? "BARRA"
+            : "GENERAL";
+
+      // Encabezado compacto y optimizado para ahorro de papel
+      job.center();
+      job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
+      job.printLine(`*** ${destName} - MESA: ${tableLabel} ***`);
+      job.bold(false);
+      job.printLine(
+        `Cmd #${comanda.folioInterno || comanda.folio} | Hora: ${new Date(comanda.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      );
+      if (comanda.createdBy?.name) {
+        job.bold(true).printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`).bold(false);
+      }
+
+      const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
+      if (isDelivery) {
+        const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
+        const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
+        const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
+        const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
+        
+        job.printLine("--------------------------------");
+        if (dClient) job.bold(true).printLine(`CTE: ${dClient.toUpperCase()}`).bold(false);
+        if (dPhone) job.printLine(`TEL: ${dPhone}`);
+        if (dAddr) {
+          let cleanAddr = dAddr;
+          let refText = "";
+          if (dAddr.includes("(Ref:")) {
+            const parts = dAddr.split("(Ref:");
+            cleanAddr = parts[0].trim();
+            refText = parts[1].replace(")", "").trim();
+          } else if (dAddr.includes("| Ref:")) {
+            const parts = dAddr.split("| Ref:");
+            cleanAddr = parts[0].trim();
+            refText = parts[1].trim();
+          }
+          job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
+          if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
+        }
+        if (dNotes) job.bold(true).printLine(`NOTAS: ${dNotes.toUpperCase()}`).bold(false);
+      }
+
+      job.printLine("--------------------------------");
+      job.left();
+
+      if (target === "kitchen") {
+        // COCINA: Group by comensal only if multiple plates exist
+        const plates = Array.from(
+          new Set(filteredItems.map((i) => i.plate || 1)),
+        ).sort((a, b) => a - b);
+
+        const hasMultiplePlates = plates.length > 1;
+
+        plates.forEach((plateNum) => {
+          if (hasMultiplePlates) {
+            job
+              .bold(true)
+              .printLine(`-- COMENSAL ${plateNum} --`)
+              .bold(false);
+          }
+
+          filteredItems
+            .filter((i) => (i.plate || 1) === plateNum)
+            .forEach((item) => {
+              job.bold(true).printLine(
+                `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
+              ).bold(false);
+
+              if (item.notes && item.notes.trim()) {
+                job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
+              }
+            });
+        });
+      } else if (target === "bar") {
+        // BARRA: Group by product (sum quantities)
+        const grouped: {
+          [key: string]: { name: string; quantity: number; notes: string[] };
+        } = {};
+
+        filteredItems.forEach((item) => {
+          const key = item.product.id + (item.notes || "");
+          if (!grouped[key]) {
+            grouped[key] = {
+              name: getFormattedProductName(item.product),
+              quantity: 0,
+              notes: [],
+            };
+          }
+          grouped[key].quantity += item.quantity;
+          if (item.notes && item.notes.trim()) {
+            grouped[key].notes.push(item.notes.trim());
+          }
+        });
+
+        Object.values(grouped).forEach((item) => {
+          job.bold(true).printLine(`${item.quantity}x ${item.name.toUpperCase()}`).bold(false);
+          const uniqueNotes = Array.from(new Set(item.notes));
+          uniqueNotes.forEach((n) => {
+            job.bold(true).printLine(`  >> NOTA: ${n.toUpperCase()}`).bold(false);
+          });
+        });
+      } else {
+        // Fallback/General
+        filteredItems.forEach((item) => {
+          job.bold(true).printLine(
+            `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
+          ).bold(false);
+
+          if (item.notes && item.notes.trim()) {
+            job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
+          }
+        });
+      }
+
+      if (comanda.generalNotes && comanda.generalNotes.trim()) {
+        job.printLine("--------------------------------");
+        job.bold(true).printLine(`OBS: ${comanda.generalNotes.toUpperCase()}`).bold(false);
+      }
+
+      // Corte limpio con feed mínimo para no desperdiciar papel
+      job.feed(1).cut();
+      await job.execute();
       setPrintLoading(null);
-    }, 500);
+      return true;
+    } catch (e) {
+      console.error("Error printing comanda:", e);
+      setPrintLoading(null);
+      return false;
+    }
   };
 
   const getLastInternalFolio = (
@@ -8573,20 +8703,25 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         }
       );
 
-      // Trigger automatic printing for both destinations
+      // Trigger automatic printing for both destinations sequentially and reliably
       const destinations = getComandaDestinations(newComanda);
 
-      if (destinations.includes("kitchen")) {
-        printComanda(tableLabel, newComanda, "kitchen");
-      }
-
-      if (destinations.includes("kitchen") && destinations.includes("bar")) {
-        setTimeout(() => {
-          printComanda(tableLabel, newComanda, "bar");
-        }, 1500);
-      } else if (destinations.includes("bar")) {
-        printComanda(tableLabel, newComanda, "bar");
-      }
+      (async () => {
+        try {
+          if (destinations.includes("kitchen")) {
+            await printComanda(tableLabel, newComanda, "kitchen");
+          }
+          if (destinations.includes("bar")) {
+            if (destinations.includes("kitchen")) {
+              // Pausa de seguridad de 800ms para permitir que la impresora termine y libere el spooler
+              await new Promise((resolve) => setTimeout(resolve, 800));
+            }
+            await printComanda(tableLabel, newComanda, "bar");
+          }
+        } catch (err) {
+          console.error("Error in sequential comanda dispatch:", err);
+        }
+      })();
 
       // Save to Firebase in background without blocking UI
       addComandaToFirebase(

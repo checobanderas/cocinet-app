@@ -1107,17 +1107,24 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     pass
                 pending_total_amount = None
 
-            if text.startswith('*') or text.startswith('>'):
-                f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
-                hDC.SelectObject(f_italic)
-                y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
+            if text.startswith('*') or text.startswith('>') or text.startswith('>>') or "NOTA:" in text.upper() or text.startswith('OBS:'):
+                # Notas personalizadas: Fuente destacada, más grande y en negrita cursiva para máxima claridad
+                note_pt = pt * 1.12
+                f_note = get_font(FONT_NAME, note_pt, True, is_italic=True, use_emoji_font=has_emoji(text))
+                hDC.SelectObject(f_note)
+                indent_x = margin_left + 15
+                y = wrap_and_draw_text(hDC, text, indent_x, margin_right, printable_width - 15, y, align=0, line_spacing=2)
                 continue
                 
             f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
             hDC.SelectObject(f_line)
             y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
             
-        y += 90
+        # Ahorro de papel: 20px para comandas de cocina/barra, 60px para cuentas
+        if ticket_type.lower() in ["cocina", "barra"]:
+            y += 20
+        else:
+            y += 60
         hDC.EndPage()
         hDC.EndDoc()
     finally:
@@ -1299,8 +1306,8 @@ def print_ticket():
     
     notify_step("1_RECEIVE", f"Solicitud de impresión recibida vía POST /print para clave '{printer_key}'", extra_data={"bytes_len": len(raw_bytes)})
 
-    if check_duplicate_and_register(raw_bytes):
-        notify_step("2_PROCESS_DUP", "Ticket duplicado detectado por Hash, omitiendo impresión", status="WARNING")
+    if check_duplicate_and_register(raw_bytes, printer_key):
+        notify_step("2_PROCESS_DUP", f"Ticket duplicado detectado por Hash para '{printer_key}', omitiendo impresión", status="WARNING")
         return jsonify({"success": True, "ignored": True, "reason": "duplicate", "bytes_sent": 0})
         
     # Encolar para impresión asíncrona
@@ -1438,15 +1445,15 @@ def diag_print():
 # ─── Deduplicación por Hash en Memoria RAM ─────────────────────────
 _recent_ticket_hashes = {}
 
-def generar_hash(raw_bytes: bytes) -> str:
-    return hashlib.md5(raw_bytes).hexdigest()
+def generar_hash(raw_bytes: bytes, printer_key: str = "") -> str:
+    return hashlib.md5((printer_key or "cuentas").encode("utf-8") + b"|" + raw_bytes).hexdigest()
 
-def check_duplicate_and_register(raw_bytes: bytes, job_id: str = None) -> bool:
-    ticket_hash = generar_hash(raw_bytes)
+def check_duplicate_and_register(raw_bytes: bytes, printer_key: str = "") -> bool:
+    ticket_hash = generar_hash(raw_bytes, printer_key)
     now = time.time()
     
-    # Limpiar hashes de más de 8 segundos
-    expired = [h for h, t in list(_recent_ticket_hashes.items()) if now - t > 8]
+    # Limpiar hashes de más de 2 segundos (evita dobles clicks pero no bloquea Cocina/Barra ni reimpresiones legítimas)
+    expired = [h for h, t in list(_recent_ticket_hashes.items()) if now - t > 2]
     for h in expired:
         _recent_ticket_hashes.pop(h, None)
         

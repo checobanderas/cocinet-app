@@ -101,7 +101,7 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {matrices.map((company) => {
-                    const isSelected = selectedTenant.id === company.id;
+                    const isSelected = selectedTenant?.id === company.id;
                     const ownerObj = customOwners.find(o => o.key === company.ownerKey);
                     const logoToUse = ownerObj?.logo;
                     return (
@@ -168,7 +168,7 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {sucursales.map((company) => {
-                    const isSelected = selectedTenant.id === company.id;
+                    const isSelected = selectedTenant?.id === company.id;
                     const ownerObj = customOwners.find(o => o.key === company.ownerKey);
                     const logoToUse = ownerObj?.logo;
                     return (

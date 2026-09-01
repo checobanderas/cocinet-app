@@ -638,53 +638,62 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     formatWorksheet(wsCancellations);
     XLSX.utils.book_append_sheet(wb, wsCancellations, "Cancelaciones");
 
-    // ==================== SHEET 4: PRODUCTOS DE LISTA (CATÁLOGO CON COLORES VENDIDO/NO VENDIDO) ====================
+    // ==================== SHEET 4: PRODUCTOS DE LISTA (CATÁLOGO EN ORDEN CONSECUTIVO ESTRICTO) ====================
     const catalogAOA: any[][] = [];
     catalogAOA.push([`${companyName.toUpperCase()} - CATÁLOGO GENERAL DE PRODUCTOS`]);
-    catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS Y ESTADO DE VENTAS DEL DÍA"]);
+    catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS Y ESTADO DE VENTAS DEL DÍA (ORDEN AUDITORÍA)"]);
     catalogAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
     catalogAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
     catalogAOA.push([]); // Empty row
 
     // Header Row (Row 6)
-    catalogAOA.push(["PRODUCTO / PLATILLO", "PRECIO LISTA", "ESTADO EN VENTAS", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
+    catalogAOA.push(["# ORDEN", "PRODUCTO / PLATILLO", "PRECIO LISTA", "ESTADO EN VENTAS", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
 
-    // Track rows that represent sold products vs unsold products for cell background color fill
     const soldRowIndices: Set<number> = new Set();
     const unsoldRowIndices: Set<number> = new Set();
-    const groupHeaderRowIndices: Set<number> = new Set();
 
-    groupedFullCatalog.forEach(group => {
-      catalogAOA.push([]);
-      const groupRowIdx = catalogAOA.length;
-      groupHeaderRowIndices.add(groupRowIdx);
-      catalogAOA.push([`GROUP_HEADER:📂 ${group.groupName.toUpperCase()}`, "", "", "", ""]);
-      
-      group.items.forEach(p => {
-        const itemRowIdx = catalogAOA.length + 1; // 1-indexed Excel row
-        if (p.quantitySold > 0) {
-          soldRowIndices.add(itemRowIdx);
-          catalogAOA.push([p.name, p.price, `🟢 SÍ VENDIDO (${p.quantitySold})`, p.quantitySold, p.totalSold]);
-        } else {
-          unsoldRowIndices.add(itemRowIdx);
-          catalogAOA.push([p.name, p.price, "⚪ SIN VENTAS (0)", 0, 0]);
-        }
+    // Sort products directly by numeric sortOrder (1..210) without splitting into category headers
+    const sortedDirectCatalog = [...(products || [])]
+      .filter((p: any) => !(p.name || "").includes("---") && !p.isDeleted)
+      .sort((a: any, b: any) => {
+        const numA = Number(a.sortOrder !== undefined && a.sortOrder !== null && a.sortOrder !== 9999 ? a.sortOrder : (a.consecutive || 999999));
+        const numB = Number(b.sortOrder !== undefined && b.sortOrder !== null && b.sortOrder !== 9999 ? b.sortOrder : (b.consecutive || 999999));
+        if (numA !== numB) return numA - numB;
+        return (a.name || "").localeCompare(b.name || "");
       });
+
+    sortedDirectCatalog.forEach((prod, idx) => {
+      const itemRowIdx = catalogAOA.length + 1; // 1-indexed row in Excel
+      const orderNum = prod.sortOrder !== undefined && prod.sortOrder !== null && prod.sortOrder !== 9999 
+        ? prod.sortOrder 
+        : (prod.consecutive || (idx + 1));
+      const liveName = getProductReportName(prod);
+      const sold = soldMap[String(prod.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(prod.name || "").toLowerCase().trim()] || { quantity: 0, total: 0 };
+      const priceVal = Number(prod.price || 0);
+
+      if (sold.quantity > 0) {
+        soldRowIndices.add(itemRowIdx);
+        catalogAOA.push([orderNum, liveName, priceVal, `🟢 SÍ VENDIDO (${sold.quantity})`, sold.quantity, sold.total]);
+      } else {
+        unsoldRowIndices.add(itemRowIdx);
+        catalogAOA.push([orderNum, liveName, priceVal, "⚪ SIN VENTAS (0)", 0, 0]);
+      }
     });
 
     const M = catalogAOA.length;
 
     catalogAOA.push([]);
-    catalogAOA.push(["TOTAL GENERAL DEL CATÁLOGO", "", "", { t: "n", f: `SUM(D7:D${M})` }, { t: "n", f: `SUM(E7:E${M})` }]);
+    catalogAOA.push(["TOTAL GENERAL DEL CATÁLOGO", "", "", "", { t: "n", f: `SUM(E7:E${M})` }, { t: "n", f: `SUM(F7:F${M})` }]);
 
     const wsCatalog = XLSX.utils.aoa_to_sheet(catalogAOA);
     wsCatalog['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } }
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }
     ];
     wsCatalog['!cols'] = [
+      { wch: 10 }, // # Orden
       { wch: 45 }, // Producto
       { wch: 16 }, // Precio Lista
       { wch: 22 }, // Estado en Ventas
@@ -703,32 +712,30 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       if (!cell.s) cell.s = {};
 
       if (cell.t === 'n' || cell.f) {
-        if (col === 'B' || col === 'E') {
+        if (col === 'C' || col === 'F') {
           cell.z = '$#,##0.00';
-        } else if (col === 'D') {
+        } else if (col === 'E') {
           cell.z = '#,##0.0';
         }
       }
 
-      // Format Group Headers
-      if (typeof cell.v === 'string' && cell.v.startsWith('GROUP_HEADER:')) {
-        cell.v = cell.v.replace('GROUP_HEADER:', '');
+      if (col === 'A') {
         cell.s = {
-          fill: { fgColor: { rgb: "E0E7FF" } },
-          font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1E1B4B" } }
+          font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "1E3A8A" } },
+          alignment: { horizontal: "center" }
         };
       }
       // Format Sold Rows (Soft Light Green Fill)
       else if (soldRowIndices.has(row)) {
         cell.s = {
-          fill: { fgColor: { rgb: "D1FAE5" } }, // Emerald light green background
-          font: { name: "Calibri", sz: 10, color: { rgb: "065F46" }, bold: col === 'A' || col === 'C' }
+          fill: { fgColor: { rgb: "D1FAE5" } },
+          font: { name: "Calibri", sz: 10, color: { rgb: "065F46" }, bold: col === 'B' || col === 'D' }
         };
       }
       // Format Unsold Rows (Soft Light Gray Fill)
       else if (unsoldRowIndices.has(row)) {
         cell.s = {
-          fill: { fgColor: { rgb: "F3F4F6" } }, // Neutral light gray background
+          fill: { fgColor: { rgb: "F3F4F6" } },
           font: { name: "Calibri", sz: 10, color: { rgb: "6B7280" } }
         };
       }

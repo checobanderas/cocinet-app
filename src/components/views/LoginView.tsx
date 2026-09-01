@@ -517,6 +517,7 @@ return (
                 ></div>
 
                 {/* 🌊 MARCA DE AGUA DEL LOGO OFICIAL COCINET */}
+                {/* 🎨 EMBLEMA / LOGO DE FONDO (MARCA DE AGUA) */}
                 <div
                   style={{
                     position: "absolute",
@@ -525,7 +526,7 @@ return (
                     transform: "translate(-50%, -50%)",
                     width: "min(85vw, 480px)",
                     height: "min(85vh, 480px)",
-                    backgroundImage: "url('/cocinet-logo.png')",
+                    backgroundImage: `url('${(selectedTenant && (selectedTenant.logoUrl || selectedTenant.logo)) ? (selectedTenant.logoUrl || selectedTenant.logo) : '/cocinet-logo.png'}')`,
                     backgroundRepeat: "no-repeat",
                     backgroundPosition: "center",
                     backgroundSize: "contain",
@@ -536,47 +537,20 @@ return (
                 />
 
                 {/* 🎨 EMBLEMA / LOGO SUPERIOR DEL SISTEMA */}
-                <div className="relative z-10 mb-1 flex items-center justify-center">
+                <div className="relative z-10 mb-2 flex flex-col items-center justify-center">
                   <img
-                    src="/cocinet-logo.png"
-                    alt="Logo COCINET"
-                    className="h-16 sm:h-20 max-h-[18vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
+                    src={(selectedTenant && (selectedTenant.logoUrl || selectedTenant.logo)) ? (selectedTenant.logoUrl || selectedTenant.logo) : "/cocinet-logo.png"}
+                    alt={selectedTenant ? selectedTenant.name : "Logo COCINET"}
+                    className="h-20 sm:h-24 max-h-[22vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
                     style={{ filter: "drop-shadow(0px 4px 10px rgba(45, 36, 28, 0.18))" }}
                   />
+                  <span
+                    className="mt-2 px-3.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-widest text-[#2d241c]/75 bg-[#2d241c]/5 border border-[#2d241c]/10 shadow-2xs"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
+                    SEP 2026
+                  </span>
                 </div>
-
-                <h1
-                  className="relative z-10"
-                  style={{
-                    fontFamily: "Georgia, serif",
-                    fontSize: "clamp(2.8rem, 6vw, 4.2rem)",
-                    margin: "0.2rem 0",
-                    color: "#2d241c",
-                    textTransform: "uppercase",
-                    lineHeight: "1",
-                    textShadow: "2px 2px 0px #e0d5ba",
-                  }}
-                >
-                  Cocinet
-                </h1>
-                <h2
-                  className="relative z-10"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    letterSpacing: "0.15em",
-                    textTransform: "uppercase",
-                    margin: 0,
-                    fontWeight: "900",
-                    fontSize: "clamp(1.1rem, 2.5vw, 1.4rem)",
-                    textShadow: "0px 4px 20px rgba(78, 205, 196, 0.4)",
-                    fontFamily: "'Space Grotesk', sans-serif",
-                  }}
-                >
-                  VERSIÓN AGOSTO 2026
-                </h2>
 
                 {/* 🔒 GRAN CANDADO PULSANTE EN EL CENTRO */}
                 <div className="my-2.5 relative z-10">
@@ -655,9 +629,9 @@ return (
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   {/* Fecha - Tipo Calendario */}
-                  <div className="flex items-center gap-3 text-[#5c4d3c] w-full pl-2">
-                    <div className="text-3xl select-none" role="img" aria-label="Calendario">📅</div>
-                    <div className="text-left">
+                  <div className="flex items-center justify-center gap-3 text-[#5c4d3c] w-full text-center">
+                    <div className="text-3xl select-none shrink-0" role="img" aria-label="Calendario">📅</div>
+                    <div className="text-center">
                       <div className="text-[11px] uppercase font-bold tracking-wider text-slate-500">Fecha</div>
                       <div className="text-[16px] sm:text-[17px] font-black uppercase text-slate-700 leading-tight">
                         {(() => {
@@ -672,9 +646,9 @@ return (
                   <div className="w-full h-[1px] bg-[#d2c2ad]"></div>
 
                   {/* Hora - Tipo Reloj */}
-                  <div className="flex items-center gap-3 text-[#5c4d3c] w-full pl-2">
-                    <div className="text-3xl select-none" role="img" aria-label="Reloj">⏰</div>
-                    <div className="text-left">
+                  <div className="flex items-center justify-center gap-3 text-[#5c4d3c] w-full text-center">
+                    <div className="text-3xl select-none shrink-0" role="img" aria-label="Reloj">⏰</div>
+                    <div className="text-center">
                       <div className="text-[11px] uppercase font-bold tracking-wider text-slate-500">Hora</div>
                       <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-widest text-slate-800 leading-none">
                         {mexicoClockShort || new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -853,35 +827,13 @@ return (
                       </button>
                     </div>
 
-                    <div className="text-center space-y-1">
-                      <span className="text-[14px] uppercase font-extrabold text-indigo-700 tracking-widest bg-indigo-50 px-3 py-1.5 rounded-full inline-block mb-1">
+                    <div className="text-center space-y-1 pb-2">
+                      <span className="text-[13px] uppercase font-extrabold text-indigo-700 tracking-widest bg-indigo-50 px-3.5 py-1 rounded-full inline-block mb-1.5 shadow-2xs">
                         Acceso al Sistema 🔒
                       </span>
                       <h4 className="text-lg font-black text-slate-800 tracking-tight">
                         Ingrese su PIN de Seguridad 🔑
                       </h4>
-                      {selectedTenant ? (
-                        <div className="p-3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-2 border-indigo-500/40 rounded-2xl text-white my-3 shadow-md">
-                          <div className="flex items-center justify-center gap-3">
-                            <span className="text-2xl">🏢</span>
-                            <div className="text-left">
-                              <span className="text-[9px] font-black uppercase text-amber-400 tracking-widest block">
-                                Sucursal Asignada:
-                              </span>
-                              <h3 className="text-sm font-black text-white uppercase tracking-tight m-0">
-                                {selectedTenant.name}
-                              </h3>
-                              <span className="text-[11px] text-slate-300 font-bold block">
-                                📍 {selectedTenant.sucursalDefault || "Matriz"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[14px] text-slate-500 font-semibold leading-relaxed">
-                          Introduce tu PIN de 4 dígitos asignado por tu administrador para iniciar sesión en tu sucursal.
-                        </p>
-                      )}
                     </div>
 
                     {/* Display Dots */}
@@ -958,7 +910,7 @@ return (
 
                     <div className="pt-2 text-center">
                       <p className="text-[11px] text-slate-400 font-semibold m-0">
-                        🛡️ Terminal aislada y segura para {selectedTenant?.name || "esta sucursal"}
+                        🛡️ Terminal aislada y segura • Cocinet POS
                       </p>
                     </div>
                   </div>
@@ -1266,7 +1218,7 @@ return (
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {matrices.map((company) => {
-                                  const isSelected = selectedTenant.id === company.id;
+                                  const isSelected = selectedTenant?.id === company.id;
                                   return (
                                     <div
                                       key={company.id}
@@ -1433,7 +1385,7 @@ return (
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {sucursales.map((company) => {
-                                  const isSelected = selectedTenant.id === company.id;
+                                  const isSelected = selectedTenant?.id === company.id;
                                   return (
                                     <div
                                       key={company.id}
