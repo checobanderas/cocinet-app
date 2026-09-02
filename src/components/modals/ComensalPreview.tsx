@@ -480,7 +480,7 @@ export const ComensalPreview: React.FC<ComensalPreviewProps> = ({
                     } else {
                       // Direct checkout
                       const existingItems =
-                        selectedTable?.comandas.flatMap((c) => c.items) || [];
+                        (selectedTable?.comandas || []).flatMap((c) => c?.items || []) || [];
                       setCheckoutFallbackItems(existingItems);
                       setShowTipInput(false);
                       setShowDiscountInput(false);

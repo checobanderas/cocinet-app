@@ -1,25 +1,29 @@
-export const formatTableName = (zone: string, label: string) => {
+export const formatTableName = (zone: string, label: string): string => {
   if (!label) return "S/N";
   
-  const z = (zone || "").toLowerCase();
-  // Extract number from label if it has words like "Para Llevar 14" -> "14"
+  const rawStr = `${zone || ''} ${label}`.trim().toLowerCase();
+  
+  // Extract number from label or raw text
   let num = label.replace(/\D/g, "");
-  if (!num) num = label; // Fallback to raw label if no number
+  if (!num) num = rawStr.replace(/\D/g, "");
   
-  // Custom abbreviations for areas
-  if (z.includes("llevar") || z.includes("takeout")) {
-    return `P ${num}`;
-  }
-  if (z.includes("domicilio") || z.includes("reparto") || z.includes("delivery")) {
-    return `SD ${num}`;
-  }
-  if (z.includes("salÃ³n") || z.includes("salon")) {
-    return `Mesa ${num}`;
+  // 1. Para Llevar -> P1, P2, P3...
+  if (rawStr.includes("llevar") || rawStr.includes("takeout") || label.toUpperCase().startsWith("P")) {
+    return num ? `P${num}` : `P ${label}`;
   }
   
-  // Default for unknown zones (don't prepend Mesa if they just called it "Terraza")
-  const formattedZone = zone ? zone.charAt(0).toUpperCase() + zone.slice(1) : "Mesa";
-  return `${formattedZone} ${num}`;
+  // 2. Servicio a Domicilio / Reparto / Delivery -> D1, D2, D3...
+  if (rawStr.includes("domicilio") || rawStr.includes("reparto") || rawStr.includes("delivery") || label.toUpperCase().startsWith("D")) {
+    return num ? `D${num}` : `D ${label}`;
+  }
+  
+  // 3. Mesas de Salón Principal o cualquier mesa numerada -> M1, M2, M3...
+  if (num) {
+    return `M${num}`;
+  }
+  
+  // Fallback si no tiene número
+  return label;
 };
 
 export const numeroALetras = (num: number): string => {

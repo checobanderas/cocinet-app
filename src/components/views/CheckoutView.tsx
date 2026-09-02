@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IonButton, IonCard, IonCardContent, IonCol, IonContent, IonFooter, IonGrid, IonIcon, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
+import { IonButton, IonCard, IonCardContent, IonCol, IonContent, IonFooter, IonGrid, IonIcon, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonSpinner, IonText, IonToolbar } from '@ionic/react';
 import { addOutline, cardOutline, cashOutline, flashOutline, swapHorizontalOutline, trashOutline } from 'ionicons/icons';
+import { formatTableName } from '../../utils/formatters';
 
 interface CheckoutViewProps {
   cancellationReason: any;
   checkoutFallbackItems: any;
+  checkoutReturnMode?: any;
   currentUser: any;
   invoicePhone: any;
   selectedTenant: any;
@@ -52,6 +54,7 @@ interface CheckoutViewProps {
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
   cancellationReason,
   checkoutFallbackItems,
+  checkoutReturnMode,
   currentUser,
   invoicePhone,
   selectedTenant,
@@ -110,7 +113,7 @@ if (currentUser?.role === "mesero") {
       );
     }
 
-    const tableItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
+    const tableItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) || [];
     const allItems = tableItems.length > 0 ? tableItems : checkoutFallbackItems;
     const summarizedItems = allItems
       .filter((item) => !item.isCancelled)
@@ -162,14 +165,120 @@ if (currentUser?.role === "mesero") {
       setShowPasswordInput(true);
     };
 
+    const hasTriggeredRef = useRef(false);
+
+    useEffect(() => {
+      hasTriggeredRef.current = false;
+    }, [showPaymentOptions]);
+
+    const handleFinalizePayment = () => {
+      if (hasTriggeredRef.current || isProcessingPayment) return;
+      hasTriggeredRef.current = true;
+      finalizePayment(true);
+    };
+
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.repeat) return;
+        if (e.key === "F5" || e.code === "F5") {
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (!showPaymentOptions) {
+            setShowPaymentOptions(true);
+          } else {
+            if (hasTriggeredRef.current || isProcessingPayment) return;
+            const canFinalize =
+              !(
+                paymentMethod === "cash" &&
+                (Number(paymentAmountReceived) < total || !paymentAmountReceived)
+              ) &&
+              !(
+                paymentMethod === "card" &&
+                selectedTenant?.requireCardDigits !== false &&
+                (!paymentCardLastFour || paymentCardLastFour.length < 4)
+              ) &&
+              !(
+                paymentMethod === "transfer" &&
+                selectedTenant?.requireCardDigits !== false &&
+                (!paymentCardLastFour || paymentCardLastFour.length < 4)
+              );
+
+            if (canFinalize) {
+              handleFinalizePayment();
+            }
+          }
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [
+      showPaymentOptions,
+      isProcessingPayment,
+      paymentMethod,
+      paymentAmountReceived,
+      total,
+      selectedTenant,
+      paymentCardLastFour,
+    ]);
+
     return (
       <IonPage>
+      {isProcessingPayment && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(5px)",
+            zIndex: 99999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            animation: "fadeIn 0.2s ease-out",
+          }}
+        >
+          <div
+            style={{
+              background: "#1e293b",
+              padding: "32px 36px",
+              borderRadius: "24px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "16px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              textAlign: "center",
+              maxWidth: "340px",
+              width: "90%",
+            }}
+          >
+            <IonSpinner name="crescent" color="primary" style={{ width: "48px", height: "48px", transform: "scale(1.3)" }} />
+            <div>
+              <h3 style={{ margin: "0 0 6px 0", fontWeight: "800", fontSize: "1.25rem", color: "#f8fafc" }}>
+                💳 Procesando Pago...
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.9rem", color: "#94a3b8", lineHeight: "1.4" }}>
+                Guardando venta y liberando mesa, por favor espere...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {renderMaterialHeader({
-        title: `Caja Mesa ${selectedTable?.label || "S/N"}`,
+        title: `Caja ${formatTableName(selectedTable?.zone || "", selectedTable?.label || "")}`,
         subtitle: `Cobrando por: ${currentUser?.name || "Cajero"}`,
         showBack: true,
         onBack: () => {
-          setAppMode("table-details");
+          const next = checkoutReturnMode || "gestion_cuentas";
+          setAppMode(next);
           setPrecuentaComensal(1);
           setPrecuentaTab("resumen");
         }
@@ -668,6 +777,7 @@ if (currentUser?.role === "mesero") {
                           expand="block"
                           color="success"
                           onClick={() => setShowPaymentOptions(true)}
+                          title="Cobrar (Presiona F5)"
                           style={{
                             height: "60px",
                             "--border-radius": "16px",
@@ -675,7 +785,7 @@ if (currentUser?.role === "mesero") {
                             fontSize: "1.2rem",
                           }}
                         >
-                          COBRAR
+                          COBRAR (F5) 💳
                         </IonButton>
                       ) : (
                         <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -1189,7 +1299,7 @@ if (currentUser?.role === "mesero") {
                             <IonButton
                               expand="block"
                               color="primary"
-                              onClick={() => finalizePayment(true)}
+                              onClick={handleFinalizePayment}
                               disabled={
                                 isProcessingPayment ||
                                 (paymentMethod === "cash" &&
@@ -1200,6 +1310,7 @@ if (currentUser?.role === "mesero") {
                                 (paymentMethod === "transfer" &&
                                   (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)))
                               }
+                              title="Finalizar Pago (Presiona F5)"
                               style={{
                                 flex: 2,
                                 height: "55px",
@@ -1207,7 +1318,14 @@ if (currentUser?.role === "mesero") {
                                 fontWeight: "900",
                               }}
                             >
-                              FINALIZAR PAGO
+                              {isProcessingPayment ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                                  <IonSpinner name="crescent" color="light" />
+                                  <span>PROCESANDO...</span>
+                                </div>
+                              ) : (
+                                "FINALIZAR PAGO (F5) ✅"
+                              )}
                             </IonButton>
                           </div>
                         </div>

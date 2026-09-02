@@ -202,8 +202,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             onClick={() => { 
                               const activeSubtotal = selectedAccountForPayment 
                                 ? selectedAccountForPayment.subtotal 
-                                : (selectedTable?.comandas.flatMap( 
-                                    (c) => c.items, 
+                                : ((selectedTable?.comandas || []).flatMap( 
+                                    (c) => c?.items || [], 
                                   ) || []) 
                                     .filter((i) => !i.isCancelled) 
                                     .reduce( 
@@ -323,8 +323,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                               onClick={() => { 
                                 const activeSubtotal = selectedAccountForPayment 
                                   ? selectedAccountForPayment.subtotal 
-                                  : (selectedTable?.comandas.flatMap( 
-                                      (c) => c.items, 
+                                  : ((selectedTable?.comandas || []).flatMap( 
+                                      (c) => c?.items || [], 
                                     ) || []) 
                                       .filter((i) => !i.isCancelled) 
                                       .reduce( 
@@ -424,8 +424,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                               onClick={() => { 
                                 const activeSubtotal = selectedAccountForPayment 
                                   ? selectedAccountForPayment.subtotal 
-                                  : (selectedTable?.comandas.flatMap( 
-                                      (c) => c.items, 
+                                  : ((selectedTable?.comandas || []).flatMap( 
+                                      (c) => c?.items || [], 
                                     ) || []) 
                                       .filter((i) => !i.isCancelled) 
                                       .reduce( 

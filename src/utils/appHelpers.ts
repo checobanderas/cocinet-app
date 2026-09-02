@@ -64,9 +64,9 @@ export function getOperatingDay(dateInput: Date | string): string {
   const d = new Date(dateInput);
   const hour = d.getHours();
   const operatingDate = new Date(d);
-  // Business hours: new shift starts at 3:10 AM.
-  // Any time before 3:10 AM belongs to the previous day cycle.
-  if (hour < 3 || (hour === 3 && d.getMinutes() < 10)) {
+  // Business hours: new shift starts at 5:00 AM.
+  // Any time before 5:00 AM belongs to the previous day cycle.
+  if (hour < 5) {
     operatingDate.setDate(operatingDate.getDate() - 1);
   }
   const yyyy = operatingDate.getFullYear();

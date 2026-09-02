@@ -3,7 +3,7 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager, CACHE_SIZE_UNLIMITED,
+  persistentMultipleTabManager,
   CACHE_SIZE_UNLIMITED,
   setLogLevel
 } from "firebase/firestore";
@@ -95,4 +95,43 @@ try {
 }
 
 export const db = firestoreDb;
+
+export async function purgeLocalFirestoreCache() {
+  if (typeof window === "undefined" || !window.indexedDB) return;
+  console.warn("🧹 Purgando bases de datos IndexedDB locales de Firestore...");
+  if (window.indexedDB.databases) {
+    try {
+      const dbs = await window.indexedDB.databases();
+      dbs.forEach((d) => {
+        if (d.name && (d.name.includes("firestore") || d.name.includes("[DEFAULT]"))) {
+          window.indexedDB.deleteDatabase(d.name);
+        }
+      });
+    } catch (e) {
+      console.warn("Error al enumerar bases de datos IndexedDB:", e);
+    }
+  }
+  const fallbacks = [
+    "firestore/[DEFAULT]/cocinet-app/(default)",
+    "firestore/[DEFAULT]/cocinet-app/(default)/main",
+    "firestore/[DEFAULT]/cocinet-app/",
+    "firestore/custom_app/cocinet-app/(default)",
+    "firestore",
+    "[DEFAULT]main",
+    "[DEFAULT]"
+  ];
+  fallbacks.forEach((name) => {
+    try { window.indexedDB.deleteDatabase(name); } catch (e) {}
+  });
+}
+
+if (typeof window !== "undefined") {
+  (window as any).purgeFirestoreCache = () => {
+    purgeLocalFirestoreCache().then(() => {
+      localStorage.setItem("needs_firestore_purge", "true");
+      window.location.reload();
+    });
+  };
+}
+
 

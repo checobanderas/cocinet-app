@@ -20,6 +20,53 @@
         document.write('<link rel="apple-touch-icon" href="https://img.icons8.com/fluency/512/restaurant.png" />');
       }
     </script>
+
+    <!-- Script de auto-recuperación de caché IndexedDB de Firestore contra límites de serialización en navegadores (ej: Firefox 256MB) -->
+    <script>
+      (function() {
+        var PURGE_FLAG = 'cocinet_firestore_purge_2026_09';
+        var needsPurge = localStorage.getItem('needs_firestore_purge') === 'true' || localStorage.getItem(PURGE_FLAG) !== 'done';
+        if (needsPurge && window.indexedDB) {
+          localStorage.setItem(PURGE_FLAG, 'done');
+          localStorage.removeItem('needs_firestore_purge');
+          try {
+            if (window.indexedDB.databases) {
+              window.indexedDB.databases().then(function(dbs) {
+                dbs.forEach(function(db) {
+                  if (db.name && (db.name.indexOf('firestore') !== -1 || db.name.indexOf('[DEFAULT]') !== -1)) {
+                    window.indexedDB.deleteDatabase(db.name);
+                  }
+                });
+              }).catch(function() {});
+            }
+            var fallbacks = [
+              'firestore/[DEFAULT]/cocinet-app/(default)',
+              'firestore/[DEFAULT]/cocinet-app/(default)/main',
+              'firestore/[DEFAULT]/cocinet-app/',
+              'firestore/custom_app/cocinet-app/(default)',
+              'firestore',
+              '[DEFAULT]main',
+              '[DEFAULT]'
+            ];
+            fallbacks.forEach(function(name) {
+              try { window.indexedDB.deleteDatabase(name); } catch(e) {}
+            });
+            console.warn('🧹 Firestore IndexedDB cache purge completed.');
+          } catch (e) {
+            console.error('Error purgando IndexedDB:', e);
+          }
+        }
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = String(event && event.reason && (event.reason.message || event.reason) || '');
+          if (reason.indexOf('serialized value is too large') !== -1 || reason.indexOf('b815') !== -1) {
+            console.error('🚨 Error crítico en IndexedDB detectado. Purgando y reiniciando...', reason);
+            localStorage.setItem('needs_firestore_purge', 'true');
+            window.location.reload();
+          }
+        });
+      })();
+    </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   </head>
   <body>

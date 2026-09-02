@@ -631,15 +631,31 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                             <div className="flex justify-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(link);
+                                onClick={async () => {
+                                  const rawPhone = (user.phone || "").replace(/\D/g, "");
+                                  const phoneTarget = rawPhone ? (rawPhone.length === 10 ? `52${rawPhone}` : rawPhone) : "";
+                                  const msg = encodeURIComponent(`Hola ${user.name}! Aquí tienes tu acceso directo de Cocinet Pro:\n\n${link}`);
+                                  const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${msg}` : `https://wa.me/?text=${msg}`;
+
+                                  try {
+                                    await navigator.clipboard.writeText(waUrl);
+                                  } catch (err) {
+                                    const textarea = document.createElement("textarea");
+                                    textarea.value = waUrl;
+                                    document.body.appendChild(textarea);
+                                    textarea.select();
+                                    document.execCommand("copy");
+                                    document.body.removeChild(textarea);
+                                  }
+
                                   triggerAppNotification(
-                                    "🔗 Enlace Copiado",
-                                    `Acceso directo para ${user.name} copiado al portapapeles.`,
+                                    "📲 Enlace de WhatsApp Copiado",
+                                    `URL de WhatsApp con acceso para ${user.name} copiada al portapapeles.`,
                                     "success"
                                   );
                                 }}
                                 className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
+                                title="Copiar enlace de WhatsApp"
                               >
                                 📋 Copiar
                               </button>

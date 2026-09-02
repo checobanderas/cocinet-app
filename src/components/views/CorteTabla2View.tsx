@@ -913,9 +913,9 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
                     </select>
                   </div>
 
-                  {/* Selector de Turno con Animación Heartbeat */}
+                  {/* Selector de Turno con Animación Heartbeat (solo mientras cargan las fechas) */}
                   <div
-                    className="turno-heartbeat-anim flex items-center gap-2 p-1.5 md:p-2 rounded-2xl border bg-amber-50 border-amber-400 shadow-md transition-all"
+                    className={`${(!historyLoaded && filteredShiftKeys.length === 0) ? "turno-heartbeat-anim" : ""} flex items-center gap-2 p-1.5 md:p-2 rounded-2xl border bg-amber-50 border-amber-400 shadow-md transition-all`}
                   >
                     <span className="text-xs font-black text-amber-900 pl-1.5 flex items-center gap-1">
                       <span>📅</span> Turno:

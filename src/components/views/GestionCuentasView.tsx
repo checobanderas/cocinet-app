@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonCol, IonContent, IonGrid, IonPage, IonRow, IonText, useIonAlert } from '@ionic/react';
+import { formatTableName } from '../../utils/formatters';
 
 
 interface GestionCuentasViewProps {
@@ -227,8 +228,8 @@ return (
             let emoji = "🍽️";
             if (z.includes("llevar") || l.includes("llevar")) emoji = "🛍️";
             else if (z.includes("domicilio") || l.includes("domicilio") || z.includes("reparto") || l.includes("reparto")) emoji = "🏍️";
-            const prefix = emoji === "🍽️" ? "Mesa " : "";
-            return `Gestionando Cuenta ${emoji} (${prefix}${selectedTableGestion.label || "S/N"})`;
+            const tableCode = formatTableName(selectedTableGestion.zone || "", selectedTableGestion.label || "");
+            return `Gestionando Cuenta ${emoji} (${tableCode})`;
           })(),
           subtitle: selectedTenant?.name || "Cocinet",
           showBack: !!selectedTableGestion,

@@ -7,6 +7,8 @@ import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
 import { getCompanyCatalog, getTenantUsers, getOperatingDay } from '../../utils/appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { formatTableName } from '../../utils/formatters';
+import { generateDailyReportText, exportDailyReportExcel } from '../../utils/dailyReportService';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
@@ -33,6 +35,7 @@ interface CorteTablaViewProps {
   isSystemsMode: any;
   paymentMethod: any;
   purchases: any;
+  products?: any[];
   renderMaterialHeader: any;
   selectedPendingOwner: any;
   selectedTenant: any;
@@ -58,6 +61,7 @@ interface CorteTablaViewProps {
   setIsOwnerUnlocked: any;
   setOwnerPasswordInput: any;
   setSelectedTableGestion: any;
+  setSelectedTableId?: any;
   setShowCashMovementModal: any;
   setShowCloseTurnConfirm: any;
   setShowDailyReportModal: any;
@@ -144,6 +148,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   isSystemsMode,
   paymentMethod,
   purchases,
+  products,
   renderMaterialHeader,
   selectedPendingOwner,
   selectedTenant,
@@ -169,6 +174,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   setIsOwnerUnlocked,
   setOwnerPasswordInput,
   setSelectedTableGestion,
+  setSelectedTableId,
   setShowCashMovementModal,
   setShowCloseTurnConfirm,
   setShowDailyReportModal,
@@ -1309,14 +1315,18 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       text += `🏪 ${nombreNegocio.toUpperCase()}\n`;
       text += `📍 SUCURSAL: ${nombreSucursal.toUpperCase()}\n`;
       text += `=================================\n`;
-      if (isReopened) {
-        text += `🚨 CORTE FINAL DEFINITIVO (ACUMULADO DEL DÍA)\n`;
-        text += `⚠️ (Actualiza y reemplaza al corte anterior por ventas adicionales en madrugada)\n`;
+      if (customRole === "automated_5am") {
+        text += `🌅 CORTE FINAL DE JORNADA (5:00 AM) - AUDITORÍA DEFINITIVA\n`;
+        text += `📌 Cierre oficial y consolidado inmutable del día operativo\n`;
+      } else if (isReopened) {
+        text += `📤 REPORTE DE FIN DE JORNADA ACTUALIZADO (ACUMULADO DEL DÍA)\n`;
+        text += `⚠️ (Actualiza el reporte previo por ventas/movimientos adicionales)\n`;
       } else {
-        text += `📝 CORTE DE CAJA / FIN DE TURNO\n`;
+        text += `📤 REPORTE DE FIN DE JORNADA (TURNO DEL CAJERO)\n`;
+        text += `ℹ️ Nota: Reporte emitido por el cajero. El corte final definitivo consolidado se emite a las 5:00 AM.\n`;
       }
       text += `📅 Fecha: ${dateStr}\n`;
-      text += `👤 Responsable: ${cajeroNombre} (${rolStr.toUpperCase()})\n`;
+      text += `👤 Responsable: ${cajeroNombre} (${(customRole === "automated_5am" ? "SISTEMA COCINET" : rolStr).toUpperCase()})\n`;
       text += `=================================\n\n`;
 
       text += `🟢 TOTAL VENDIDO EN EL DÍA: $${totalVentasNetas.toFixed(2)}\n`;
@@ -1440,13 +1450,19 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
 
         setShowClosePinModal(false);
         triggerAppNotification(
-          "Turno Cerrado 🔒✅",
-          `El turno fue finalizado formalmente por ${matchedUser.name} (${matchedUser.role}).`,
+          "Reportes de Fin de Jornada Enviados 📤✅",
+          `Los reportes y balances fueron enviados formalmente por ${matchedUser.name} (${matchedUser.role}).`,
           "success"
         );
 
-        // Disparo de WhatsApp Silencioso
-        const text = generateCorteText(matchedUser.name, matchedUser.role, isReopening);
+        // 1. Mensaje de Saldo de Caja (Corte de Turno)
+        const textCorte = generateCorteText(matchedUser.name, matchedUser.role, isReopening);
+
+        // 2. Mensaje del Reporte Diario del Día (Desglose de Cuentas, Productos, Cancelaciones y Pagos)
+        const targetOpDay = sessionToRender.operatingDay || getOperatingDay(new Date());
+        const companyName = ticketBusinessName || selectedTenant?.name || "Cocinet App";
+        const textDailyReport = generateDailyReportText(history || [], products || [], targetOpDay, companyName);
+
         const metaConfig = getWhatsAppCloudConfig();
 
         if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
@@ -1463,22 +1479,41 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
 
           if (recipients.length > 0) {
             recipients.forEach((r) => {
-              sendSilentWhatsAppMessage(r.phone!, text).catch((e) =>
-                console.error("Error silent send:", e)
+              // Envío 1: Corte de Turno (Saldo en Caja)
+              sendSilentWhatsAppMessage(r.phone!, textCorte).catch((e) =>
+                console.error("Error silent send corte:", e)
               );
+              // Envío 2: Reporte del Día (Productos, Cuentas, Desglose) con intervalo suave
+              setTimeout(() => {
+                sendSilentWhatsAppMessage(r.phone!, textDailyReport).catch((e) =>
+                  console.error("Error silent send daily report:", e)
+                );
+              }, 1500);
             });
             triggerAppNotification(
               "WhatsApp Silencioso Entregado 🚀✅",
-              `Corte entregado en segundo plano a los administradores (${recipients.map((r) => r.name).join(", ")}).`,
+              `Corte de caja y Reporte del día enviados a (${recipients.map((r) => r.name).join(", ")}).`,
               "success"
             );
           } else {
-            const encodedText = encodeURIComponent(text);
+            const encodedText = encodeURIComponent(textCorte);
             window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
           }
         } else {
-          const encodedText = encodeURIComponent(text);
+          const encodedText = encodeURIComponent(textCorte);
           window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        }
+
+        // 3. Exportación y descarga automática del archivo Excel del Reporte Diario
+        try {
+          exportDailyReportExcel(history || [], products || [], targetOpDay, companyName);
+          triggerAppNotification(
+            "Excel del Reporte Diario Descargado 📊✨",
+            "Se generó y guardó automáticamente el archivo Excel con el desglose de cuentas, productos y cancelaciones.",
+            "info"
+          );
+        } catch (excelErr) {
+          console.error("Error generating Excel on shift close:", excelErr);
         }
       } catch (err) {
         console.error(err);
@@ -1942,7 +1977,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                   >
                     <div>
                       <span className="text-sm font-black text-slate-800 block">
-                        🍽️ {t.label || `Mesa ${t.id}`}
+                        🍽️ {formatTableName(t.zone || "", t.label || `Mesa ${t.id}`)}
                       </span>
                       <span className="text-[11px] text-slate-500 font-semibold">
                         {(t.comandas || []).length} comanda(s) • Total:{" "}
@@ -1954,7 +1989,10 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                     <button
                       onClick={() => {
                         setShowPendingTablesModal(false);
-                        setSelectedTableGestion(t.id);
+                        if (setSelectedTableId) {
+                          setSelectedTableId(t.id);
+                        }
+                        setSelectedTableGestion(t);
                         setAppMode("gestion_cuentas");
                       }}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-3.5 rounded-xl transition border-none cursor-pointer flex items-center gap-1 shadow-sm"
@@ -1994,10 +2032,10 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
               🔑
             </div>
             <h3 className="text-lg font-black text-slate-900 m-0">
-              Confirmar Cierre de Turno
+              Enviar Reportes por Fin de Jornada
             </h3>
             <p className="text-xs text-slate-500 font-semibold mt-1 mb-4">
-              Ingresa el PIN de 4 dígitos del cajero o administrador responsable para sellar este corte.
+              Ingresa el PIN de 4 dígitos del cajero o administrador para enviar los balances por WhatsApp y descargar el Excel del día.
             </p>
 
             {/* PIN Display */}
@@ -2148,32 +2186,24 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                     <span>Reiniciar Corte ⚙️</span>
                   </button>
                 )}
-                {(currentUser?.id.endsWith("-sistemas") || currentUser?.role === "Sistemas" || isSystemsMode || isMasterAdmin) && (
-                  <button
-                    onClick={() => setTenantBackupConfirm({ isOpen: true, type: null })}
-                    className="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 px-4 rounded-xl transition duration-200 shadow-md shadow-violet-600/20 flex items-center gap-1.5 border-none cursor-pointer text-[13px] uppercase tracking-wider"
-                  >
-                    <span>📦 Respaldo del Tenant</span>
-                  </button>
-                )}
 
                 {sessionToRender?.status === "open" ? (
                   <button
                     onClick={handleInitiateCloseShift}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 border-none cursor-pointer text-[13px] uppercase tracking-wider animate-pulse hover:animate-none"
                   >
-                    <span>🔒 Cerrar Turno</span>
+                    <span>📤 Enviar Reportes por Fin de Jornada</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-2">
                     <div className="bg-slate-100 text-slate-500 font-bold py-2.5 px-3 rounded-xl flex items-center gap-1.5 text-[12px] border border-slate-200 uppercase tracking-widest select-none">
-                      <span>🔒 Turno Cerrado</span>
+                      <span>✅ Reportes Enviados</span>
                     </div>
                     <button
                       onClick={handleReopenShift}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3.5 rounded-xl transition duration-200 shadow-md shadow-emerald-600/20 flex items-center gap-1.5 border-none cursor-pointer text-[12px] uppercase tracking-wider"
                     >
-                      <span>🔓 Reabrir Turno</span>
+                      <span>🔓 Reabrir y Actualizar</span>
                     </button>
                   </div>
                 )}

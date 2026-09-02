@@ -66,6 +66,8 @@ interface LoginViewProps {
   handleSupportAction: any;
   history: any;
   isMasterAdmin: any;
+  masterAdminPin?: string;
+  handleUpdateMasterPin?: (newPin: string) => Promise<boolean>;
   isOwnerUnlocked: any;
   loginSubStep: any;
   mexicoClockShort: any;
@@ -206,6 +208,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   handleSupportAction,
   history,
   isMasterAdmin,
+  masterAdminPin,
+  handleUpdateMasterPin,
   isOwnerUnlocked,
   loginSubStep,
   mexicoClockShort,
@@ -297,6 +301,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
   formTenantRequireCardDigits,
   setFormTenantRequireCardDigits,
 }) => {
+  const [showEditMasterPinModal, setShowEditMasterPinModal] = React.useState(false);
+  const [newMasterPinInput, setNewMasterPinInput] = React.useState("");
+  const [confirmMasterPinInput, setConfirmMasterPinInput] = React.useState("");
+  const [isSavingMasterPin, setIsSavingMasterPin] = React.useState(false);
+
 return (
       <IonPage>
         <TenantUsersModal
@@ -1008,17 +1017,28 @@ return (
                     </div>
 
                     {isMasterAdmin && (
-                      <div className="text-center py-2">
+                      <div className="flex flex-wrap items-center justify-center gap-2.5 py-2">
                         <button
                           type="button"
                           onClick={() => {
                             resetTenantForm();
                             setShowTenantCrudModal(true);
                           }}
-                          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md mx-auto border-none uppercase tracking-wider animate-pulse"
+                          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border-none uppercase tracking-wider animate-pulse"
                           style={{ backgroundColor: "#e11d48" }}
                         >
-                          🛠️ Registrar / Gestionar Inquilinos (2052)
+                          🛠️ Registrar / Gestionar Inquilinos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewMasterPinInput(masterAdminPin || "2052");
+                            setConfirmMasterPinInput(masterAdminPin || "2052");
+                            setShowEditMasterPinModal(true);
+                          }}
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border-none uppercase tracking-wider"
+                        >
+                          🔑 Cambiar PIN Maestro (Actual: {masterAdminPin || "2052"})
                         </button>
                       </div>
                     )}
@@ -1614,6 +1634,123 @@ return (
             ) : null}
 
           </div>
+
+          {showEditMasterPinModal && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.75)",
+                backdropFilter: "blur(4px)",
+                zIndex: 99999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "16px",
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: "#ffffff",
+                  borderRadius: "24px",
+                  maxWidth: "420px",
+                  width: "100%",
+                  padding: "24px",
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                  animation: "scaleUp 0.2s ease-out",
+                }}
+              >
+                <div className="text-center space-y-2 mb-5">
+                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">
+                    🔑
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                    Cambiar PIN Maestro
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                    Este PIN te otorga acceso total de Administrador General. Se almacena directamente en Firestore en la colección <strong className="text-indigo-600 font-mono">principal</strong> (campo: <strong className="text-indigo-600 font-mono">pin</strong>).
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1.5">
+                      Nuevo PIN (4 dígitos numéricos)
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={newMasterPinInput}
+                      onChange={(e) => setNewMasterPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                      placeholder="Ej. 2052"
+                      className="w-full text-center text-2xl font-mono font-black tracking-widest px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 rounded-xl outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-600 mb-1.5">
+                      Confirmar Nuevo PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={confirmMasterPinInput}
+                      onChange={(e) => setConfirmMasterPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                      placeholder="Repite el PIN"
+                      className="w-full text-center text-2xl font-mono font-black tracking-widest px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 rounded-xl outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 mt-6">
+                  <button
+                    type="button"
+                    disabled={isSavingMasterPin}
+                    onClick={() => {
+                      setShowEditMasterPinModal(false);
+                      setNewMasterPinInput("");
+                      setConfirmMasterPinInput("");
+                    }}
+                    className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer border-none uppercase tracking-wider"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingMasterPin || newMasterPinInput.length !== 4}
+                    onClick={async () => {
+                      if (newMasterPinInput.length !== 4) {
+                        triggerAppNotification("⚠️ Longitud Incorrecta", "El PIN debe ser de 4 dígitos numéricos.", "warning");
+                        return;
+                      }
+                      if (newMasterPinInput !== confirmMasterPinInput) {
+                        triggerAppNotification("⚠️ No Coinciden", "Los dos campos de PIN deben ser exactamente iguales.", "warning");
+                        return;
+                      }
+                      setIsSavingMasterPin(true);
+                      try {
+                        if (handleUpdateMasterPin) {
+                          const ok = await handleUpdateMasterPin(newMasterPinInput);
+                          if (ok) {
+                            setShowEditMasterPinModal(false);
+                          }
+                        }
+                      } finally {
+                        setIsSavingMasterPin(false);
+                      }
+                    }}
+                    className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs rounded-xl transition-all cursor-pointer border-none shadow-md uppercase tracking-wider flex items-center justify-center gap-1.5"
+                  >
+                    {isSavingMasterPin ? "Guardando..." : "💾 Guardar PIN"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </IonContent>
       </IonPage>
     );

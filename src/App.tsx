@@ -5,6 +5,10 @@ import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
 import { PrinterTemplateModal } from "./components/PrinterTemplateModal";
 import { NumpadModal } from "./components/modals/NumpadModal";
+import { parseStructuredExcelCatalog } from "./services/excelMenuParser";
+import { getComandaDestinations, executePrintComanda, getLastInternalFolio } from "./services/comandaPrintService";
+import { executePrintTicket } from "./services/receiptPrintService";
+import { executeImportTenantMenu, executeReplicateMenuToTenants } from "./services/tenantMenuSyncService";
 import {
   User,
   Product,
@@ -317,6 +321,8 @@ import {
   deleteTenantBackupSnapshot,
   restoreTenantBackupSnapshot,
   deduplicateComandas,
+  subscribeToMasterConfig,
+  saveMasterPinToFirestore,
 } from "./utils/firestore";
 
 
@@ -1224,6 +1230,18 @@ export default function App() {
   });
   const [deviceRequest, setDeviceRequest] = useState<DeviceRequest | null>(null);
   const [isMasterAdmin, setIsMasterAdmin] = useState(() => localStorage.getItem("pos_master_admin") === "true");
+  const [masterAdminPin, setMasterAdminPin] = useState<string>(() => localStorage.getItem("cocinet_master_pin") || "2052");
+
+  useEffect(() => {
+    const unsub = subscribeToMasterConfig((data) => {
+      if (data && data.pin) {
+        const cleanPin = String(data.pin).trim();
+        setMasterAdminPin(cleanPin);
+        localStorage.setItem("cocinet_master_pin", cleanPin);
+      }
+    });
+    return () => unsub();
+  }, []);
   const [allDeviceRequests, setAllDeviceRequests] = useState<DeviceRequest[]>([]);
   const [showDeviceRequestsModal, setShowDeviceRequestsModal] = useState(false);
   const [showCuentasSummary, setShowCuentasSummary] = useState(false);
@@ -2973,19 +2991,213 @@ export default function App() {
     return OWNER_PINS[owner] === key;
   };
 
+  const handleUpdateMasterPin = async (newPin: string): Promise<boolean> => {
+    const clean = String(newPin).trim();
+    if (!/^\d{4}$/.test(clean)) {
+      triggerAppNotification("⚠️ PIN Inválido", "El PIN maestro debe ser de exactamente 4 dígitos numéricos.", "warning");
+      return false;
+    }
+    try {
+      await saveMasterPinToFirestore(clean);
+      setMasterAdminPin(clean);
+      localStorage.setItem("cocinet_master_pin", clean);
+      triggerAppNotification(
+        "✅ PIN Maestro Actualizado",
+        `El PIN de Administrador Maestro ahora es: ${clean}. Se guardó en la tabla 'principal' (campo: pin) de Firestore.`,
+        "success"
+      );
+      return true;
+    } catch (err: any) {
+      console.error("Error updating master pin in firestore:", err);
+      triggerAppNotification("❌ Error", "No se pudo actualizar el PIN maestro en Firestore.", "warning");
+      return false;
+    }
+  };
+
   const handleOwnerPinSubmit = (enteredPin: string) => {
-    if (enteredPin === "4020" || enteredPin === "2052") {
+    // 0. ABSOLUTE TOP PRIORITY: MASTER ADMIN (2052 or custom master PIN from Firestore)
+    // ALWAYS UNLOCKS GLOBAL MASTER VIEW (All owners, all tenants)
+    if (enteredPin === masterAdminPin || enteredPin === "2052") {
+      setIsMasterAdmin(true);
       setIsOwnerUnlocked(true);
       setActiveOwnerFilter(null);
-      setIsMasterAdmin(enteredPin === "2052");
+      setRestrictedOwnerKey(null);
+      setSelectedTenant(null);
+      setSelectedLoginUser(null);
+      setCurrentUser(null);
+      setShowPinPanel(true);
       localStorage.setItem("cocinet_is_owner_unlocked", "true");
-      if (enteredPin === "2052") {
-        localStorage.setItem("pos_master_admin", "true");
-      }
+      localStorage.setItem("pos_master_admin", "true");
       localStorage.removeItem("cocinet_active_owner_filter");
+      localStorage.removeItem("cocinet_restricted_owner_key");
+      localStorage.removeItem("pos_selected_tenant");
+
+      setOwnerPasswordInput("");
+      setPinAttempts(0);
+      setLoginSubStep("tenant");
+
       triggerAppNotification(
-        "🔑 Acceso Maestro Autorizado",
-        "Visualización total de todas las sucursales activa para propósitos de auditoría local.",
+        "👑 Acceso Maestro Autorizado",
+        "Directorio de Propietarios y Sucursales desbloqueado.",
+        "success"
+      );
+      return;
+    }
+
+    // A. IF A TENANT IS ALREADY SELECTED (Tenant PIN Screen)
+    if (selectedTenant) {
+      let matchedUser: User | null = null;
+      const matchedTenant: CompanyTenant = selectedTenant;
+
+      // 1. Sistemas global PIN (4020) for this tenant
+      if (enteredPin === "4020") {
+        const companyUsers = getTenantUsers(selectedTenant.id);
+        const existingSistemas = companyUsers.find(u => u.id.endsWith("-sistemas") || u.role === "admin");
+        matchedUser = existingSistemas || {
+          id: `${selectedTenant.id}-sistemas`,
+          name: `Sistemas (${selectedTenant.sucursalDefault || selectedTenant.name}) ⚙️`,
+          role: "admin",
+          pin: enteredPin,
+          avatar: "fa-solid fa-laptop-code",
+          tenantId: selectedTenant.id,
+        };
+      }
+      // 2. Owner / Supervisor PIN for this tenant's owner
+      else if (
+        (selectedTenant.ownerKey && OWNER_PINS[selectedTenant.ownerKey] === enteredPin) ||
+        (selectedTenant.ownerKey && OWNER_SUPERVISOR_PINS[selectedTenant.ownerKey] === enteredPin) ||
+        enteredPin === "2026"
+      ) {
+        const companyUsers = getTenantUsers(selectedTenant.id);
+        const existingAdmin = companyUsers.find(u => u.id.endsWith("-admin") || u.role === "admin");
+        matchedUser = existingAdmin || {
+          id: `${selectedTenant.id}-admin`,
+          name: `Propietario (${selectedTenant.name}) 👑`,
+          role: "admin",
+          pin: enteredPin,
+          avatar: "fa-solid fa-user-shield",
+          tenantId: selectedTenant.id,
+        };
+      }
+      // 3. Regular assigned employees of this specific tenant
+      else {
+        const companyUsers = getTenantUsers(selectedTenant.id);
+        const user = companyUsers.find((u) => u.pin === enteredPin);
+        if (user) {
+          matchedUser = user;
+        } else {
+          // 4. Cross-tenant check: if enteredPin belongs to any Sistemas/Admin across all companies
+          for (const company of COMPANY_CATALOG) {
+            const cUsers = getTenantUsers(company.id);
+            const crossUser = cUsers.find((x) => x.pin === enteredPin);
+            if (crossUser && (crossUser.id.endsWith("-sistemas") || crossUser.role === "admin")) {
+              matchedUser = {
+                id: `${selectedTenant.id}-sistemas`,
+                name: crossUser.name,
+                role: "admin",
+                pin: enteredPin,
+                avatar: crossUser.avatar || "fa-solid fa-laptop-code",
+                tenantId: selectedTenant.id,
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      if (matchedUser) {
+        setSelectedTenant(matchedTenant);
+        setCurrentUser(matchedUser);
+        setOwnerPasswordInput("");
+        setPinAttempts(0);
+
+        if (matchedUser.id.endsWith("-sistemas") || enteredPin === "4020") {
+          setIsOwnerUnlocked(true);
+          setActiveOwnerFilter(null);
+          localStorage.setItem("cocinet_is_owner_unlocked", "true");
+          localStorage.removeItem("cocinet_active_owner_filter");
+
+          setIsSystemsMode(true);
+          localStorage.setItem("cocinet_is_systems", "true");
+          setRestrictedOwnerKey(null);
+          localStorage.removeItem("cocinet_restricted_owner_key");
+        } else if (matchedUser.id.endsWith("-admin") || matchedUser.role === "admin") {
+          setIsOwnerUnlocked(true);
+          setActiveOwnerFilter(matchedTenant.ownerKey);
+          localStorage.setItem("cocinet_is_owner_unlocked", "true");
+          localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
+
+          setIsSystemsMode(false);
+          localStorage.setItem("cocinet_is_systems", "false");
+          setRestrictedOwnerKey(matchedTenant.ownerKey);
+          localStorage.setItem("cocinet_restricted_owner_key", matchedTenant.ownerKey);
+        } else {
+          setIsOwnerUnlocked(false);
+          setActiveOwnerFilter(matchedTenant.ownerKey);
+          localStorage.setItem("cocinet_is_owner_unlocked", "false");
+          localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
+
+          setIsSystemsMode(false);
+          localStorage.setItem("cocinet_is_systems", "false");
+          setRestrictedOwnerKey(null);
+          localStorage.removeItem("cocinet_restricted_owner_key");
+        }
+
+        setLoginSubStep("tenant");
+
+        triggerAppNotification(
+          "⚡ Ingreso Exitoso",
+          `Bienvenido, ${matchedUser.name} a la sucursal ${matchedTenant.name}.`,
+          "success"
+        );
+
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (e) {}
+
+        if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
+          setAppMode("corte-tabla");
+        } else {
+          setAppMode(getPreferredTablesMode());
+        }
+        return;
+      }
+
+      // Failed attempt for this tenant
+      const nextAttempts = pinAttempts + 1;
+      setPinAttempts(nextAttempts);
+      setOwnerPasswordInput("");
+
+      if (nextAttempts >= 3) {
+        setShowAttemptsExceededAlert(true);
+        setPinAttempts(0);
+      } else {
+        triggerAppNotification(
+          "❌ PIN Incorrecto",
+          `El PIN ingresado no corresponde a ningún usuario autorizado en ${selectedTenant?.name || "esta sucursal"}. Intento ${nextAttempts}/3.`,
+          "warning"
+        );
+      }
+      return;
+    }
+
+    // B. GLOBAL PIN SCREEN (No tenant chosen yet)
+    if (enteredPin === "4020") {
+      setIsOwnerUnlocked(true);
+      setActiveOwnerFilter(null);
+      setIsSystemsMode(true);
+      setSelectedTenant(null);
+      setSelectedLoginUser(null);
+      setCurrentUser(null);
+      setShowPinPanel(true);
+      setLoginSubStep("tenant");
+      localStorage.setItem("cocinet_is_owner_unlocked", "true");
+      localStorage.setItem("cocinet_is_systems", "true");
+      localStorage.removeItem("cocinet_active_owner_filter");
+      localStorage.removeItem("pos_selected_tenant");
+      triggerAppNotification(
+        "⚙️ Acceso de Sistemas Autorizado",
+        "Visualización de todas las sucursales activa en modo Sistemas.",
         "info"
       );
       setOwnerPasswordInput("");
@@ -3000,7 +3212,7 @@ export default function App() {
       setActiveOwnerFilter(ownerKey);
       localStorage.setItem("cocinet_is_owner_unlocked", "true");
       localStorage.setItem("cocinet_active_owner_filter", ownerKey);
-      
+
       const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
       triggerAppNotification(
         "🔑 Acceso Propietario Autorizado",
@@ -3019,7 +3231,7 @@ export default function App() {
       setActiveOwnerFilter(ownerKey);
       localStorage.setItem("cocinet_is_owner_unlocked", "true");
       localStorage.setItem("cocinet_active_owner_filter", ownerKey);
-      
+
       const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
       triggerAppNotification(
         "📋 Acceso Supervisor Autorizado",
@@ -3031,26 +3243,16 @@ export default function App() {
       return;
     }
 
-    // 3. Search ONLY users of the currently assigned/selected sucursal (Tenant Scoping)
+    // Fallback search across all tenants if entering from global keypad
     let matchedUser: User | null = null;
-    let matchedTenant: CompanyTenant | null = selectedTenant || null;
-
-    if (selectedTenant) {
-      const companyUsers = getTenantUsers(selectedTenant.id);
+    let matchedTenant: CompanyTenant | null = null;
+    for (const company of COMPANY_CATALOG) {
+      const companyUsers = getTenantUsers(company.id);
       const user = companyUsers.find((u) => u.pin === enteredPin);
       if (user) {
         matchedUser = user;
-      }
-    } else {
-      // Fallback only if no tenant has ever been set on this device
-      for (const company of COMPANY_CATALOG) {
-        const companyUsers = getTenantUsers(company.id);
-        const user = companyUsers.find((u) => u.pin === enteredPin);
-        if (user) {
-          matchedUser = user;
-          matchedTenant = company;
-          break;
-        }
+        matchedTenant = company;
+        break;
       }
     }
 
@@ -3060,13 +3262,12 @@ export default function App() {
       setOwnerPasswordInput("");
       setPinAttempts(0);
 
-      // Apply role-based privileges
       if (matchedUser.id.endsWith("-sistemas")) {
         setIsOwnerUnlocked(true);
         setActiveOwnerFilter(null);
         localStorage.setItem("cocinet_is_owner_unlocked", "true");
         localStorage.removeItem("cocinet_active_owner_filter");
-        
+
         setIsSystemsMode(true);
         localStorage.setItem("cocinet_is_systems", "true");
         setRestrictedOwnerKey(null);
@@ -3076,7 +3277,7 @@ export default function App() {
         setActiveOwnerFilter(matchedTenant.ownerKey);
         localStorage.setItem("cocinet_is_owner_unlocked", "true");
         localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
-        
+
         setIsSystemsMode(false);
         localStorage.setItem("cocinet_is_systems", "false");
         setRestrictedOwnerKey(matchedTenant.ownerKey);
@@ -3086,7 +3287,7 @@ export default function App() {
         setActiveOwnerFilter(matchedTenant.ownerKey);
         localStorage.setItem("cocinet_is_owner_unlocked", "false");
         localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
-        
+
         setIsSystemsMode(false);
         localStorage.setItem("cocinet_is_systems", "false");
         setRestrictedOwnerKey(null);
@@ -3101,12 +3302,10 @@ export default function App() {
         "success"
       );
 
-      // Clean address bar query parameters to avoid page reload loops
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) {}
 
-      // Redirect based on role and preference
       if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
         setAppMode("corte-tabla");
       } else {
@@ -3123,7 +3322,7 @@ export default function App() {
       } else {
         triggerAppNotification(
           "❌ PIN Incorrecto",
-          `El PIN ingresado no corresponde a ningún usuario autorizado en ${selectedTenant?.name || "esta sucursal"}. Intento ${nextAttempts}/3.`,
+          `El PIN ingresado no corresponde a ningún usuario autorizado. Intento ${nextAttempts}/3.`,
           "warning"
         );
       }
@@ -4198,131 +4397,6 @@ export default function App() {
     setShowMenuToast(true);
   };
 
-  const parseStructuredExcelCatalog = (rawGrid: any[][]) => {
-    if (!rawGrid || rawGrid.length < 2) return null;
-
-    let currentSection = "";
-    const parsed: any[] = [];
-
-    for (let r = 0; r < rawGrid.length; r++) {
-      const row = rawGrid[r];
-      if (!Array.isArray(row) || row.length === 0) continue;
-
-      const col0 = String(row[0] || "").trim();
-      if (!col0) continue;
-
-      // Skip table header row
-      if (
-        col0.toUpperCase() === "PRODUCTO" ||
-        col0.toUpperCase() === "PRODUCTO / DESCRIPCIÓN" ||
-        col0.toUpperCase() === "NOMBRE" ||
-        col0.toUpperCase() === "PRODUCTO / PLATILLO"
-      ) {
-        continue;
-      }
-
-      // Check if it's a section header (no numbers in other columns)
-      let consecNum = NaN;
-      let priceNum = NaN;
-
-      for (let c = 1; c < row.length; c++) {
-        const cellRaw = String(row[c] || "").replace(/[$,]/g, "").trim();
-        if (cellRaw !== "") {
-          const val = parseFloat(cellRaw);
-          if (!isNaN(val)) {
-            if (isNaN(consecNum)) {
-              consecNum = val;
-            } else if (isNaN(priceNum)) {
-              priceNum = val;
-            }
-          }
-        }
-      }
-
-      // If row has no numeric consec or price, treat as section header
-      if (isNaN(consecNum) && isNaN(priceNum)) {
-        currentSection = col0;
-        continue;
-      }
-
-      // If only one numeric value was found
-      if (!isNaN(consecNum) && isNaN(priceNum)) {
-        if (consecNum >= 1 && consecNum <= 999 && Number.isInteger(consecNum) && row[1] !== undefined && String(row[1]).trim() !== "") {
-          priceNum = 0;
-        } else {
-          priceNum = consecNum;
-          consecNum = parsed.length + 1;
-        }
-      }
-
-      const sortOrder = !isNaN(consecNum) ? consecNum : parsed.length + 1;
-      const finalPrice = !isNaN(priceNum) ? priceNum : 0;
-
-      const nameLower = col0.toLowerCase();
-      const secLower = (currentSection || "").toLowerCase();
-
-      let category = "food";
-      let destination: "kitchen" | "bar" = "kitchen";
-
-      if (
-        secLower.includes("bebida") ||
-        secLower.includes("refresco") ||
-        secLower.includes("cerveza") ||
-        secLower.includes("agua") ||
-        secLower.includes("caf") ||
-        secLower.includes("te") ||
-        nameLower.includes("coca") ||
-        nameLower.includes("refresco") ||
-        nameLower.includes("cerveza") ||
-        nameLower.includes("barrilito") ||
-        nameLower.includes("agua") ||
-        nameLower.includes("limonada") ||
-        nameLower.includes("naranjada") ||
-        nameLower.includes("topo chico") ||
-        nameLower.includes("ponche") ||
-        nameLower.includes("soda") ||
-        nameLower.includes("atole") ||
-        nameLower.includes("tizana") ||
-        nameLower.includes("choco milk") ||
-        nameLower.includes("frape") ||
-        nameLower.includes("matcha") ||
-        nameLower.includes("taro") ||
-        nameLower.includes("suero") ||
-        nameLower.includes("michelada")
-      ) {
-        category = "drinks";
-        destination = "bar";
-      } else if (
-        secLower.includes("postre") ||
-        secLower.includes("flan") ||
-        secLower.includes("panque") ||
-        secLower.includes("tarta") ||
-        nameLower.includes("postre") ||
-        nameLower.includes("flan") ||
-        nameLower.includes("panque") ||
-        nameLower.includes("tarta") ||
-        nameLower.includes("pay")
-      ) {
-        category = "desserts";
-        destination = "kitchen";
-      }
-
-      parsed.push({
-        id: `ai_excel_${Date.now()}_${sortOrder}`,
-        name: col0,
-        sortOrder,
-        consecutive: sortOrder,
-        price: finalPrice,
-        category,
-        subcategory: currentSection || (category === "drinks" ? "Bebidas" : category === "desserts" ? "Postres" : "Alimentos"),
-        subgroup: currentSection || "General",
-        destination,
-      });
-    }
-
-    return parsed.length > 0 ? parsed : null;
-  };
-
   const handleExcelUpload = async (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -4905,20 +4979,51 @@ export default function App() {
     }
   };
 
+  const isFirstPrinterQueueLoadRef = useRef(true);
+
+  useEffect(() => {
+    isFirstPrinterQueueLoadRef.current = true;
+  }, [selectedTenant?.id]);
+
   // Background printer queue observer daemon for Windows
   useEffect(() => {
     if (!selectedTenant || !systemLocalWindowsAutoPrint) return;
+
+    // Protección de arranque en frío (Cold-Start): al abrir la aplicación, omitir el backlog viejo existente
+    if (isFirstPrinterQueueLoadRef.current) {
+      isFirstPrinterQueueLoadRef.current = false;
+      printerQueue.forEach((p) => {
+        processedPrintIdsRef.current.add(p.id);
+        if (p.folio) processedPrintIdsRef.current.add(p.folio);
+      });
+      console.log(`[WindowsAutoPrint] Inicialización de cola: ${printerQueue.length} pedidos existentes registrados para no duplicar en físico.`);
+      return;
+    }
+
+    const MAX_PRINT_AGE_MS = 2 * 60 * 1000; // 2 minutos máximo
+    const now = Date.now();
 
     const pendingPedidos = printerQueue.filter((p) => p.impreso === false || p.impreso === undefined);
 
     pendingPedidos.forEach((pedido) => {
       const isAlreadyProcessed = 
         processedPrintIdsRef.current.has(pedido.id) ||
-        (pedido.tipo === "cuenta" && pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
+        (pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
 
       if (isAlreadyProcessed) return;
 
       processedPrintIdsRef.current.add(pedido.id);
+      if (pedido.folio) processedPrintIdsRef.current.add(pedido.folio);
+
+      // Validar antigüedad: no imprimir si fue creado hace más de 2 minutos
+      const pedidoTime = pedido.timestamp ? new Date(pedido.timestamp).getTime() : 0;
+      const isTooOld = pedidoTime > 0 && (now - pedidoTime > MAX_PRINT_AGE_MS);
+
+      if (isTooOld) {
+        console.warn(`[WindowsAutoPrint] Pedido omitido por antigüedad (> 2 min):`, pedido.folio || pedido.id);
+        updatePedidoInFirebase(selectedTenant.id, pedido.id, { impreso: true, expired: true }).catch(() => {});
+        return;
+      }
 
       console.log(`[WindowsAutoPrint] Auto-printing network ${pedido.tipo}:`, pedido.folio);
       
@@ -5119,6 +5224,7 @@ export default function App() {
   const [cancellationReason, setCancellationReason] = useState<string>("");
   const [showCancellationModal, setShowCancellationModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const isProcessingPaymentRef = useRef(false);
 
   // Estados para cancelar cuentas cerradas en la lista de cuentas 🚫🧾
   const [selectedAccountForCancellation, setSelectedAccountForCancellation] = useState<ClosedAccount | null>(null);
@@ -5377,23 +5483,42 @@ export default function App() {
     }
   }, [selectedTenant?.id]);
 
-  const fetchWindowsPrinters = async () => {
+  const fetchWindowsPrinters = async (portParam?: string) => {
     setIsSentinelLoading(true);
+    const portToUse = portParam || windowsPrinterPort || "3010";
     try {
-      const printers = await getWindowsPrinters();
-      setAvailableWindowsPrinters(printers);
-    } catch (err) {
+      const printersList = await getWindowsPrinters(portToUse, selectedTenant?.id);
+      setAvailableWindowsPrinters(printersList);
+      if (printersList && printersList.length > 0) {
+        triggerAppNotification(
+          "🖨️ Impresoras Detectadas",
+          `Se encontraron ${printersList.length} impresoras de Windows en el puerto ${portToUse}:\n${printersList.join(", ")}`,
+          "success"
+        );
+      } else {
+        triggerAppNotification(
+          "⚠️ Centinela sin respuesta",
+          `No se detectó respuesta del Centinela en http://localhost:${portToUse}. Asegúrate de tener iniciado el servicio local (sentinel_printer.py).`,
+          "warning"
+        );
+      }
+    } catch (err: any) {
       console.error("Error al cargar impresoras de Windows:", err);
+      triggerAppNotification(
+        "❌ Error al Buscar Impresoras",
+        `Fallo al conectar con http://localhost:${portToUse}.`,
+        "error"
+      );
     } finally {
       setIsSentinelLoading(false);
     }
   };
 
   useEffect(() => {
-    if (showBluetoothConfigModal && systemPrintDestination === "windows") {
+    if (showBluetoothConfigModal) {
       fetchWindowsPrinters();
     }
-  }, [showBluetoothConfigModal, systemPrintDestination, windowsPrinterPort]);
+  }, [showBluetoothConfigModal, selectedTenant?.id]);
 
 
   const [ticketBusinessName, setTicketBusinessName] = useState<string>(
@@ -6199,7 +6324,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const val = valueStr || "0";
     const numVal = parseFloat(val) || 0;
     const checkoutSubtotal = (() => {
-      const tableItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
+      const tableItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) || [];
       const allItems = tableItems.length > 0 ? tableItems : checkoutFallbackItems;
       return allItems
         .filter((item) => !item.isCancelled)
@@ -7649,9 +7774,10 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       transferStep={transferStep}
       transferTargetOwnerKey={transferTargetOwnerKey}
       triggerAppNotification={triggerAppNotification}
-      users={users}
-          executeTenantTransfer={executeTenantTransfer}
-          resetTenantForm={resetTenantForm}
+      masterAdminPin={masterAdminPin}
+      handleUpdateMasterPin={handleUpdateMasterPin}
+      executeTenantTransfer={executeTenantTransfer}
+      resetTenantForm={resetTenantForm}
           setCompaniesConfig={setCompaniesConfig}
           searchCompanyQuery={searchCompanyQuery}
           setSearchCompanyQuery={setSearchCompanyQuery}
@@ -8133,253 +8259,25 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
-  const getComandaDestinations = (comanda: Comanda): Destination[] => {
-    const dests = new Set<Destination>();
-    comanda.items.forEach((item) => {
-      if (!item.isCancelled) {
-        dests.add(item.product.destination as Destination);
-      }
-    });
-    return Array.from(dests);
-  };
-
   const printComanda = async (
     tableLabel: string,
     comanda: Comanda,
     target?: Destination,
   ): Promise<boolean> => {
     setPrintLoading(comanda.folio);
-
-    const filteredItems = target
-      ? comanda.items.filter(
-          (item) => !item.isCancelled && item.product.destination === target,
-        )
-      : comanda.items.filter((item) => !item.isCancelled);
-
-    if (filteredItems.length === 0) {
-      setPrintLoading(null);
-      return false;
-    }
-
-    try {
-      // Parallel sync with Firestore Printer Queue (Centinela) 🖨️
-      if (selectedTenant) {
-        const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null;
-        const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || null;
-        const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || null;
-        const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || null;
-
-        addPedidoToPrinter(selectedTenant.id, {
-          folio: comanda.folio,
-          mesa: tableLabel,
-          items: filteredItems.map((i) => ({
-            nombre: getFormattedProductName(i.product),
-            cantidad: i.quantity,
-            notas: i.notes || "",
-            comensal: i.plate,
-          })),
-          tipo: "comanda",
-          area: target || "general",
-          timestamp: getMexicoISOString(),
-          mesero: comanda.createdBy?.name || "S/M",
-          deliveryClientName: dClient,
-          deliveryClientPhone: dPhone,
-          deliveryAddress: dAddr,
-          deliveryNotes: dNotes,
-        }).catch((err) => console.warn("Centinela Sync Error:", err));
-      }
-
-      if (systemLocalWindowsAutoPrint) {
-        setPrintLoading(null);
-        return true;
-      }
-
-      const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
-      const transport = await createTransport(printerArea, selectedTenant?.id);
-      const driver = new EscPosDriver();
-      const job = new PosPrinterJob(driver, transport as any);
-
-      job.initialize();
-
-      const destName =
-        target === "kitchen"
-          ? "COCINA"
-          : target === "bar"
-            ? "BARRA"
-            : "GENERAL";
-
-      // Encabezado compacto y optimizado para ahorro de papel
-      job.center();
-      job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
-      job.printLine(`*** ${destName} - MESA: ${tableLabel} ***`);
-      job.bold(false);
-      job.printLine(
-        `Cmd #${comanda.folioInterno || comanda.folio} | Hora: ${new Date(comanda.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      );
-      if (comanda.createdBy?.name) {
-        job.bold(true).printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`).bold(false);
-      }
-
-      const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
-      if (isDelivery) {
-        const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || "";
-        const dPhone = selectedDeliveryClient?.phone || (selectedTable as any)?.deliveryClientPhone || "";
-        const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
-        const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
-        
-        job.printLine("--------------------------------");
-        if (dClient) job.bold(true).printLine(`CTE: ${dClient.toUpperCase()}`).bold(false);
-        if (dPhone) job.printLine(`TEL: ${dPhone}`);
-        if (dAddr) {
-          let cleanAddr = dAddr;
-          let refText = "";
-          if (dAddr.includes("(Ref:")) {
-            const parts = dAddr.split("(Ref:");
-            cleanAddr = parts[0].trim();
-            refText = parts[1].replace(")", "").trim();
-          } else if (dAddr.includes("| Ref:")) {
-            const parts = dAddr.split("| Ref:");
-            cleanAddr = parts[0].trim();
-            refText = parts[1].trim();
-          }
-          job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
-          if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
-        }
-        if (dNotes) job.bold(true).printLine(`NOTAS: ${dNotes.toUpperCase()}`).bold(false);
-      }
-
-      job.printLine("--------------------------------");
-      job.left();
-
-      if (target === "kitchen") {
-        // COCINA: Group by comensal only if multiple plates exist
-        const plates = Array.from(
-          new Set(filteredItems.map((i) => i.plate || 1)),
-        ).sort((a, b) => a - b);
-
-        const hasMultiplePlates = plates.length > 1;
-
-        plates.forEach((plateNum) => {
-          if (hasMultiplePlates) {
-            job
-              .bold(true)
-              .printLine(`-- COMENSAL ${plateNum} --`)
-              .bold(false);
-          }
-
-          filteredItems
-            .filter((i) => (i.plate || 1) === plateNum)
-            .forEach((item) => {
-              job.bold(true).printLine(
-                `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
-              ).bold(false);
-
-              if (item.notes && item.notes.trim()) {
-                job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
-              }
-            });
-        });
-      } else if (target === "bar") {
-        // BARRA: Group by product (sum quantities)
-        const grouped: {
-          [key: string]: { name: string; quantity: number; notes: string[] };
-        } = {};
-
-        filteredItems.forEach((item) => {
-          const key = item.product.id + (item.notes || "");
-          if (!grouped[key]) {
-            grouped[key] = {
-              name: getFormattedProductName(item.product),
-              quantity: 0,
-              notes: [],
-            };
-          }
-          grouped[key].quantity += item.quantity;
-          if (item.notes && item.notes.trim()) {
-            grouped[key].notes.push(item.notes.trim());
-          }
-        });
-
-        Object.values(grouped).forEach((item) => {
-          job.bold(true).printLine(`${item.quantity}x ${item.name.toUpperCase()}`).bold(false);
-          const uniqueNotes = Array.from(new Set(item.notes));
-          uniqueNotes.forEach((n) => {
-            job.bold(true).printLine(`  >> NOTA: ${n.toUpperCase()}`).bold(false);
-          });
-        });
-      } else {
-        // Fallback/General
-        filteredItems.forEach((item) => {
-          job.bold(true).printLine(
-            `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
-          ).bold(false);
-
-          if (item.notes && item.notes.trim()) {
-            job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
-          }
-        });
-      }
-
-      if (comanda.generalNotes && comanda.generalNotes.trim()) {
-        job.printLine("--------------------------------");
-        job.bold(true).printLine(`OBS: ${comanda.generalNotes.toUpperCase()}`).bold(false);
-      }
-
-      // Corte limpio con feed mínimo para no desperdiciar papel
-      job.feed(1).cut();
-      await job.execute();
-      setPrintLoading(null);
-      return true;
-    } catch (e) {
-      console.error("Error printing comanda:", e);
-      setPrintLoading(null);
-      return false;
-    }
-  };
-
-  const getLastInternalFolio = (
-    tenantId: string,
-    tablesList: TableData[],
-    historyList: ClosedAccount[]
-  ): string => {
-    const cached = localStorage.getItem("cocinet_last_internal_folio_" + tenantId);
-    let lastFound: string = cached || "";
-    let highestNum = -1;
-
-    if (cached && !isNaN(Number(cached))) {
-      highestNum = Number(cached);
-    }
-
-    const allComandas: Comanda[] = [];
-
-    (tablesList || []).forEach((t: any) => {
-      const tTenant = t.tenantId || tenantId;
-      if (tTenant === tenantId && Array.isArray(t.comandas)) {
-        allComandas.push(...t.comandas);
-      }
+    const success = await executePrintComanda({
+      tableLabel,
+      comanda,
+      target,
+      selectedTenant,
+      selectedTable,
+      selectedDeliveryClient,
+      selectedDeliveryAddress,
+      deliveryNotes,
+      systemLocalWindowsAutoPrint,
     });
-
-    (historyList || []).forEach((h: any) => {
-      const hTenant = h.tenantId || tenantId;
-      if (hTenant === tenantId && Array.isArray(h.comandas)) {
-        allComandas.push(...h.comandas);
-      }
-    });
-
-    allComandas.forEach((c: any) => {
-      if (c.folioInterno) {
-        const valStr = String(c.folioInterno).trim();
-        const num = Number(valStr);
-        if (!isNaN(num) && num > highestNum) {
-          highestNum = num;
-          lastFound = valStr;
-        } else if (highestNum === -1 && !lastFound) {
-          lastFound = valStr;
-        }
-      }
-    });
-
-    return lastFound;
+    setPrintLoading(null);
+    return success;
   };
 
   const getExistingTableFolio = (table: TableData | null | undefined): string | null => {
@@ -8741,21 +8639,20 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const finalizePayment = async (isPaidNow: boolean = true) => {
-    if (isProcessingPayment) return;
+    if (isProcessingPaymentRef.current || isProcessingPayment) {
+      console.warn("⚠️ finalizePayment: Cobro ya en progreso, llamada duplicada bloqueada.");
+      return;
+    }
+    isProcessingPaymentRef.current = true;
 
     if (requiresInvoice && (!invoicePhone || invoicePhone.trim().length !== 10)) {
+      isProcessingPaymentRef.current = false;
       alert("⚠️ Error de Validación: Para solicitar factura es obligatorio ingresar el teléfono celular de 10 dígitos del cliente.");
       return;
     }
 
-    // if (paymentMethod === "card" && !paymentCardType) {
-    //   alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
-    //   const el = document.getElementById("card-type-selection-container");
-    //   if (el) el.scrollIntoView({ behavior: "smooth" });
-    //   return;
-    // }
-
     if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
+      isProcessingPaymentRef.current = false;
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
       return;
     }
@@ -8763,6 +8660,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     if (selectedTableId) {
       const freshTable = tables.find(t => t.id === selectedTableId);
       if (!freshTable || freshTable.status === "available" || !freshTable.comandas || freshTable.comandas.length === 0) {
+        isProcessingPaymentRef.current = false;
         alert("⚠️ Esta mesa ya ha sido cancelada o liberada por un administrador. No se puede cobrar.");
         const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
         setAppMode(nextMode);
@@ -8782,6 +8680,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const activeItems = allItems.filter((item) => !item.isCancelled);
       
       if (activeItems.length === 0) {
+        isProcessingPaymentRef.current = false;
         alert("⚠️ No hay productos activos para cobrar en esta mesa.");
         return;
       }
@@ -8805,6 +8704,15 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
             })),
           };
 
+          // Optimistic local state update for instant release
+          setTables((prev) =>
+            prev.map((t) =>
+              t.id === selectedTableId
+                ? { ...t, status: "available", comandas: [], folioInterno: undefined }
+                : t
+            )
+          );
+
           await checkoutTableInFirebase(selectedTableId, selectedTable, {
             tableLabel: selectedTable.label,
             subtotal,
@@ -8826,8 +8734,10 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
             `Mesa ${selectedTable.label} | Total: $${billTotal.toFixed(2)} | Pago: ${paymentMethod.toUpperCase()}. ${!navigator.onLine ? "📴 Registrado Offline (Modo Híbrido)" : "⚡ Sincronizado con Firestore"}`,
           );
 
-          // Auto-print ticket upon closing the account
-          await printTicket(tableSnapshot, "resumen", paymentMethod, paymentCardType);
+          // Auto-print ticket upon closing the account in background without holding UI
+          printTicket(tableSnapshot, "resumen", paymentMethod, paymentCardType).catch((err) => {
+            console.error("Error printing ticket in background:", err);
+          });
         }
       } catch (error: any) {
         console.error("Error during checkout:", error);
@@ -8836,8 +8746,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
           error.message || "No se pudo registrar la venta.",
         );
       } finally {
+        isProcessingPaymentRef.current = false;
         setIsProcessingPayment(false);
       }
+    } else {
+      isProcessingPaymentRef.current = false;
     }
 
     const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
@@ -8859,7 +8772,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const cancelOrder = async (reason: string, user: User) => {
-    if (isProcessingPayment) return;
+    if (isProcessingPaymentRef.current || isProcessingPayment) return;
+    isProcessingPaymentRef.current = true;
     if (selectedTable) {
       setIsProcessingPayment(true);
       try {
@@ -8904,8 +8818,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       } catch (error) {
         console.error("Error cancelling order:", error);
       } finally {
+        isProcessingPaymentRef.current = false;
         setIsProcessingPayment(false);
       }
+    } else {
+      isProcessingPaymentRef.current = false;
     }
 
     const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
@@ -9819,558 +9736,27 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       console.warn(`⚠️ [Impresión] Faltan datos fiscales del SAT para la precuenta (${missingSAT.join(", ")}), pero procediendo a imprimir.`);
     }
 
-    const activePayMethod = explicitPaymentMethod || paymentMethod || (table as any).paymentMethod || (table as any).metodoPago || "";
-    const activeCardType = explicitCardType || paymentCardType || (table as any).cardType || (table as any).tipoTarjeta || "";
-
-    const allItems = table.comandas.flatMap((c) => c.items);
-    const currentSubtotal = allItems
-      .filter((i) => !i.isCancelled)
-      .reduce((sum, item) => sum + item.quantity * item.product.price, 0);
-    
-    // Si no hay valores en los inputs globales (0), intentamos usar los de la mesa si existieran
-    const currentDiscountAmount = Math.round(
-      paymentDiscountType === "percent"
-        ? currentSubtotal * (paymentDiscountValue / 100)
-        : paymentDiscountValue
-    );
-    const currentTotal = currentSubtotal + paymentTipValue - currentDiscountAmount;
-
-    try {
-      const bName = (companyConfig.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
-      const rfcVal = (companyConfig.rfc || selectedTenant?.rfc || "").toUpperCase();
-      const regVal = (companyConfig.regimenFiscal || selectedTenant?.regimenFiscal || "").toUpperCase();
-      const lugVal = (companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion || "").toUpperCase();
-      const dirVal = (companyConfig.direccionFiscal || selectedTenant?.direccionFiscal || "").toUpperCase();
-      const telVal = companyConfig.telefono || selectedTenant?.telefono || "";
-      const emlVal = companyConfig.email || selectedTenant?.email || "";
-      const sucVal = (companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase();
-
-      // Parallel sync with Firestore Printer Queue (Centinela) for Tickets 🖨️
-      if (selectedTenant) {
-        const preFolio = "PRE-" + table.label + "-" + Date.now().toString().slice(-4);
-        const dClient = selectedDeliveryClient?.name || (table as any).deliveryClientName || null;
-        const dPhone = selectedDeliveryClient?.phone || (table as any).deliveryClientPhone || null;
-        const dAddr = selectedDeliveryAddress || (table as any).deliveryAddress || null;
-        const dNotes = deliveryNotes || (table as any).deliveryNotes || null;
-
-        addPedidoToPrinter(selectedTenant.id, {
-          folio: preFolio,
-          mesa: table.label,
-          items: allItems
-            .filter((i) => !i.isCancelled)
-            .map((i) => ({
-              nombre: getFormattedProductName(i.product),
-              cantidad: i.quantity,
-              precio: i.product.price,
-              subtotal: i.quantity * i.product.price,
-            })),
-          subtotal: currentSubtotal,
-          propina: paymentTipValue,
-          descuento: currentDiscountAmount,
-          total: currentTotal,
-          paymentMethod: activePayMethod,
-          metodoPago: activePayMethod,
-          cardType: activeCardType,
-          tipo: "cuenta",
-          area: "caja",
-          requiresInvoice: requiresInvoice,
-          invoicePhone: requiresInvoice ? invoicePhone : "",
-          timestamp: getMexicoISOString(),
-          atendidoPor: currentUser?.name || "S/M",
-          deliveryClientName: dClient,
-          deliveryClientPhone: dPhone,
-          deliveryAddress: dAddr,
-          deliveryNotes: dNotes,
-          businessName: bName,
-          rfc: rfcVal,
-          regimenFiscal: regVal,
-          lugarExpedicion: lugVal,
-          direccionFiscal: dirVal,
-          telefono: telVal,
-          email: emlVal,
-          sucursal: sucVal,
-        }).catch((err) => console.warn("Centinela Ticket Error:", err));
-
-        let deliverySubStr = "";
-        if (dClient) deliverySubStr += ` | Cliente: ${dClient}`;
-        if (dPhone) deliverySubStr += ` | Tel: ${dPhone}`;
-        if (dAddr) {
-          if (typeof dAddr === "string") {
-            deliverySubStr += ` | Dir: ${dAddr}`;
-          } else {
-            const cleanA = dAddr.street || dAddr.address || dAddr.formatted || "";
-            let refT = dAddr.notes || dAddr.reference || "";
-            if (!refT && cleanA.includes("(Ref:")) {
-              const parts = cleanA.split("(Ref:");
-              refT = parts[1].replace(")", "").trim();
-            } else if (!refT && cleanA.includes(",")) {
-              const parts = cleanA.split(",");
-              refT = parts[1].trim();
-            }
-            deliverySubStr += ` | Dir: ${cleanA}`;
-            if (refT) deliverySubStr += ` | Ref: ${refT}`;
-          }
-        }
-
-        triggerAppNotification(
-          "💰 PRECUENTA SOLICITADA",
-          `Mesa: ${table.label} | Total: $${currentTotal.toFixed(2)}${deliverySubStr} | Atendido por: ${currentUser?.name || "S/M"}`,
-          "success",
-          {
-            isCuentaNotification: true,
-            tableLabel: table.label,
-            folio: preFolio,
-            subtotal: currentSubtotal,
-            propina: paymentTipValue,
-            descuento: currentDiscountAmount,
-            total: currentTotal,
-            deliveryClientName: dClient,
-            deliveryClientPhone: dPhone,
-            deliveryAddress: dAddr,
-            deliveryNotes: dNotes,
-            items: allItems
-              .filter((i) => !i.isCancelled)
-              .map((i) => ({
-                nombre: getFormattedProductName(i.product),
-                cantidad: i.quantity,
-                precio: i.product.price,
-                subtotal: i.quantity * i.product.price,
-              })),
-            atendidoPor: Array.from(new Set(table.comandas.map(c => c.createdBy?.name).filter(Boolean))).join(", ") || currentUser?.name || "S/M",
-            pedidoData: {
-                tipo: "cuenta",
-                folio: preFolio,
-                mesa: table.label,
-                subtotal: currentSubtotal,
-                propina: paymentTipValue,
-                descuento: currentDiscountAmount,
-                total: currentTotal,
-                paymentMethod: activePayMethod,
-                metodoPago: activePayMethod,
-                cardType: activeCardType,
-                deliveryClientName: dClient,
-                deliveryClientPhone: dPhone,
-                deliveryAddress: dAddr,
-                deliveryNotes: dNotes,
-                items: allItems
-                  .filter((i) => !i.isCancelled)
-                  .map((i) => ({
-                    nombre: getFormattedProductName(i.product),
-                    cantidad: i.quantity,
-                    precio: i.product.price,
-                    subtotal: i.quantity * i.product.price,
-                  })),
-                atendidoPor: Array.from(new Set(table.comandas.map(c => c.createdBy?.name).filter(Boolean))).join(", ") || currentUser?.name || "S/M",
-                timestamp: getMexicoISOString(),
-                businessName: companyConfig.businessName,
-                rfc: companyConfig.rfc,
-                regimenFiscal: companyConfig.regimenFiscal,
-                lugarExpedicion: companyConfig.lugarExpedicion,
-                direccionFiscal: companyConfig.direccionFiscal,
-                telefono: companyConfig.telefono,
-                email: companyConfig.email,
-                sucursal: companyConfig.sucursal,
-            }
-          }
-        );
-
-        processedPrintIdsRef.current.add(preFolio);
-      }
-
-      const transport = await createTransport("cuentas", selectedTenant?.id);
-      const driver = new EscPosDriver();
-      const job = new PosPrinterJob(driver, transport as any);
-
-      job.initialize();
-      job.center();
-      job
-        .setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED)
-        .bold(true)
-        .printLine(bName)
-        .setPrintMode(job.FONT_SIZE_NORMAL)
-        .bold(false);
-      job.printLine("--------------------------------");
-      if (companyConfig.rfc)
-        job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
-      if (companyConfig.regimenFiscal)
-        job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
-      if (companyConfig.lugarExpedicion)
-        job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
-      if (companyConfig.direccionFiscal)
-        job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
-      if (companyConfig.sucursal)
-        job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
-      if (telVal)
-        job.printLine(`📞 TEL: ${formatPhone(telVal) || telVal}`);
-      if (companyConfig.email)
-        job.printLine(`✉️ ${companyConfig.email.toLowerCase()}`);
-
-      job.printLine("--------------------------------");
-      job.printLine(`MESA: ${table.label}`);
-      job.printLine(`FECHA: ${new Date().toLocaleString("es-MX")}`);
-      job.printLine("--------------------------------");
-      job.center().bold(true).printLine("📝 DETALLE DEL PEDIDO 📝").bold(false).left();
-      job.printLine("--------------------------------");
-
-      job.left();
-
-      if (view === "resumen") {
-        const summarized = allItems
-          .filter((i) => !i.isCancelled)
-          .reduce((acc: any[], item) => {
-            const existing = acc.find((i) => i.product.id === item.product.id);
-            if (existing) existing.quantity += item.quantity;
-            else acc.push({ ...item });
-            return acc;
-          }, []);
-        summarized.forEach((item) => {
-          const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-          const maxDescLen = Math.max(10, 32 - price.length - 4);
-          const rawName = getFormattedProductName(item.product).toUpperCase();
-          const cleanName = rawName.length > maxDescLen ? rawName.substring(0, maxDescLen) : rawName;
-          const line = `${item.quantity}x ${cleanName}`;
-          const padding = " ".repeat(
-            Math.max(1, 32 - line.length - price.length),
-          );
-          job.printLine(line + padding + price);
-        });
-
-        const cancelled = allItems.filter((i) => i.isCancelled);
-        if (cancelled.length > 0) {
-          job.printLine("--------------------------------");
-          job.bold(true).printLine("CANCELACIONES").bold(false);
-          const summarizedCancelled = cancelled.reduce((acc: any[], item) => {
-            const existing = acc.find(
-              (i) =>
-                i.product.id === item.product.id &&
-                i.cancellationReason === item.cancellationReason,
-            );
-            if (existing) existing.quantity += item.quantity;
-            else acc.push({ ...item });
-            return acc;
-          }, []);
-          summarizedCancelled.forEach((item) => {
-            job.printLine(
-              `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-            );
-            job.printLine(`  MOTIVO: ${item.cancellationReason}`);
-            if (item.cancelledBy)
-              job.printLine(`  POR: ${item.cancelledBy.name}`);
-          });
-        }
-      } else if (view === "comandas") {
-        table.comandas.forEach((comanda) => {
-          job.bold(true).printLine(comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`).bold(false);
-          comanda.items
-            .filter((i) => !i.isCancelled)
-            .forEach((item) => {
-              const line = `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`;
-              const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-              const padding = " ".repeat(
-                Math.max(1, 32 - line.length - price.length),
-              );
-              job.printLine(line + padding + price);
-            });
-
-          const cancelled = comanda.items.filter((i) => i.isCancelled);
-          if (cancelled.length > 0) {
-            job.printLine("  -- CANCELACIONES --");
-            cancelled.forEach((item) => {
-              job.printLine(
-                `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-              );
-              job.printLine(`    MOTIVO: ${item.cancellationReason}`);
-            });
-          }
-          job.printLine(" ");
-        });
-      } else if (view === "comensales") {
-        const comensales = Array.from(
-          new Set(allItems.map((i) => i.plate)),
-        ).sort((a, b) => a - b);
-        comensales.forEach((cNum) => {
-          job.bold(true).printLine(`COMENSAL ${cNum}`).bold(false);
-          allItems
-            .filter((i) => !i.isCancelled && i.plate === cNum)
-            .forEach((item) => {
-              const line = `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`;
-              const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-              const padding = " ".repeat(
-                Math.max(1, 32 - line.length - price.length),
-              );
-              job.printLine(line + padding + price);
-            });
-
-          const cancelled = allItems.filter(
-            (i) => i.isCancelled && i.plate === cNum,
-          );
-          if (cancelled.length > 0) {
-            job.printLine("  -- CANCELACIONES --");
-            cancelled.forEach((item) => {
-              job.printLine(
-                `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-              );
-              job.printLine(`    MOTIVO: ${item.cancellationReason}`);
-            });
-          }
-          job.printLine(" ");
-        });
-      }
-
-      const dClientEsc = selectedDeliveryClient?.name || (table as any).deliveryClientName || "";
-      const dPhoneEsc = selectedDeliveryClient?.phone || (table as any).deliveryClientPhone || "";
-      const dAddrEsc = selectedDeliveryAddress || (table as any).deliveryAddress || "";
-      const dNotesEsc = deliveryNotes || (table as any).deliveryNotes || "";
-
-      if (table.zone === "Servicio a Domicilio" || dClientEsc || dAddrEsc) {
-        job.printLine(" ");
-        job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
-        if (dClientEsc) {
-          job.printLine(`CLIENTE: ${dClientEsc.toUpperCase()}`);
-        }
-        if (dAddrEsc) {
-          let cleanAddr = "";
-          let refText = "";
-          if (typeof dAddrEsc === "string") {
-            cleanAddr = dAddrEsc;
-            if (dAddrEsc.includes("(Ref:")) {
-              const parts = dAddrEsc.split("(Ref:");
-              cleanAddr = parts[0].trim();
-              refText = parts[1].replace(")", "").trim();
-            } else if (dAddrEsc.includes("| Ref:")) {
-              const parts = dAddrEsc.split("| Ref:");
-              cleanAddr = parts[0].trim();
-              refText = parts[1].trim();
-            }
-          } else if (typeof dAddrEsc === "object" && dAddrEsc !== null) {
-            cleanAddr = (dAddrEsc as any).street || (dAddrEsc as any).address || (dAddrEsc as any).formatted || "";
-            refText = (dAddrEsc as any).notes || (dAddrEsc as any).reference || "";
-          }
-
-          if (cleanAddr) job.printLine(`DIR: ${String(cleanAddr).toUpperCase()}`);
-          if (refText) job.printLine(`REF: ${String(refText).toUpperCase()}`);
-        }
-        if (dNotesEsc) {
-          job.printLine(`NOTAS: ${String(dNotesEsc).toUpperCase()}`);
-        }
-        job.printLine("--------------------------------");
-      }
-
-      job.right();
-      job.printLine(`SUBTOTAL: $${currentSubtotal.toFixed(2)}`);
-      if (paymentTipValue > 0)
-        job.printLine(`PROPINA: $${paymentTipValue.toFixed(2)}`);
-      if (currentDiscountAmount > 0)
-        job.printLine(`DESCUENTO: -$${currentDiscountAmount.toFixed(2)}`);
-      job
-        .bold(true)
-        .printLine(`TOTAL: $${currentTotal.toFixed(2)}`)
-        .bold(false);
-      
-      job.printLine(" ");
-      job.center().printLine(`(${numeroALetras(currentTotal)})`).left();
-
-      if (explicitPaymentMethod || (table as any).isPaid) {
-        const payMethodToUse = explicitPaymentMethod || (table as any).paymentMethod || activePayMethod;
-        if (payMethodToUse) {
-          let pLabel = String(payMethodToUse).toUpperCase();
-          if (["CASH", "EFECTIVO"].includes(pLabel)) pLabel = "EFECTIVO";
-          else if (["CARD", "TARJETA"].includes(pLabel)) pLabel = activeCardType === "credito" ? "TARJETA CRÉDITO" : activeCardType === "debito" ? "TARJETA DÉBITO" : "TARJETA";
-          else if (["TRANSFER", "TRANSFERENCIA", "SPEI"].includes(pLabel)) pLabel = "TRANSFERENCIA";
-          
-          job.printLine(`PAGADO: $${currentTotal.toFixed(2)}`);
-          job.printLine(`PAGO CON: ${pLabel}`);
-        }
-      }
-
-      if (requiresInvoice) {
-        job.printLine("--------------------------------");
-        job.left();
-        job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
-      }
-
-      job.center();
-      job.feed(1).printLine((companyConfig?.footerMessage || "¡Gracias por su visita!").toUpperCase());
-      job.feed(3).cut();
-
-      job.execute();
-    } catch (e) {
-      console.error("Error printing ticket with native bluetooth, fallback to iframe print:", e);
-      
-      const allItems = table.comandas.flatMap((c) => c.items);
-      const subTotalItems = allItems
-        .filter((i) => !i.isCancelled)
-        .reduce((sum, item) => sum + item.quantity * item.product.price, 0);
-      const discountAmount = Math.round(
-        paymentDiscountType === "percent"
-          ? subTotalItems * (paymentDiscountValue / 100)
-          : paymentDiscountValue
-      );
-      const total = subTotalItems + paymentTipValue - discountAmount;
-
-      let itemsHtml = "";
-      if (view === "resumen") {
-        const summarized = allItems
-          .filter((i) => !i.isCancelled)
-          .reduce((acc: any[], item) => {
-            const existing = acc.find((i) => i.product.id === item.product.id);
-            if (existing) existing.quantity += item.quantity;
-            else acc.push({ ...item });
-            return acc;
-          }, []);
-        summarized.forEach((item) => {
-          itemsHtml += `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-              <span>${item.quantity}x ${item.product.name.toUpperCase()}</span>
-              <span>$${(item.quantity * item.product.price).toFixed(2)}</span>
-            </div>
-          `;
-        });
-      } else if (view === "comandas") {
-        table.comandas.forEach((comanda) => {
-          itemsHtml += `<div style="font-weight: bold; margin-top: 8px;">${comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`}</div>`;
-          comanda.items
-            .filter((i) => !i.isCancelled)
-            .forEach((item) => {
-              itemsHtml += `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; padding-left: 10px;">
-                  <span>${item.quantity}x ${item.product.name.toUpperCase()}</span>
-                  <span>$${(item.quantity * item.product.price).toFixed(2)}</span>
-                </div>
-              `;
-            });
-        });
-      } else if (view === "comensales") {
-        const comensales = Array.from(
-          new Set(allItems.map((i) => i.plate)),
-        ).sort((a, b) => a - b);
-        comensales.forEach((cNum) => {
-          itemsHtml += `<div style="font-weight: bold; margin-top: 8px;">COMENSAL ${cNum}</div>`;
-          allItems
-            .filter((i) => !i.isCancelled && i.plate === cNum)
-            .forEach((item) => {
-              itemsHtml += `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; padding-left: 10px;">
-                  <span>${item.quantity}x ${item.product.name.toUpperCase()}</span>
-                  <span>$${(item.quantity * item.product.price).toFixed(2)}</span>
-                </div>
-              `;
-            });
-        });
-      }
-
-      const receiptTemplate = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            @media print {
-              body { margin: 0; padding: 0; background: #fff; }
-              @page { margin: 0; }
-            }
-            body {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 13px;
-              color: #000;
-              width: 300px;
-              margin: 0 auto;
-              padding: 15px;
-              background: #fff;
-              box-sizing: border-box;
-            }
-            .center { text-align: center; }
-            .right { text-align: right; }
-            .divider { border-top: 1px dashed #000; margin: 10px 0; }
-            .total-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-          </style>
-        </head>
-        <body onload="window.print()">
-          <div class="center">
-            <div style="display: flex; justify-content: center; margin-bottom: 10px;">
-              <img src="${companyConfig.logoUrl || '/logoroy.png'}" style="max-height: 50px; max-width: 140px; object-fit: contain;" onError="this.style.display='none'" />
-            </div>
-            <h2 style="margin: 0 0 5px 0;">${(companyConfig.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase()}</h2>
-            <div class="divider"></div>
-            ${(companyConfig.rfc || selectedTenant?.rfc) ? `<div style="font-size: 11px;">RFC: ${(companyConfig.rfc || selectedTenant?.rfc || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.regimenFiscal || selectedTenant?.regimenFiscal) ? `<div style="font-size: 11px;">RÉGIMEN FISCAL: ${(companyConfig.regimenFiscal || selectedTenant?.regimenFiscal || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion) ? `<div style="font-size: 11px;">LUGAR EXPEDICIÓN: ${(companyConfig.lugarExpedicion || selectedTenant?.lugarExpedicion || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.direccionFiscal || selectedTenant?.direccionFiscal) ? `<div style="font-size: 11px;">DIR: ${(companyConfig.direccionFiscal || selectedTenant?.direccionFiscal || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.sucursal || selectedTenant?.sucursalDefault) ? `<div style="font-size: 11px;">SUC: ${(companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase()}</div>` : ''}
-            ${(companyConfig.telefono || selectedTenant?.telefono) ? `<div style="font-size: 11px;">📞 TEL: ${formatPhone(companyConfig.telefono || selectedTenant?.telefono) || companyConfig.telefono || selectedTenant?.telefono}</div>` : ''}
-            ${(companyConfig.email || selectedTenant?.email) ? `<div style="font-size: 11px;">✉️ ${(companyConfig.email || selectedTenant?.email || "").toLowerCase()}</div>` : ''}
-            <div class="divider"></div>
-            <div>Mesa: ${table.label}</div>
-            <div>Fecha: ${new Date().toLocaleString("es-MX")}</div>
-            <div class="divider"></div>
-            <div style="font-weight: bold; text-align: center; font-size: 12px; margin: 4px 0;">📝 DETALLE DEL PEDIDO 📝</div>
-            <div class="divider"></div>
-          </div>
-          <div>
-            ${itemsHtml}
-          </div>
-          <div class="divider"></div>
-          ${
-            table.zone === "Servicio a Domicilio" || (table as any).deliveryClientName || selectedDeliveryClient?.name || selectedDeliveryAddress ? `
-              <div style="font-size: 11px; margin-top: 5px; margin-bottom: 5px; padding: 6px; border: 1px dashed #000; border-radius: 4px;">
-                <div style="font-weight: bold; text-align: center; margin-bottom: 4px;">-- DATOS DE ENVÍO --</div>
-                ${selectedDeliveryClient?.name || (table as any).deliveryClientName ? `<div><strong>CLIENTE:</strong> ${(selectedDeliveryClient?.name || (table as any).deliveryClientName).toUpperCase()}</div>` : ""}
-                ${selectedDeliveryClient?.phone || (table as any).deliveryClientPhone ? `<div><strong>TEL:</strong> ${selectedDeliveryClient?.phone || (table as any).deliveryClientPhone}</div>` : ""}
-                ${selectedDeliveryAddress || (table as any).deliveryAddress ? (() => {
-                  const dAddr = selectedDeliveryAddress || (table as any).deliveryAddress;
-                  let cleanAddr = dAddr;
-                  let refText = "";
-                  if (dAddr.includes("(Ref:")) {
-                    const parts = dAddr.split("(Ref:");
-                    cleanAddr = parts[0].trim();
-                    refText = parts[1].replace(")", "").trim();
-                  } else if (dAddr.includes("| Ref:")) {
-                    const parts = dAddr.split("| Ref:");
-                    cleanAddr = parts[0].trim();
-                    refText = parts[1].trim();
-                  }
-                  return `<div><strong>DIR:</strong> ${cleanAddr.toUpperCase()}</div>` +
-                    (refText ? `<div><strong>REF:</strong> ${refText.toUpperCase()}</div>` : "");
-                })() : ""}
-                ${deliveryNotes || (table as any).deliveryNotes ? `<div><strong>NOTAS:</strong> ${(deliveryNotes || (table as any).deliveryNotes).toUpperCase()}</div>` : ""}
-              </div>
-              <div class="divider"></div>
-            ` : ""
-          }
-          <div class="right">
-            <div class="total-row"><strong>SUBTOTAL:</strong><span>$${subTotalItems.toFixed(2)}</span></div>
-            ${discountAmount > 0 ? `<div class="total-row"><strong>DESCUENTO:</strong><span>-$${discountAmount.toFixed(2)}</span></div>` : ''}
-            <div class="total-row" style="font-size: 15px; font-weight: bold;"><strong>TOTAL A PAGAR:</strong><span>$${total.toFixed(2)}</span></div>
-            ${paymentTipValue > 0 ? `<div class="total-row" style="margin-top: 4px; border-top: 1px dotted #888; padding-top: 4px; font-size: 11px;"><strong>(+) PROPINA MESEROS (VOLUNTARIA):</strong><span>$${paymentTipValue.toFixed(2)}</span></div>` : ''}
-          </div>
-          <div class="divider"></div>
-          <div class="center" style="font-size: 11px; margin-top: 15px;">
-            ${companyConfig.footerMessage.toUpperCase()}<br/>
-            ¡GRACIAS POR SU PREFERENCIA! ⚡🍕
-          </div>
-        </body>
-        </html>
-      `;
-
-      let iframe = document.getElementById("print-iframe") as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.id = "print-iframe";
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "0";
-        document.body.appendChild(iframe);
-      }
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(receiptTemplate);
-        doc.close();
-      }
-    }
+    await executePrintTicket({
+      table,
+      view,
+      explicitPaymentMethod,
+      explicitCardType,
+      selectedTenant,
+      companyConfig,
+      currentUser,
+      selectedDeliveryClient,
+      selectedDeliveryAddress,
+      deliveryNotes,
+      paymentMethod,
+      paymentCardType,
+      paymentDiscountType,
+      paymentDiscountValue,
+      paymentTipValue,
+      requiresInvoice,
+      invoicePhone,
+      triggerAppNotification,
+      processedPrintIdsRef,
+    });
   };
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -11342,11 +10728,11 @@ Instrucciones:
       setGeneralNotes={setGeneralNotes}
       setReviewComensal={setReviewComensal}
       setSelectedTableGestion={setSelectedTableGestion}
-          generateOrder={generateOrder}
-          getComensalColor={getComensalColor}
-      
+      generateOrder={generateOrder}
+      getComensalColor={getComensalColor}
+      triggerAppNotification={triggerAppNotification}
     />
-  );;
+  );
 
   const renderTableDetails = () => (
     <TableDetailsView
@@ -11406,6 +10792,7 @@ Instrucciones:
       selectedTenant={selectedTenant}
       cancellationReason={cancellationReason}
       checkoutFallbackItems={checkoutFallbackItems}
+      checkoutReturnMode={checkoutReturnMode}
       currentUser={currentUser}
       invoicePhone={invoicePhone}
       isProcessingPayment={isProcessingPayment}
@@ -11569,80 +10956,21 @@ Instrucciones:
 
   const handleImportTenantMenu = async () => {
     if (importInProgressRef.current) return;
-    if (!importSelectedTenantId) {
-      triggerAppNotification("Error ⚠️", "Por favor selecciona una sucursal origen.", "warning");
-      return;
-    }
-
-    const sourceTenant = COMPANY_CATALOG.find((c) => c.id === importSelectedTenantId);
-    const sourceTenantName = sourceTenant ? sourceTenant.name : importSelectedTenantId;
-
     importInProgressRef.current = true;
     setIsImportingTenantMenu(true);
     try {
-      // 1. Delete destination products (and automatically back up under menu_backups collection!)
-      const destBranchName = selectedTenant?.name || selectedTenant?.sucursalDefault || "Sucursal";
-      await softDeleteAllProductsFromFirebase(selectedTenant.id, destBranchName, products);
-
-      // 2. Fetch all products to get source products
-      const allProducts = await getAllProductsFromFirebase();
-      const sourceProductsRaw = allProducts.filter((p: any) => p.tenantId === importSelectedTenantId);
-
-      if (sourceProductsRaw.length === 0) {
-        triggerAppNotification("Advertencia ⚠️", "La sucursal origen seleccionada no contiene productos para importar.", "warning");
-        setIsImportingTenantMenu(false);
+      const ok = await executeImportTenantMenu({
+        importSelectedTenantId,
+        selectedTenant,
+        companyCatalog: COMPANY_CATALOG,
+        currentProducts: products,
+        triggerAppNotification,
+      });
+      if (ok) {
+        setImportSelectedTenantId("");
+        setManageMenuTab(null);
         setImportConfirmStep(0);
-        return;
       }
-
-      // De-duplicate source products by name and category to clean up any existing database duplicates
-      const seenKeys = new Set<string>();
-      const sourceProducts: any[] = [];
-      sourceProductsRaw.forEach((p: any) => {
-        if (!p.name) return;
-        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          sourceProducts.push(p);
-        }
-      });
-
-      // 3. Map to destination payload
-      const productsToInsert = sourceProducts.map((p: any) => {
-        const { id, uid, tenantId, sucursal, ...rest } = p;
-        const newRawId = `prod_${selectedTenant.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        return {
-          ...rest,
-          id: newRawId,
-          uid: newRawId,
-          tenantId: selectedTenant.id,
-          isDeleted: false,
-          sucursal: selectedTenant.name || selectedTenant.sucursalDefault || "Sucursal"
-        };
-      });
-
-      // 4. Save to Firebase
-      await bulkAddProductsToFirebase(productsToInsert);
-
-      // 5. Reset selection states and UI
-      setImportSelectedTenantId("");
-      setManageMenuTab(null);
-      setImportConfirmStep(0);
-
-      // Compute exact quantities per category
-      const foodCount = productsToInsert.filter((p: any) => p.category === "food").length;
-      const drinksCount = productsToInsert.filter((p: any) => p.category === "drinks").length;
-      const dessertsCount = productsToInsert.filter((p: any) => p.category === "desserts").length;
-
-      triggerAppNotification(
-        "¡Éxito! 📥",
-        `Se han importado exitosamente ${productsToInsert.length} productos desde "${sourceTenantName}" a la sucursal actual:
-        🍔 ${foodCount} alimentos, 🥤 ${drinksCount} bebidas, 🍰 ${dessertsCount} postres.`,
-        "success"
-      );
-    } catch (error: any) {
-      console.error("Error al importar menú de otra sucursal:", error);
-      triggerAppNotification("Error ❌", error.message || "Ocurrió un error inesperado durante la importación.", "warning");
     } finally {
       setIsImportingTenantMenu(false);
       importInProgressRef.current = false;
@@ -11651,71 +10979,19 @@ Instrucciones:
 
   const handleReplicateMenuToTenants = async (targetTenantIds: string[]) => {
     if (importInProgressRef.current) return;
-    if (!selectedTenant) return;
-    if (!targetTenantIds || targetTenantIds.length === 0) {
-      triggerAppNotification("Error ⚠️", "Selecciona al menos una sucursal destino.", "warning");
-      return;
-    }
-
-    const activeProducts = products.filter((p: any) => !p.isDeleted);
-    if (activeProducts.length === 0) {
-      triggerAppNotification("Advertencia ⚠️", "La sucursal actual no contiene productos activos para replicar.", "warning");
-      return;
-    }
-
     importInProgressRef.current = true;
     setIsImportingTenantMenu(true);
     try {
-      // De-duplicate active products
-      const seenKeys = new Set<string>();
-      const cleanProducts: any[] = [];
-      activeProducts.forEach((p: any) => {
-        if (!p.name) return;
-        const key = `${p.name.trim().toLowerCase()}_${p.category || ""}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          cleanProducts.push(p);
-        }
+      const ok = await executeReplicateMenuToTenants({
+        targetTenantIds,
+        selectedTenant,
+        companyCatalog: COMPANY_CATALOG,
+        currentProducts: products,
+        triggerAppNotification,
       });
-
-      const replicatedNames: string[] = [];
-
-      for (const destId of targetTenantIds) {
-        const destTenant = COMPANY_CATALOG.find(c => c.id === destId);
-        const destName = destTenant ? destTenant.name : destId;
-        replicatedNames.push(destName);
-
-        // 1. Soft delete destination products (with backup)
-        await softDeleteAllProductsFromFirebase(destId, destName, []);
-
-        // 2. Prepare payload
-        const productsToInsert = cleanProducts.map((p: any) => {
-          const { id, uid, tenantId, sucursal, ...rest } = p;
-          const newRawId = `prod_${destId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-          return {
-            ...rest,
-            id: newRawId,
-            uid: newRawId,
-            tenantId: destId,
-            isDeleted: false,
-            sucursal: destName
-          };
-        });
-
-        // 3. Save to Firebase
-        await bulkAddProductsToFirebase(productsToInsert, false, destId);
+      if (ok) {
+        setManageMenuTab(null);
       }
-
-      setManageMenuTab(null);
-
-      triggerAppNotification(
-        "¡Replicación Exitosa! 📡",
-        `Se han replicado exitosamente ${cleanProducts.length} productos a ${replicatedNames.length} sucursal(es): ${replicatedNames.join(", ")}.`,
-        "success"
-      );
-    } catch (error: any) {
-      console.error("Error al replicar menú a sucursales:", error);
-      triggerAppNotification("Error ❌", error.message || "Ocurrió un error al replicar el menú.", "warning");
     } finally {
       setIsImportingTenantMenu(false);
       importInProgressRef.current = false;
@@ -13061,6 +12337,7 @@ Instrucciones:
       isSystemsMode={isSystemsMode}
       paymentMethod={paymentMethod}
       purchases={purchases}
+      products={products}
       renderMaterialHeader={renderMaterialHeader}
       selectedPendingOwner={selectedPendingOwner}
       selectedTenant={selectedTenant}
@@ -13086,6 +12363,7 @@ Instrucciones:
       setIsOwnerUnlocked={setIsOwnerUnlocked}
       setOwnerPasswordInput={setOwnerPasswordInput}
       setSelectedTableGestion={setSelectedTableGestion}
+      setSelectedTableId={setSelectedTableId}
       setShowCashMovementModal={setShowCashMovementModal}
       setShowCloseTurnConfirm={setShowCloseTurnConfirm}
       setShowDailyReportModal={setShowDailyReportModal}

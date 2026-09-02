@@ -1159,10 +1159,19 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             pass
 
 def print_data(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
-    """Bypass unificado para imprimir en RAW o renderizar vectorialmente en GDI."""
-    if PRINT_MODE.lower() == "gdi":
+    """
+    Arquitectura Híbrida Inteligente:
+      - 'cocina' / 'barra' / 'comanda' -> ESC/POS RAW Nativo (Instantáneo, <30ms, máxima estabilidad en horas pico)
+      - 'cuentas' / 'caja' / 'recibo'  -> GDI Vectorial (Tipografía estilizada, logotipo, desglose formal y emojis)
+    """
+    is_comanda = any(k in str(ticket_type).lower() for k in ["cocina", "barra", "comanda"])
+    
+    if is_comanda:
+        notify_step("2_PROCESS_EXEC", f"⚡ Imprimiendo comanda en modo ESC/POS RAW nativo ultrarrápido para [{printer_name}] ({ticket_type})", status="INFO")
+        send_raw_to_printer(printer_name, data_bytes)
+    elif PRINT_MODE.lower() == "gdi":
         try:
-            notify_step("2_PROCESS_EXEC", f"Renderizando en modo GDI ({ticket_type}) para [{printer_name}]", status="INFO")
+            notify_step("2_PROCESS_EXEC", f"🎨 Renderizando ticket de cobro/cuenta en modo GDI para [{printer_name}] ({ticket_type})", status="INFO")
             send_gdi_to_printer(printer_name, data_bytes, ticket_type)
         except Exception as e:
             notify_step("PRINT_FALLBACK", f"Fallo en GDI: {e}. Reintentando con bypass RAW...", status="WARNING")

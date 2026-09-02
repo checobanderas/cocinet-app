@@ -130,13 +130,18 @@ export async function isSentinelOnline(): Promise<boolean> {
  * Retorna las impresoras disponibles en el sentinel de Windows.
  * Retorna [] si el sentinel no está activo.
  */
-export async function getWindowsPrinters(): Promise<string[]> {
+export async function getWindowsPrinters(customPort?: string, tenantId?: string): Promise<string[]> {
+  const port = customPort || getTenantPrinterPort(tenantId) || "3010";
   try {
-    const res = await fetch(`${getSentinelUrl()}/printers`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`http://localhost:${port}/printers`, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return [];
     const data = await res.json();
     return data.printers ?? [];
-  } catch {
+  } catch (e) {
+    console.warn(`[getWindowsPrinters] No se pudo obtener lista de impresoras de http://localhost:${port}/printers:`, e);
     return [];
   }
 }
@@ -146,7 +151,7 @@ export async function getWindowsPrinters(): Promise<string[]> {
 // ─── Factory de transporte ────────────────────────────────────────────────────
 
 export type PrinterArea = "cuentas" | "cocina" | "barra" | string;
-export type PrinterMode = "windows" | "bluetooth" | "rawbt" | "disabled";
+export type PrinterMode = "windows" | "bluetooth" | "disabled";
 
 export interface AreaPrinterSetting {
   id: string;
@@ -164,7 +169,7 @@ export function getDefaultTenantPrinterSettings(): TenantPrinterSettings {
   return {
     cuentas: { id: "cuentas", name: "Cuentas (Tickets / Recibos)", emoji: "💵", mode: "windows", printerName: "cuentas", windowsPort: "3010" },
     cocina: { id: "cocina", name: "Cocina (Comandas)", emoji: "🍳", mode: "windows", printerName: "cocina", windowsPort: "3010" },
-    barra: { id: "barra", name: "Barra (Bebidas)", emoji: "🍹", mode: "bluetooth", printerName: "barra", windowsPort: "3010" },
+    barra: { id: "barra", name: "Barra (Bebidas)", emoji: "🍹", mode: "windows", printerName: "barra", windowsPort: "3010" },
   };
 }
 
@@ -244,7 +249,6 @@ export function saveTenantPrinterSettingsToLocal(tenantId: string, settings: Ten
  * Crea el transporte correcto según la configuración del tenant y del área:
  *   - Windows (Puerto configurado por área) → WindowsSpoolerTransport
  *   - Bluetooth Nativo (GATT / Web Bluetooth) → WebBluetoothTransport
- *   - App RawBT (Android Intent)            → RawBtTransport
  *   - Deshabilitado                         → ConsoleMockTransport
  *
  * @param area      Área de la impresora: "cuentas" | "cocina" | "barra"
@@ -256,11 +260,7 @@ export async function createTransport(
 ): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
   const tId = tenantId || getActiveTenantId();
   const settings = getTenantPrinterSettings(tId);
-  const areaConfig = settings[area] || { mode: isWindows() ? "windows" : "rawbt", printerName: area, windowsPort: "3010" };
-
-  if (isWindows()) {
-    return new WindowsSpoolerTransport(area, "3010", areaConfig.printerName || area, tId);
-  }
+  const areaConfig = settings[area] || { mode: "windows", printerName: area, windowsPort: "3010" };
 
   if (areaConfig.mode === "disabled") {
     return new ConsoleMockTransport(area);
@@ -270,15 +270,15 @@ export async function createTransport(
     return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
   }
 
-  if (areaConfig.mode === "rawbt") {
-    return new RawBtTransport(areaConfig.printerName || area, true);
+  if (areaConfig.mode === "bluetooth") {
+    return new WebBluetoothTransport(areaConfig.printerName || area);
   }
 
   if (WebBluetoothTransport.isConnected(area)) {
     return new WebBluetoothTransport(area);
   }
 
-  return new RawBtTransport(areaConfig.printerName || area);
+  return new WindowsSpoolerTransport(area, "3010", areaConfig.printerName || area, tId);
 }
 
 // ─── Transports ───────────────────────────────────────────────────────────────

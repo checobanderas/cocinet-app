@@ -955,21 +955,30 @@ export async function transferEntireTableInFirebase(
   await runWrite(batch.commit());
 }
 
+const activeCheckoutTables = new Set<string>();
+
 export async function checkoutTableInFirebase(
   tableId: string,
   tableInfo: any,
   checkoutData: any,
 ) {
-  // Safety check: prevent checkout if no comandas and not a cancellation
-  if (checkoutData.status !== "cancelled" && (!tableInfo.comandas || tableInfo.comandas.length === 0)) {
-    console.warn("Prevented $0.00 checkout on empty table:", tableId);
-    return; // Silently ignore or could throw error
+  if (activeCheckoutTables.has(tableId)) {
+    console.warn(`[checkoutTableInFirebase] Bloqueado cobro concurrente duplicado para mesa ${tableId}`);
+    return;
   }
+  activeCheckoutTables.add(tableId);
 
-  const historyRef = doc(collection(db, "history"));
-  const closedId = historyRef.id;
-  const currentTenant = tableInfo.tenantId || getCurrentTenantId();
-  const now = getMexicoISOString();
+  try {
+    // Safety check: prevent checkout if no comandas and not a cancellation
+    if (checkoutData.status !== "cancelled" && (!tableInfo.comandas || tableInfo.comandas.length === 0)) {
+      console.warn("Prevented $0.00 checkout on empty table:", tableId);
+      return; // Silently ignore or could throw error
+    }
+
+    const historyRef = doc(collection(db, "history"));
+    const closedId = historyRef.id;
+    const currentTenant = tableInfo.tenantId || getCurrentTenantId();
+    const now = getMexicoISOString();
 
   const closedAccount = injectTenant(
     cleanUndefined({
@@ -1069,6 +1078,11 @@ export async function checkoutTableInFirebase(
   }
 
   await runWrite(batch.commit());
+  } finally {
+    setTimeout(() => {
+      activeCheckoutTables.delete(tableId);
+    }, 2500);
+  }
 }
 
 export async function releaseTableInFirebase(tableId: string) {
@@ -1987,6 +2001,39 @@ export async function addTenantToFirebase(tenantData: any) {
 export async function deleteTenantFromFirebase(id: string) {
   const ref = doc(db, "tenants", id);
   await runWrite(deleteDoc(ref));
+}
+
+export function subscribeToMasterConfig(callback: (data: { pin?: string }) => void) {
+  const docRef = doc(db, "principal", "config");
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.data() as any);
+      } else {
+        // Initialize default if not exists
+        setDoc(docRef, { pin: "2052", updatedAt: getMexicoISOString() }, { merge: true }).catch(console.error);
+        callback({ pin: "2052" });
+      }
+    },
+    (error) => {
+      console.warn("Error subscribing to principal/config:", error);
+    }
+  );
+}
+
+export async function saveMasterPinToFirestore(newPin: string) {
+  const docRef = doc(db, "principal", "config");
+  await runWrite(
+    setDoc(
+      docRef,
+      {
+        pin: newPin,
+        updatedAt: getMexicoISOString(),
+      },
+      { merge: true }
+    )
+  );
 }
 
 export async function getCompanyConfig(

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonCard, IonContent, IonHeader, IonIcon, IonLabel, IonPage, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
 import { addOutline, checkmarkCircleOutline, printOutline, receiptOutline, restaurantOutline, swapHorizontalOutline, trashOutline, beerOutline } from 'ionicons/icons';
+import { formatTableName } from '../../utils/formatters';
 
 interface TableDetailsViewProps {
   appMode: any;
@@ -98,12 +99,44 @@ export const TableDetailsView: React.FC<TableDetailsViewProps> = ({
   triggerAppNotification,
   cancelEntireComanda, getComandaDestinations, getComensalColor, printComanda, printTicket
 }) => {
-const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
+const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) || [];
     const tableTotal =
       allItems
         .filter((item) => !item.isCancelled)
         .reduce((sum, item) => sum + item.quantity * item.product.price, 0) ||
       0;
+
+    const handleGoToCheckout = () => {
+      if (currentUser?.role === "mesero") return;
+      if ((selectedTable?.comandas?.length || 0) === 0 && tableTotal <= 0) return;
+      const existingItems =
+        (selectedTable?.comandas || []).flatMap((c: any) => c?.items || []).filter((i: any) => !i?.isSeparator) || [];
+      setCheckoutFallbackItems(existingItems);
+      setShowTipInput(false);
+      setShowDiscountInput(false);
+      setShowPaymentOptions(false);
+      setPaymentTipValue(0);
+      setPaymentDiscountValue(0);
+      setPaymentAmountReceived("");
+      setPaymentMethod("cash");
+      setRequiresInvoice(false);
+      setCheckoutReturnMode(appMode);
+      setAppMode("checkout");
+    };
+
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.repeat) return;
+        if (e.key === "F5" || e.code === "F5") {
+          e.preventDefault();
+          e.stopPropagation();
+          handleGoToCheckout();
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [selectedTable, currentUser, appMode, tableTotal]);
 
     // Grouping for "Resumen" (Summarized)
     const summarizedItems = allItems
@@ -237,21 +270,83 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                 >
                   <div
                     style={{
-                      padding: "20px",
+                      padding: "14px 20px",
                       background: "#1e293b",
                       color: "white",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
                     }}
                   >
                     <h2
                       style={{
                         margin: "0",
-                        fontSize: "1.2rem",
+                        fontSize: "1.15rem",
                         fontWeight: "800",
                         letterSpacing: "1px",
                       }}
                     >
                       RESUMEN DE CONSUMO
                     </h2>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveCategory("food");
+                          setActiveSubcategory("");
+                          setAppMode("menu");
+                        }}
+                        style={{
+                          background: "#2563eb",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "12px",
+                          padding: "8px 14px",
+                          fontSize: "0.82rem",
+                          fontWeight: "800",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 2px 8px rgba(37, 99, 235, 0.4)",
+                          transition: "all 0.2s ease",
+                        }}
+                        className="hover:bg-blue-500 active:scale-95 cursor-pointer"
+                      >
+                        <IonIcon icon={addOutline} style={{ fontSize: "1.1rem" }} />
+                        <span>+ AGREGAR PROD.</span>
+                      </button>
+
+                      {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleGoToCheckout}
+                          style={{
+                            background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "12px",
+                            padding: "8px 16px",
+                            fontSize: "0.85rem",
+                            fontWeight: "900",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+                            transition: "all 0.2s ease",
+                            letterSpacing: "0.5px",
+                          }}
+                          className="hover:brightness-110 active:scale-95 cursor-pointer"
+                          title="Cobrar cuenta (Presiona F5)"
+                        >
+                          <IonIcon icon={checkmarkCircleOutline} style={{ fontSize: "1.2rem" }} />
+                          <span>COBRAR CUENTA (F5) 💳</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div style={{ background: "white" }}>
                     {summarizedItems.map((item, idx) =>
@@ -324,7 +419,7 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
 
             {precuentaTab === "comandas" && (
               <div style={{ animation: "fadeIn 0.3s ease-out", marginLeft: "-16px", marginRight: "-16px", marginTop: "-16px" }}>
-                {selectedTable?.comandas.map((comanda) => (
+                {(selectedTable?.comandas || []).map((comanda) => (
                   <IonCard
                     key={comanda.folio}
                     style={{
@@ -641,18 +736,23 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                   background:
                     "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
                   borderRadius: "24px",
-                  padding: "25px",
+                  padding: "18px 24px",
                   color: "white",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   boxShadow: "0 15px 30px -10px rgba(0,0,0,0.3)",
+                  flexWrap: "wrap",
+                  gap: "14px",
+                  border: tableTotal > 0 ? "2px solid rgba(16, 185, 129, 0.45)" : "1px solid rgba(255,255,255,0.1)",
+                  transition: "all 0.2s ease-in-out",
                 }}
+                className="select-none"
               >
                 <div>
                   <IonText
                     style={{
-                      fontSize: "0.9rem",
+                      fontSize: "0.85rem",
                       opacity: 0.7,
                       textTransform: "uppercase",
                       letterSpacing: "2px",
@@ -665,55 +765,32 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                     style={{
                       fontSize: "2.5rem",
                       fontWeight: "900",
-                      marginTop: "5px",
+                      marginTop: "2px",
+                      color: "#ffffff"
                     }}
                   >
                     ${tableTotal.toFixed(2)}
                   </div>
                 </div>
-                <IonIcon
-                  icon={receiptOutline}
-                  style={{ fontSize: "3.5rem", opacity: 0.2 }}
-                />
-              </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}
-              >
                 {tableTotal > 0 && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "12px",
-                    }}
-                  >
-                    <IonButton
-                      expand="block"
-                      color="primary"
-                      fill="outline"
-                      disabled={isPrintingPrecuenta}
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    {/* Botón Imprimir Precuenta */}
+                    <div
                       onClick={async (e) => {
-                        e.preventDefault();
                         e.stopPropagation();
-                        if (isPrintingPrecuenta) return;
+                        if (tableTotal <= 0 || isPrintingPrecuenta) return;
                         setIsPrintingPrecuenta(true);
 
                         try {
                           setPrecuentaModalType(precuentaTab);
-                          
-                          // 🖨️ Mandar a imprimir precuenta inmediatamente según la pestaña seleccionada
                           if (selectedTable) {
                             await printTicket(selectedTable, precuentaTab);
                           }
 
                           triggerAppNotification(
-                            "🖨️ Ticket Enviado",
-                            `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para Mesa ${selectedTable?.label || ""}... ⚡🍽️`,
+                            "🖨️ Precuenta Enviada",
+                            `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para ${formatTableName(selectedTable?.zone || "", selectedTable?.label || "")}... ⚡🍽️`,
                             "success"
                           );
                         } catch (err: any) {
@@ -723,42 +800,79 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                         }
                       }}
                       style={{
-                        height: "65px",
-                        "--border-radius": "20px",
-                        fontWeight: "800",
-                        fontSize: "1rem",
+                        background: "rgba(16, 185, 129, 0.18)",
+                        border: "1.5px solid rgba(16, 185, 129, 0.6)",
+                        borderRadius: "20px",
+                        padding: "10px 18px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        boxShadow: "0 6px 18px rgba(0,0,0,0.3)",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
                       }}
+                      className="hover:bg-emerald-500/30 hover:border-emerald-400 hover:scale-105 active:scale-95"
                     >
-                      <IonIcon icon={printOutline} slot="start" />
-                      {isPrintingPrecuenta
-                        ? "Imprimiendo..."
-                        : precuentaTab === "resumen"
-                          ? "Precuenta"
-                          : precuentaTab === "comandas"
-                            ? "Comandas"
-                            : "Comensales"}
-                    </IonButton>
+                      <span style={{ fontSize: "2.2rem", lineHeight: 1 }}>
+                        🖨️
+                      </span>
+                      <div style={{ textAlign: "left" }}>
+                        <div style={{ fontWeight: "900", fontSize: "0.95rem", color: "#34d399", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          {isPrintingPrecuenta
+                            ? "Imprimiendo..."
+                            : "Imprimir Precuenta"}
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "#cbd5e1", fontWeight: "700" }}>
+                          Toca aquí para imprimir ⚡
+                        </div>
+                      </div>
+                    </div>
 
-                    <IonButton
-                      expand="block"
-                      color="primary"
-                      onClick={() => {
-                        setActiveCategory("food");
-                        setActiveSubcategory("");
-                        setAppMode("menu");
-                      }}
-                      style={{
-                        height: "65px",
-                        "--border-radius": "20px",
-                        fontWeight: "800",
-                        fontSize: "1rem",
-                      }}
-                    >
-                      <IonIcon icon={addOutline} slot="start" />
-                      Agregar Prod.
-                    </IonButton>
+                    {/* Botón Cobrar Cuenta F5 */}
+                    {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGoToCheckout();
+                        }}
+                        style={{
+                          background: "linear-gradient(135deg, #10b981 0%, #047857 100%)",
+                          border: "2px solid #34d399",
+                          borderRadius: "20px",
+                          padding: "10px 20px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                          boxShadow: "0 8px 24px rgba(16, 185, 129, 0.4)",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                        }}
+                        className="hover:brightness-110 hover:scale-105 active:scale-95"
+                      >
+                        <span style={{ fontSize: "2.2rem", lineHeight: 1 }}>
+                          💳
+                        </span>
+                        <div style={{ textAlign: "left" }}>
+                          <div style={{ fontWeight: "900", fontSize: "1.05rem", color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            Cobrar Cuenta
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "#d1fae5", fontWeight: "800" }}>
+                            Presiona F5 o Toca aquí ➔
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
                 
                 {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
                   <>
@@ -865,21 +979,7 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                 <IonButton
                   expand="block"
                   color="success"
-                  onClick={() => {
-                    const existingItems =
-                      selectedTable?.comandas.flatMap((c) => c.items).filter((i: any) => !i.isSeparator) || [];
-                    setCheckoutFallbackItems(existingItems);
-                    setShowTipInput(false);
-                    setShowDiscountInput(false);
-                    setShowPaymentOptions(false);
-                    setPaymentTipValue(0);
-                    setPaymentDiscountValue(0);
-                    setPaymentAmountReceived("");
-                    setPaymentMethod("cash");
-                    setRequiresInvoice(false);
-                    setCheckoutReturnMode(appMode);
-                    setAppMode("checkout");
-                  }}
+                  onClick={handleGoToCheckout}
                   style={{
                     height: "75px",
                     "--border-radius": "24px",
@@ -893,7 +993,7 @@ const allItems = selectedTable?.comandas.flatMap((c) => c.items) || [];
                     slot="start"
                     style={{ fontSize: "1.8rem" }}
                   />
-                  COBRAR CUENTA
+                  COBRAR CUENTA (F5) 💳
                 </IonButton>
               )}
             </div>

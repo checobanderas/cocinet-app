@@ -1,5 +1,5 @@
 import { formatTableName } from '../../utils/formatters';
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonBadge, IonButton, IonButtons, IonContent, IonFooter, IonHeader, IonIcon, IonLabel, IonList, IonPage, IonSpinner, IonText, IonTitle, IonToolbar } from '@ionic/react';
 import { arrowBackOutline, chatbubbleEllipsesOutline, closeOutline, fastFoodOutline, restaurantOutline } from 'ionicons/icons';
@@ -23,6 +23,7 @@ interface ReviewViewProps {
   setSelectedTableGestion: any;
   generateOrder: any;
   getComensalColor: any;
+  triggerAppNotification?: any;
 }
 
 export const ReviewView: React.FC<ReviewViewProps> = ({
@@ -42,7 +43,8 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
   setGeneralNotes,
   setReviewComensal,
   setSelectedTableGestion,
-  generateOrder, getComensalColor
+  generateOrder, getComensalColor,
+  triggerAppNotification,
 }) => {
   const listEndRef = useRef<HTMLDivElement>(null);
 
@@ -54,13 +56,83 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
     return () => clearTimeout(timer);
   }, [cart.length]);
 
-const totalPrice = cart.reduce(
-      (sum, item) => sum + item.quantity * item.product.price,
-      0,
-    );
-    const comensales = Array.from(new Set(cart.map((item) => item.plate))).sort(
-      (a: any, b: any) => a - b,
-    ) as number[];
+  const [showEscapeConfirm, setShowEscapeConfirm] = useState(false);
+  const escapeTimerRef = useRef<any>(null);
+
+  const handleRestartOrder = () => {
+    setCart([]);
+    setReviewComensal(1);
+    setGeneralNotes("");
+    setConfirmRestart(false);
+    setShowEscapeConfirm(false);
+    if (checkoutReturnMode) {
+      setCheckoutReturnMode(null);
+    }
+    if (triggerAppNotification) {
+      triggerAppNotification("🗑️ Pedido Reiniciado", "Se han eliminado todos los productos capturados de este pedido.", "info");
+    }
+  };
+
+  const handleConfirmSendOrder = () => {
+    if (isGeneratingOrder || cart.length === 0) return;
+    const isTakeout = selectedTable?.zone?.toLowerCase().includes("llevar") || selectedTable?.zone?.toLowerCase().includes("domicilio") || selectedTable?.zone?.toLowerCase().includes("mostrador");
+    if (isTakeout && appMode === "gestion_cuentas") {
+      generateOrder(true);
+    } else {
+      generateOrder(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      // Atajo F5: Enviar y Confirmar Pedido
+      if (e.key === "F5" || e.code === "F5") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleConfirmSendOrder();
+      }
+
+      // Atajo Escape: Reiniciar Pedido con confirmación
+      if (e.key === "Escape" || e.code === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (cart.length === 0) return;
+
+        if (showEscapeConfirm) {
+          if (escapeTimerRef.current) clearTimeout(escapeTimerRef.current);
+          handleRestartOrder();
+        } else {
+          setShowEscapeConfirm(true);
+          if (triggerAppNotification) {
+            triggerAppNotification(
+              "⚠️ ¿Reiniciar Pedido?",
+              "Presiona ESC de nuevo para confirmar el reinicio y vaciar los productos.",
+              "warning"
+            );
+          }
+          if (escapeTimerRef.current) clearTimeout(escapeTimerRef.current);
+          escapeTimerRef.current = setTimeout(() => {
+            setShowEscapeConfirm(false);
+          }, 4000);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (escapeTimerRef.current) clearTimeout(escapeTimerRef.current);
+    };
+  }, [cart, isGeneratingOrder, showEscapeConfirm, selectedTable, appMode]);
+
+  const totalPrice = cart.reduce(
+    (sum: number, item: any) => sum + item.quantity * item.product.price,
+    0,
+  );
+  const comensales = Array.from(new Set(cart.map((item: any) => item.plate))).sort(
+    (a: any, b: any) => a - b,
+  ) as number[];
 
     return (
       <IonPage>
@@ -130,6 +202,30 @@ const totalPrice = cart.reduce(
         </IonHeader>
         )}
         <IonContent style={{ "--background": "#f1f5f9" }}>
+          {showEscapeConfirm && (
+            <div className="bg-rose-600 text-white px-4 py-2.5 flex items-center justify-between shadow-lg sticky top-0 z-20 animate-pulse">
+              <div className="flex items-center gap-2 font-black text-xs">
+                <span>⚠️ ¿Deseas reiniciar este pedido y quitar lo capturado?</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRestartOrder}
+                  className="bg-white text-rose-700 hover:bg-rose-50 font-black px-3 py-1 rounded-lg text-xs cursor-pointer border-none shadow-sm"
+                >
+                  Sí, Reiniciar (ESC) 🗑️
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEscapeConfirm(false)}
+                  className="bg-rose-800 hover:bg-rose-900 text-white font-bold px-2.5 py-1 rounded-lg text-xs cursor-pointer border-none"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Standardized Comensal Selector */}
           <div
             style={{
@@ -149,43 +245,46 @@ const totalPrice = cart.reduce(
           >
             <div
               onClick={() => {
-                if (
-                  window.confirm(
-                    "⚠️ ¿Estas seguro de reiniciar este pedido? (Se eliminarán los productos de la memoria)",
-                  )
-                ) {
-                  setCart([]);
-                  setReviewComensal(1);
-                  setGeneralNotes("");
-                  setConfirmRestart(false);
-                  if (checkoutReturnMode === "gestion_cuentas") {
-                    // Do not close the view, just keep it open empty.
-                    // (Optional: could also keep the table selected)
+                if (showEscapeConfirm) {
+                  handleRestartOrder();
+                } else {
+                  setShowEscapeConfirm(true);
+                  if (triggerAppNotification) {
+                    triggerAppNotification(
+                      "⚠️ ¿Reiniciar Pedido?",
+                      "Presiona ESC o toca aquí de nuevo para vaciar los productos del pedido.",
+                      "warning"
+                    );
                   }
-                  setCheckoutReturnMode(null);
+                  if (escapeTimerRef.current) clearTimeout(escapeTimerRef.current);
+                  escapeTimerRef.current = setTimeout(() => {
+                    setShowEscapeConfirm(false);
+                  }, 4000);
                 }
               }}
               style={{
-                minWidth: "140px",
+                minWidth: "160px",
                 height: "42px",
                 borderRadius: "12px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                background: "#fee2e2",
-                color: "#dc2626",
+                background: showEscapeConfirm ? "#dc2626" : "#fee2e2",
+                color: showEscapeConfirm ? "white" : "#dc2626",
                 fontWeight: "900",
                 fontSize: "0.75rem",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
                 transition: "all 0.2s ease",
-                border: "1px solid #fecaca",
+                border: showEscapeConfirm ? "1px solid #b91c1c" : "1px solid #fecaca",
                 cursor: "pointer",
-                boxShadow: "0 2px 6px rgba(220, 38, 38, 0.1)",
+                boxShadow: showEscapeConfirm ? "0 4px 12px rgba(220, 38, 38, 0.3)" : "0 2px 6px rgba(220, 38, 38, 0.1)",
                 flexShrink: 0,
               }}
+              className="hover:scale-105 active:scale-95 select-none"
+              title="Reiniciar pedido (Presiona Esc)"
             >
-              Reiniciar Pedido 🗑️
+              {showEscapeConfirm ? "⚠️ ¿Confirmar? (ESC)" : "Reiniciar Pedido (Esc) 🗑️"}
             </div>
             
             {/* + SEPARADOR BUTTON MOVED HERE */}
@@ -572,28 +671,23 @@ const totalPrice = cart.reduce(
                 <IonButton
                   expand="block"
                   color={isTakeout ? "primary" : "success"}
-                  onClick={() => {
-                    if (isTakeout && appMode === "gestion_cuentas") {
-                      generateOrder(true);
-                    } else {
-                      generateOrder(false);
-                    }
-                  }}
-                  disabled={isGeneratingOrder}
+                  onClick={handleConfirmSendOrder}
+                  disabled={isGeneratingOrder || cart.length === 0}
                   style={{
                     height: "56px",
                     "--border-radius": "16px",
-                    fontWeight: "bold",
+                    fontWeight: "900",
                     fontSize: "1.1rem",
                     boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.3)",
                   }}
+                  title="Confirmar y Enviar Pedido (Presiona F5)"
                 >
                   {isGeneratingOrder ? (
                     <IonSpinner name="crescent" color="light" />
                   ) : (
                     <>
                       <IonIcon icon={isTakeout ? "wallet-outline" : restaurantOutline} slot="start" />
-                      {isTakeout && appMode === "gestion_cuentas" ? "Confirmar, Enviar y Cobrar" : "Confirmar y Enviar Pedido"}
+                      {isTakeout && appMode === "gestion_cuentas" ? "Confirmar, Enviar y Cobrar (F5) 💳" : "Confirmar y Enviar Pedido (F5) 🍽️"}
                     </>
                   )}
                 </IonButton>
