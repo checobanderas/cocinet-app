@@ -9739,32 +9739,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         job.printLine(line + padding + price);
       });
 
-      const cancelled = account.comandas
-        .flatMap((c) => c.items)
-        .filter((i) => i.isCancelled);
-      if (cancelled.length > 0) {
-        job.printLine("--------------------------------");
-        job.bold(true).printLine("CANCELACIONES").bold(false);
-        const summarizedCancelled = cancelled.reduce((acc: any[], item) => {
-          const existing = acc.find(
-            (i) =>
-              i.product.id === item.product.id &&
-              i.cancellationReason === item.cancellationReason,
-          );
-          if (existing) existing.quantity += item.quantity;
-          else acc.push({ ...item });
-          return acc;
-        }, []);
-        summarizedCancelled.forEach((item) => {
-          job.printLine(
-            `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-          );
-          job.printLine(`  MOTIVO: ${item.cancellationReason}`);
-          if (item.cancelledBy)
-            job.printLine(`  POR: ${item.cancelledBy.name}`);
-        });
-      }
-
       job.printLine("--------------------------------");
       job.right();
       job.printLine(`SUBTOTAL: $${account.subtotal.toFixed(2)}`);
@@ -9787,6 +9761,62 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         job.printLine("--------------------------------");
         job.left();
         job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
+      }
+
+      // -------------------------------------------------------------
+      // SECCIÓN DE AUDITORÍA: CANCELACIONES EN LA PARTE INFERIOR
+      // -------------------------------------------------------------
+      const cancelled = (account.comandas || [])
+        .flatMap((c) => c.items)
+        .filter((i) => i.isCancelled);
+      const isAccountCancelled = account.status === "cancelled";
+
+      if (cancelled.length > 0 || isAccountCancelled) {
+        job.printLine("--------------------------------");
+        job.center().bold(true).printLine("AUDITORIA: CANCELACIONES").bold(false).left();
+        job.printLine("--------------------------------");
+
+        if (isAccountCancelled) {
+          job.bold(true).printLine("CUENTA CANCELADA").bold(false);
+          if ((account as any).cancellationReason) {
+            job.printLine(`MOTIVO: ${String((account as any).cancellationReason).toUpperCase()}`);
+          }
+          if ((account as any).cancelledBy?.name) {
+            job.printLine(`AUTORIZO: ${String((account as any).cancelledBy.name).toUpperCase()}`);
+          }
+          if (cancelled.length > 0) {
+            job.printLine(" ");
+          }
+        }
+
+        if (cancelled.length > 0) {
+          const summarizedCancelled = cancelled.reduce((acc: any[], item) => {
+            const reason = item.cancellationReason || "No especificado";
+            const authUser = item.cancelledBy?.name || "";
+            const existing = acc.find(
+              (i) =>
+                i.product.id === item.product.id &&
+                i.cancellationReason === reason &&
+                (i.cancelledBy?.name || "") === authUser
+            );
+            if (existing) {
+              existing.quantity += item.quantity;
+            } else {
+              acc.push({ ...item, cancellationReason: reason });
+            }
+            return acc;
+          }, []);
+
+          summarizedCancelled.forEach((item) => {
+            job.printLine(
+              `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`
+            );
+            job.printLine(`  MOTIVO: ${String(item.cancellationReason).toUpperCase()}`);
+            if (item.cancelledBy?.name) {
+              job.printLine(`  AUTORIZO: ${String(item.cancelledBy.name).toUpperCase()}`);
+            }
+          });
+        }
       }
 
       job.printLine(" ");

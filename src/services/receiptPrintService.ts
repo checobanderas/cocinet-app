@@ -228,81 +228,35 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
         const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
         itemLines.forEach((l) => job.printLine(l));
       });
-
-      const cancelled = allItems.filter((i) => i.isCancelled);
-      if (cancelled.length > 0) {
-        job.printLine("--------------------------------");
-        job.bold(true).printLine("CANCELACIONES").bold(false);
-        const summarizedCancelled = cancelled.reduce((acc: any[], item) => {
-          const existing = acc.find(
-            (i) =>
-              i.product.id === item.product.id &&
-              i.cancellationReason === item.cancellationReason,
-          );
-          if (existing) existing.quantity += item.quantity;
-          else acc.push({ ...item });
-          return acc;
-        }, []);
-        summarizedCancelled.forEach((item) => {
-          job.printLine(
-            `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-          );
-          job.printLine(`  MOTIVO: ${item.cancellationReason}`);
-          if (item.cancelledBy)
-            job.printLine(`  POR: ${item.cancelledBy.name}`);
-        });
-      }
     } else if (view === "comandas") {
       table.comandas.forEach((comanda) => {
-        job.bold(true).printLine(comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`).bold(false);
-        comanda.items
-          .filter((i) => !i.isCancelled)
-          .forEach((item) => {
+        const activeComandaItems = (comanda.items || []).filter((i: any) => !i.isCancelled);
+        if (activeComandaItems.length > 0) {
+          job.bold(true).printLine(comanda.folioInterno ? `FOLIO INTERNO #${comanda.folioInterno}` : `FOLIO #${comanda.folio}`).bold(false);
+          activeComandaItems.forEach((item: any) => {
             const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
             const rawName = getFormattedProductName(item.product);
             const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
             itemLines.forEach((l) => job.printLine(l));
           });
-
-        const cancelled = comanda.items.filter((i) => i.isCancelled);
-        if (cancelled.length > 0) {
-          job.printLine("  -- CANCELACIONES --");
-          cancelled.forEach((item) => {
-            job.printLine(
-              `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-            );
-            job.printLine(`    MOTIVO: ${item.cancellationReason}`);
-          });
+          job.printLine(" ");
         }
-        job.printLine(" ");
       });
     } else if (view === "comensales") {
+      const activeItems = allItems.filter((i) => !i.isCancelled);
       const comensales = Array.from(
-        new Set(allItems.map((i) => i.plate)),
+        new Set(activeItems.map((i) => i.plate)),
       ).sort((a, b) => a - b);
       comensales.forEach((cNum) => {
         job.bold(true).printLine(`COMENSAL ${cNum}`).bold(false);
-        allItems
-          .filter((i) => !i.isCancelled && i.plate === cNum)
+        activeItems
+          .filter((i) => i.plate === cNum)
           .forEach((item) => {
             const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
             const rawName = getFormattedProductName(item.product);
             const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
             itemLines.forEach((l) => job.printLine(l));
           });
-
-        const cancelled = allItems.filter(
-          (i) => i.isCancelled && i.plate === cNum,
-        );
-        if (cancelled.length > 0) {
-          job.printLine("  -- CANCELACIONES --");
-          cancelled.forEach((item) => {
-            job.printLine(
-              `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`,
-            );
-            job.printLine(`    MOTIVO: ${item.cancellationReason}`);
-          });
-        }
         job.printLine(" ");
       });
     }
@@ -377,6 +331,60 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
       job.printLine("--------------------------------");
       job.left();
       job.bold(true).printLine("🧾 REQUIERE FACTURA").bold(false);
+    }
+
+    // -------------------------------------------------------------
+    // SECCIÓN DE AUDITORÍA: CANCELACIONES EN LA PARTE INFERIOR
+    // -------------------------------------------------------------
+    const cancelledItems = allItems.filter((i) => i.isCancelled);
+    const hasAccountCancellation = (table as any).status === "cancelled" || (table as any).isCancelled;
+
+    if (cancelledItems.length > 0 || hasAccountCancellation) {
+      job.printLine("--------------------------------");
+      job.center().bold(true).printLine("AUDITORIA: CANCELACIONES").bold(false).left();
+      job.printLine("--------------------------------");
+
+      if (hasAccountCancellation) {
+        job.bold(true).printLine("CUENTA CANCELADA").bold(false);
+        if ((table as any).cancellationReason) {
+          job.printLine(`MOTIVO: ${String((table as any).cancellationReason).toUpperCase()}`);
+        }
+        if ((table as any).cancelledBy?.name) {
+          job.printLine(`AUTORIZO: ${String((table as any).cancelledBy.name).toUpperCase()}`);
+        }
+        if (cancelledItems.length > 0) {
+          job.printLine(" ");
+        }
+      }
+
+      if (cancelledItems.length > 0) {
+        const summarizedCancelled = cancelledItems.reduce((acc: any[], item) => {
+          const reason = item.cancellationReason || "No especificado";
+          const authUser = item.cancelledBy?.name || "";
+          const existing = acc.find(
+            (i) =>
+              i.product.id === item.product.id &&
+              i.cancellationReason === reason &&
+              (i.cancelledBy?.name || "") === authUser
+          );
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            acc.push({ ...item, cancellationReason: reason });
+          }
+          return acc;
+        }, []);
+
+        summarizedCancelled.forEach((item) => {
+          job.printLine(
+            `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()} (CANC)`
+          );
+          job.printLine(`  MOTIVO: ${String(item.cancellationReason).toUpperCase()}`);
+          if (item.cancelledBy?.name) {
+            job.printLine(`  AUTORIZO: ${String(item.cancelledBy.name).toUpperCase()}`);
+          }
+        });
+      }
     }
 
     job.center();
