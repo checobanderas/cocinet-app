@@ -60,6 +60,59 @@ export interface Product {
   description?: string;
 }
 
+export function getProductDestination(product: any): "kitchen" | "bar" {
+  if (!product) return "kitchen";
+
+  // 1. Prioridad absoluta a la Categoría explícita si está claramente definida
+  const rawCat = String(product.category || "").trim().toLowerCase();
+  if (["drinks", "bebidas", "bebida", "refrescos", "refresco", "aguas", "agua", "cervezas", "cerveza", "cocteleria", "bar", "barra", "licores", "cafeteria", "cafe", "café", "vinos", "tragos"].includes(rawCat)) {
+    return "bar";
+  }
+  if (["food", "alimentos", "comida", "platillos", "platillo", "entradas", "entrada", "tacos", "taco", "tlayudas", "tlayuda", "postres", "postre", "desserts", "cortes", "carnes", "alambres", "especialidades"].includes(rawCat)) {
+    return "kitchen";
+  }
+
+  // 2. Destino explícito del producto
+  const rawDest = String(product.destination || "").trim().toLowerCase();
+  if (["bar", "barra", "bebida", "bebidas", "drinks", "coctel", "cocteleria", "licor", "licores", "tragos", "cafeteria"].includes(rawDest)) {
+    return "bar";
+  }
+  if (["kitchen", "cocina", "alimentos", "comida", "postre", "postres", "desserts", "food", "platos", "platillos"].includes(rawDest)) {
+    return "kitchen";
+  }
+
+  // 3. Subcategoría / Subgrupo
+  const rawSubcat = String(product.subcategory || product.subgroup || "").trim().toLowerCase();
+  if (["drinks", "bebidas", "bebida", "refrescos", "refresco", "aguas", "agua", "cervezas", "cerveza", "cocteleria", "bar", "barra", "licores", "cafeteria", "cafe", "café", "vinos", "tragos", "frias", "frías"].includes(rawSubcat)) {
+    return "bar";
+  }
+
+  // 4. Palabras clave en el nombre del producto
+  const rawName = String(product.name || "").trim().toLowerCase();
+  if (
+    rawName.includes("coca") ||
+    rawName.includes("refresco") ||
+    rawName.includes("cerveza") ||
+    rawName.includes("agua de ") ||
+    rawName.includes("agua natural") ||
+    rawName.includes("agua mineral") ||
+    rawName.includes("jarrito") ||
+    rawName.includes("boing") ||
+    rawName.includes("jugo") ||
+    rawName.includes("limonada") ||
+    rawName.includes("naranjada") ||
+    rawName.includes("tequila") ||
+    rawName.includes("mezcal") ||
+    rawName.includes("michelada") ||
+    rawName.includes("clamato") ||
+    rawName.includes("licor")
+  ) {
+    return "bar";
+  }
+
+  return "kitchen";
+}
+
 export function getOperatingDay(dateInput: Date | string): string {
   const d = new Date(dateInput);
   const hour = d.getHours();

@@ -50,9 +50,14 @@ export default function InstallPWA() {
       );
     setIsDesktop(desktop);
 
+    if ((window as any).__COCINET_PWA_PROMPT__) {
+      setDeferredPrompt((window as any).__COCINET_PWA_PROMPT__);
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).__COCINET_PWA_PROMPT__ = e;
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -75,11 +80,15 @@ export default function InstallPWA() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+    const promptToUse = deferredPrompt || (typeof window !== "undefined" ? (window as any).__COCINET_PWA_PROMPT__ : null);
+    if (promptToUse) {
+      promptToUse.prompt();
+      const { outcome } = await promptToUse.userChoice;
       if (outcome === "accepted") {
         setDeferredPrompt(null);
+        if (typeof window !== "undefined") {
+          (window as any).__COCINET_PWA_PROMPT__ = null;
+        }
         setDismissed(true);
       }
     } else if (isIOS) {
@@ -88,7 +97,7 @@ export default function InstallPWA() {
       );
     } else if (isWindows) {
       alert(
-        "💻 Instalación en Windows:\n\n1. Si estás usando Chrome o Edge, busca el ícono de flecha hacia abajo (📥) o el símbolo de suma (+) que aparece a la derecha de la barra de direcciones de tu navegador.\n\n2. Si no lo ves, haz clic en los 3 puntos (⋮) de arriba a la derecha del navegador y presiona 'Instalar COCINET Pro...' (o 'Guardar y compartir' -> 'Instalar esta página como aplicación').\n\n¡Eso creará un acceso directo súper rápido en tu escritorio!",
+        "💻 Instalación en Windows:\n\n1. En la barra de direcciones de Edge/Chrome (arriba a la derecha), haz clic en el icono de App (➕ o 📥) que dice 'Instalar aplicación'.\n\n2. En la ventana emergente, marca las casillas:\n  ☑ Anclar a la barra de tareas\n  ☑ Crear acceso directo en el escritorio\n\n¡Eso dejará el icono anclado en tu barra de tareas y escritorio!",
       );
     } else {
       // Fallback native menu prompt helper (standard browser fallback)

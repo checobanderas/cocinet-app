@@ -1,4 +1,4 @@
-import { numeroALetras } from './utils/formatters';
+import { numeroALetras, formatReceiptItemLines, formatComandaItemLines } from './utils/formatters';
 import { DailyReportModal } from "./components/DailyReportModal";
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
@@ -10,10 +10,18 @@ import { getComandaDestinations, executePrintComanda, getLastInternalFolio } fro
 import { executePrintTicket } from "./services/receiptPrintService";
 import { executeImportTenantMenu, executeReplicateMenuToTenants } from "./services/tenantMenuSyncService";
 import {
+  getLockedTerminalTenantId,
+  updatePwaManifestForTenant,
+  isTerminalLocked,
+  lockTerminalToTenant,
+  unlockTerminal
+} from "./services/pwaTerminalService";
+import {
   User,
   Product,
   getOperatingDay,
   getFormattedProductName,
+  getProductDestination,
   getProductInventoryStatus,
   encryptToken,
   decryptToken,
@@ -199,6 +207,7 @@ import {
   saveLocalHistory,
   clearAllLocalData,
 } from "./utils/db";
+import { startOfflineSyncService } from "./services/offlineSyncService";
 import { getMatchedOwnerKey, isTenantAccessAllowed } from "./accessHelpers";
 import {
   subscribeToProducts,
@@ -836,6 +845,16 @@ function ensureAll35TablesForTenant(existingTables: any[], tenantId: string) {
 export default function App() {
   const [selectedTenant, setSelectedTenant] = useState<CompanyTenant | null>(() => {
     try {
+      // 1. Prioridad Máxima: Candado de Terminal Física (Hardware / Terminal Lock de esta PC)
+      const lockedTenantId = getLockedTerminalTenantId();
+      if (lockedTenantId) {
+        const foundLocked = COMPANY_CATALOG.find((c) => c.id === lockedTenantId);
+        if (foundLocked) {
+          return foundLocked;
+        }
+      }
+
+      // 2. Parámetro de URL (?tenant=..., ?sucursal=..., ?company=..., ?id=...)
       const params = new URLSearchParams(window.location.search);
       let tenantParam =
         params.get("tenant") ||
@@ -880,7 +899,7 @@ export default function App() {
       // Ignore
     }
 
-    // Without a valid URL parameter, start 100% clean and neutral (Cocinet)
+    // Without a valid URL parameter or terminal lock, start 100% clean and neutral (Cocinet)
     return null;
   });
 
@@ -888,6 +907,7 @@ export default function App() {
     if (selectedTenant) {
       try {
         localStorage.setItem("pos_selected_tenant", JSON.stringify(selectedTenant));
+        updatePwaManifestForTenant(selectedTenant);
       } catch (e) {}
     } else {
       try {
@@ -1432,10 +1452,15 @@ export default function App() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
+    const stopSyncService = startOfflineSyncService();
+
     return () => {
       clearInterval(intervalId);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      if (typeof stopSyncService === "function") {
+        stopSyncService();
+      }
     };
   }, []);
 
@@ -1479,13 +1504,16 @@ export default function App() {
   });
   const [history, setHistory] = useState<ClosedAccount[]>(() => {
     try {
-      const cached = localStorage.getItem("pos_history");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        return parsed.map((h: any) => ({
-          ...h,
-          timestamp: new Date(h.timestamp),
-        }));
+      const activeTenant = selectedTenant?.id || getLockedTerminalTenantId() || "tenant-7";
+      const cachedToday = localStorage.getItem(`pos_recent_history_${activeTenant}`) || localStorage.getItem("pos_history");
+      if (cachedToday) {
+        const parsed = JSON.parse(cachedToday);
+        if (Array.isArray(parsed)) {
+          return parsed.map((h: any) => ({
+            ...h,
+            timestamp: new Date(h.timestamp),
+          }));
+        }
       }
       return [];
     } catch {
@@ -1544,6 +1572,45 @@ export default function App() {
     } catch {
       setTables(ensureAll35TablesForTenant([], tenantId));
     }
+
+    // Pre-cargar historial de forma inmediata (0ms) desde caché rápido de hoy y luego IndexedDB
+    try {
+      const cachedToday = localStorage.getItem(`pos_recent_history_${tenantId}`);
+      if (cachedToday) {
+        const parsed = JSON.parse(cachedToday);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setHistory(
+            parsed.map((h: any) => ({
+              ...h,
+              timestamp: new Date(h.timestamp),
+            }))
+          );
+          setHistoryLoaded(true);
+        }
+      }
+    } catch (e) {}
+
+    getLocalHistory(tenantId)
+      .then((localHist) => {
+        if (Array.isArray(localHist) && localHist.length > 0) {
+          setHistory((prev) => {
+            if (prev.length === 0 || prev.length < localHist.length) {
+              return localHist.map((h: any) => ({
+                ...h,
+                timestamp:
+                  h.timestamp && typeof h.timestamp.toDate === "function"
+                    ? h.timestamp.toDate()
+                    : new Date(h.timestamp),
+              }));
+            }
+            return prev;
+          });
+          setHistoryLoaded(true);
+        }
+      })
+      .catch((e) => console.warn("Error leyendo historial offline:", e));
+
+
     setCashierSessionsLoaded(false);
     setHistoryLoaded(false);
     setCashMovementsLoaded(false);
@@ -1688,14 +1755,28 @@ export default function App() {
       }));
       setHistory(parsedServerHistory);
       setHistoryLoaded(true);
+      // Guardamos en IndexedDB (sin límite de 5 MB de LocalStorage)
+      saveLocalHistory(parsedServerHistory).catch((e) =>
+        console.warn("Error caching history in IndexedDB:", e)
+      );
+
+      // Guardamos la versión ultra-ligera de hoy (<20 KB) para carga instantánea al abrir la app
       try {
-        localStorage.setItem(
-          "pos_history",
-          JSON.stringify(parsedServerHistory),
+        const currentOpDay = getOperatingDay(new Date());
+        const todayHistory = parsedServerHistory.filter(
+          (h: any) => getOperatingDay(h.timestamp) === currentOpDay
         );
-      } catch (e) {
-        console.warn("Error caching history:", e);
-      }
+        localStorage.setItem(
+          `pos_recent_history_${tenantId}`,
+          JSON.stringify(todayHistory)
+        );
+      } catch (e) {}
+
+      // Purgamos la clave pesada de localStorage para evitar QuotaExceededError
+      try {
+        localStorage.removeItem("pos_history");
+      } catch (e) {}
+
     });
 
     const unsubUsers = subscribeToUsers(
@@ -3044,64 +3125,57 @@ export default function App() {
       return;
     }
 
-    // A. IF A TENANT IS ALREADY SELECTED (Tenant PIN Screen)
-    if (selectedTenant) {
+    // A. IF A TENANT IS ALREADY SELECTED OR TERMINAL IS LOCKED TO A TENANT
+    const lockedTenantId = getLockedTerminalTenantId();
+    let activeTenantForLogin = selectedTenant;
+    if (!activeTenantForLogin && lockedTenantId) {
+      const foundLocked = COMPANY_CATALOG.find((c) => c.id === lockedTenantId);
+      if (foundLocked) {
+        activeTenantForLogin = foundLocked;
+        setSelectedTenant(foundLocked);
+      }
+    }
+
+    if (activeTenantForLogin) {
       let matchedUser: User | null = null;
-      const matchedTenant: CompanyTenant = selectedTenant;
+      const matchedTenant: CompanyTenant = activeTenantForLogin;
 
       // 1. Sistemas global PIN (4020) for this tenant
       if (enteredPin === "4020") {
-        const companyUsers = getTenantUsers(selectedTenant.id);
+        const companyUsers = getTenantUsers(matchedTenant.id);
         const existingSistemas = companyUsers.find(u => u.id.endsWith("-sistemas") || u.role === "admin");
         matchedUser = existingSistemas || {
-          id: `${selectedTenant.id}-sistemas`,
-          name: `Sistemas (${selectedTenant.sucursalDefault || selectedTenant.name}) ⚙️`,
+          id: `${matchedTenant.id}-sistemas`,
+          name: `Sistemas (${matchedTenant.sucursalDefault || matchedTenant.name}) ⚙️`,
           role: "admin",
           pin: enteredPin,
           avatar: "fa-solid fa-laptop-code",
-          tenantId: selectedTenant.id,
+          tenantId: matchedTenant.id,
         };
       }
       // 2. Owner / Supervisor PIN for this tenant's owner
       else if (
-        (selectedTenant.ownerKey && OWNER_PINS[selectedTenant.ownerKey] === enteredPin) ||
-        (selectedTenant.ownerKey && OWNER_SUPERVISOR_PINS[selectedTenant.ownerKey] === enteredPin) ||
+        (matchedTenant.ownerKey && OWNER_PINS[matchedTenant.ownerKey] === enteredPin) ||
+        (matchedTenant.ownerKey && OWNER_SUPERVISOR_PINS[matchedTenant.ownerKey] === enteredPin) ||
         enteredPin === "2026"
       ) {
-        const companyUsers = getTenantUsers(selectedTenant.id);
+        const companyUsers = getTenantUsers(matchedTenant.id);
         const existingAdmin = companyUsers.find(u => u.id.endsWith("-admin") || u.role === "admin");
         matchedUser = existingAdmin || {
-          id: `${selectedTenant.id}-admin`,
-          name: `Propietario (${selectedTenant.name}) 👑`,
+          id: `${matchedTenant.id}-admin`,
+          name: `Propietario (${matchedTenant.name}) 👑`,
           role: "admin",
           pin: enteredPin,
           avatar: "fa-solid fa-user-shield",
-          tenantId: selectedTenant.id,
+          tenantId: matchedTenant.id,
         };
       }
       // 3. Regular assigned employees of this specific tenant
       else {
-        const companyUsers = getTenantUsers(selectedTenant.id);
+        const companyUsers = getTenantUsers(matchedTenant.id);
         const user = companyUsers.find((u) => u.pin === enteredPin);
         if (user) {
           matchedUser = user;
-        } else {
-          // 4. Cross-tenant check: if enteredPin belongs to any Sistemas/Admin across all companies
-          for (const company of COMPANY_CATALOG) {
-            const cUsers = getTenantUsers(company.id);
-            const crossUser = cUsers.find((x) => x.pin === enteredPin);
-            if (crossUser && (crossUser.id.endsWith("-sistemas") || crossUser.role === "admin")) {
-              matchedUser = {
-                id: `${selectedTenant.id}-sistemas`,
-                name: crossUser.name,
-                role: "admin",
-                pin: enteredPin,
-                avatar: crossUser.avatar || "fa-solid fa-laptop-code",
-                tenantId: selectedTenant.id,
-              };
-              break;
-            }
-          }
         }
       }
 
@@ -4720,12 +4794,23 @@ export default function App() {
 
   useEffect(() => {
     if (selectedTenant) {
+      let isInitialSnapshot = true;
       const unsub = subscribeToPrinterQueue(selectedTenant.id, (data) => {
+        if (isInitialSnapshot) {
+          isInitialSnapshot = false;
+          data.forEach((p) => {
+            processedPrintIdsRef.current.add(p.id);
+            const subKey = `${p.tipo || "comanda"}_${p.folio || p.id}_${p.area || "general"}`;
+            processedPrintIdsRef.current.add(subKey);
+            if (p.tipo === "cuenta" && p.folio) processedPrintIdsRef.current.add(p.folio);
+          });
+          console.log(`[WindowsAutoPrint] Primer snapshot de Firestore (${selectedTenant.id}): ${data.length} pedidos existentes marcados como procesados.`);
+        }
         setPrinterQueue(data.slice(0, 15));
       });
       return () => unsub();
     }
-  }, [selectedTenant]);
+  }, [selectedTenant?.id]);
 
   const printPedidoFromNetwork = async (pedido: any) => {
     try {
@@ -4767,25 +4852,22 @@ export default function App() {
 
       if (pedido.tipo === "comanda") {
         job.center();
-        job.setPrintMode(job.FONT_SIZE_BIG + job.FONT_EMPHASIZED).bold(true);
-        job.printLine(`COMANDA #${pedido.folio}`);
-        
         job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
+        job.printLine("================================");
+        const destLabel = printerName === "cocina" ? "COCINA" : printerName === "barra" ? "BARRA" : "GENERAL";
+        job.printLine(`*** ${destLabel} - MESA: ${pedido.mesa} ***`);
+        job.bold(false);
+        const timeStr = pedido.timestamp ? new Date(pedido.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        job.printLine(`Cmd #${pedido.folio || "S/F"} | Hora: ${timeStr}`);
         if (pedido.mesero) {
           job.printLine(`MESERO: ${pedido.mesero.toUpperCase()}`);
         }
-        
-        const destLabel = printerName === "cocina" ? "COCINA" : printerName === "barra" ? "BARRA" : "GENERAL";
-        job.printLine(`DESTINO: ${destLabel}`);
-        job.printLine(`MESA: ${pedido.mesa}`);
-        
-        const timeStr = pedido.timestamp ? new Date(pedido.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-        job.printLine(`HORA: ${timeStr}`);
+        job.printLine("================================");
         
         if (pedido.deliveryClientName || pedido.deliveryAddress) {
-          job.bold(true).printLine("-- DATOS DE ENVIO --").bold(false);
-          if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
-          
+          job.left();
+          if (pedido.deliveryClientName) job.bold(true).printLine(`CTE: ${pedido.deliveryClientName.toUpperCase()}`).bold(false);
+          if (pedido.deliveryPhone) job.printLine(`TEL: ${pedido.deliveryPhone}`);
           if (pedido.deliveryAddress) {
             let cleanAddr = pedido.deliveryAddress;
             let refText = "";
@@ -4801,12 +4883,13 @@ export default function App() {
             job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
             if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
           }
-          if (pedido.deliveryNotes) job.printLine(`NOTAS: ${pedido.deliveryNotes.toUpperCase()}`);
+          if (pedido.deliveryNotes) job.bold(true).printLine(`NOTAS: ${pedido.deliveryNotes.toUpperCase()}`).bold(false);
+          job.printLine("--------------------------------");
         }
         
-        job.bold(false).printLine("--------------------------------");
-
         job.left();
+        job.bold(true).printLine("CANT  DESCRIPCION").bold(false);
+        job.printLine("--------------------------------");
 
         if (printerName === "cocina") {
           // Group by comensal/plate if present
@@ -4817,37 +4900,40 @@ export default function App() {
             ).sort((a: any, b: any) => Number(a) - Number(b));
             
             plates.forEach((plateNum) => {
-              job.center().bold(true).printLine(`*** COMENSAL ${plateNum} ***`).bold(false).left();
+              job.center().bold(true).printLine(`-- COMENSAL ${plateNum} --`).bold(false).left();
               pedido.items
                 .filter((i: any) => (i.comensal || 1) === plateNum)
                 .forEach((item: any) => {
-                  job.printLine(`${item.cantidad}x ${item.nombre.toUpperCase()}`);
-                  if (item.notas) {
-                    job.printLine(`   > ${item.notas}`);
-                  }
+                  const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
+                  job.bold(true);
+                  lines.forEach((l) => job.printLine(l));
+                  job.bold(false);
+                  job.printLine("--------------------------------");
                 });
-              job.printLine("--------------------------------");
             });
           } else {
             pedido.items?.forEach((item: any) => {
-              job.printLine(`${item.cantidad}x ${item.nombre.toUpperCase()}`);
-              if (item.notas) {
-                job.printLine(`   > ${item.notes || item.notas}`);
-              }
+              const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
+              job.bold(true);
+              lines.forEach((l) => job.printLine(l));
+              job.bold(false);
+              job.printLine("--------------------------------");
             });
           }
         } else {
           // Bar or General
           pedido.items?.forEach((item: any) => {
-            job.printLine(`${item.cantidad}x ${item.nombre.toUpperCase()}`);
-            if (item.notas) {
-              job.printLine(`   > ${item.notes || item.notas}`);
-            }
+            const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
+            job.bold(true);
+            lines.forEach((l) => job.printLine(l));
+            job.bold(false);
+            job.printLine("--------------------------------");
           });
         }
 
-        if (pedido.generalNotes) {
-          job.feed(1).bold(true).printLine(`OBS: ${pedido.generalNotes}`).bold(false);
+        if (pedido.generalNotes && pedido.generalNotes.trim()) {
+          job.bold(true).printLine(`OBS: ${pedido.generalNotes.toUpperCase()}`).bold(false);
+          job.printLine("--------------------------------");
         }
 
       } else if (pedido.tipo === "cuenta") {
@@ -4885,12 +4971,9 @@ export default function App() {
         job.left();
         (pedido.items || []).forEach((item: any) => {
           const price = `$${Number(item.subtotal || (item.precio || 0) * (item.cantidad || 1)).toFixed(2)}`;
-          const maxDescLen = Math.max(10, 32 - price.length - 4);
-          const rawName = String(item.nombre).toUpperCase();
-          const cleanName = rawName.length > maxDescLen ? rawName.substring(0, maxDescLen) : rawName;
-          const line = `${item.cantidad}x ${cleanName}`;
-          const padding = " ".repeat(Math.max(1, 32 - line.length - price.length));
-          job.printLine(line + padding + price);
+          const rawName = String(item.nombre || "");
+          const itemLines = formatReceiptItemLines(item.cantidad || 1, rawName, price, 32);
+          itemLines.forEach((l) => job.printLine(l));
         });
 
         if (pedido.deliveryClientName || pedido.deliveryAddress) {
@@ -4979,26 +5062,9 @@ export default function App() {
     }
   };
 
-  const isFirstPrinterQueueLoadRef = useRef(true);
-
-  useEffect(() => {
-    isFirstPrinterQueueLoadRef.current = true;
-  }, [selectedTenant?.id]);
-
   // Background printer queue observer daemon for Windows
   useEffect(() => {
     if (!selectedTenant || !systemLocalWindowsAutoPrint) return;
-
-    // Protección de arranque en frío (Cold-Start): al abrir la aplicación, omitir el backlog viejo existente
-    if (isFirstPrinterQueueLoadRef.current) {
-      isFirstPrinterQueueLoadRef.current = false;
-      printerQueue.forEach((p) => {
-        processedPrintIdsRef.current.add(p.id);
-        if (p.folio) processedPrintIdsRef.current.add(p.folio);
-      });
-      console.log(`[WindowsAutoPrint] Inicialización de cola: ${printerQueue.length} pedidos existentes registrados para no duplicar en físico.`);
-      return;
-    }
 
     const MAX_PRINT_AGE_MS = 2 * 60 * 1000; // 2 minutos máximo
     const now = Date.now();
@@ -5006,21 +5072,26 @@ export default function App() {
     const pendingPedidos = printerQueue.filter((p) => p.impreso === false || p.impreso === undefined);
 
     pendingPedidos.forEach((pedido) => {
+      const itemKey = `${pedido.tipo || "comanda"}_${pedido.folio || pedido.id}_${pedido.area || "general"}`;
       const isAlreadyProcessed = 
         processedPrintIdsRef.current.has(pedido.id) ||
-        (pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
+        processedPrintIdsRef.current.has(itemKey) ||
+        (pedido.tipo === "cuenta" && pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
 
       if (isAlreadyProcessed) return;
 
       processedPrintIdsRef.current.add(pedido.id);
-      if (pedido.folio) processedPrintIdsRef.current.add(pedido.folio);
+      processedPrintIdsRef.current.add(itemKey);
+      if (pedido.tipo === "cuenta" && pedido.folio) {
+        processedPrintIdsRef.current.add(pedido.folio);
+      }
 
-      // Validar antigüedad: no imprimir si fue creado hace más de 2 minutos
+      // Validar antigüedad: no imprimir si fue creado hace más de 2 minutos o si carece de timestamp válido
       const pedidoTime = pedido.timestamp ? new Date(pedido.timestamp).getTime() : 0;
-      const isTooOld = pedidoTime > 0 && (now - pedidoTime > MAX_PRINT_AGE_MS);
+      const isTooOld = pedidoTime === 0 || (now - pedidoTime > MAX_PRINT_AGE_MS);
 
       if (isTooOld) {
-        console.warn(`[WindowsAutoPrint] Pedido omitido por antigüedad (> 2 min):`, pedido.folio || pedido.id);
+        console.warn(`[WindowsAutoPrint] Pedido omitido por antigüedad (> 2 min o sin timestamp):`, pedido.folio || pedido.id);
         updatePedidoInFirebase(selectedTenant.id, pedido.id, { impreso: true, expired: true }).catch(() => {});
         return;
       }
@@ -8575,7 +8646,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
             cantidad: i.quantity,
             notas: i.notes || "",
             comensal: i.plate,
-            destination: i.product.destination || "general",
+            destination: getProductDestination(i.product),
           })),
           createdBy: currentUser?.name || "S/M",
           timestamp: getMexicoISOString(),
@@ -8593,7 +8664,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
                 cantidad: i.quantity,
                 notas: i.notes || "",
                 comensal: i.plate,
-                destination: i.product.destination || "general",
+                destination: getProductDestination(i.product),
             })),
             mesero: currentUser?.name || "S/M",
             timestamp: getMexicoISOString(),
@@ -8615,6 +8686,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
               await new Promise((resolve) => setTimeout(resolve, 800));
             }
             await printComanda(tableLabel, newComanda, "bar");
+          }
+          if (destinations.length === 0) {
+            await printComanda(tableLabel, newComanda);
           }
         } catch (err) {
           console.error("Error in sequential comanda dispatch:", err);
@@ -8651,7 +8725,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       return;
     }
 
-    if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
+    if ((paymentMethod === "card" || paymentMethod === "transfer") && selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       isProcessingPaymentRef.current = false;
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
       return;
@@ -9428,7 +9502,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     //   return;
     // }
 
-    if ((paymentMethod === "card" || paymentMethod === "transfer") && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
+    if ((paymentMethod === "card" || paymentMethod === "transfer") && selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
       return;
     }
@@ -10695,6 +10769,7 @@ Instrucciones:
 
   const renderPrecuentaItem = (item: CartItem, showDelete = false, folio?: number, index?: number) => (
     <PrecuentaItemView
+      key={`precuenta-item-${item.product.id}-${folio ?? 'sum'}-${index ?? 0}-${item.plate ?? 0}-${item.notes ?? ''}-${item.isCancelled ? 'canc' : 'act'}`}
       item={item}
       showDelete={showDelete}
       cancellationReason={cancellationReason}

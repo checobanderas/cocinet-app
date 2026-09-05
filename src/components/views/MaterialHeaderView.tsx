@@ -1,5 +1,5 @@
 import { getOperatingDay } from '../../utils/appHelpers';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonHeader, IonIcon } from '@ionic/react';
 import { menuOutline } from 'ionicons/icons';
@@ -39,38 +39,63 @@ export const MaterialHeaderView: React.FC<MaterialHeaderViewProps> = ({
   setShowNotificationModal,
   setShowSidebar
 }) => {
-const { title, subtitle, showBack = false, onBack, showMenu = true, actions, minimal = false } = options;
-    const currentOpDay = getOperatingDay(new Date());
-    const unreadCount = notificationsList.filter(
-      (n) => !n.read && getOperatingDay(n.createdAt ? new Date(n.createdAt) : new Date()) === currentOpDay
-    ).length;
+  const { title, subtitle, showBack = false, onBack, showMenu = true, actions, minimal = false } = options;
+  const currentOpDay = getOperatingDay(new Date());
+  const unreadCount = notificationsList.filter(
+    (n) => !n.read && getOperatingDay(n.createdAt ? new Date(n.createdAt) : new Date()) === currentOpDay
+  ).length;
 
-    return (
-      <IonHeader className="ion-no-border" style={{ zIndex: 100 }}>
-        <div 
-          className={`w-full text-white shadow-lg border-b select-none transition-all duration-500 ${
-            isOnline 
-              ? "bg-black border-neutral-900" 
-              : "bg-red-600 border-red-700"
-          }`}
-          style={{
-            fontFamily: "'Space Grotesk', sans-serif",
-            padding: "10px 16px",
-          }}
-        >
-          <div className="flex items-center justify-between gap-3 h-14">
-            {/* Left Section: Back or Menu Button */}
-            <div className="flex items-center gap-3">
-              {showBack ? (
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onBack || (() => setAppMode("floorplan"))}
-                  className="w-10 h-10 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-lg flex items-center justify-center transition border-none cursor-pointer outline-none shadow-sm text-amber-400"
-                  title="Retroceder"
-                >
-                  ⬅️
-                </motion.button>
+  useEffect(() => {
+    if (!showBack) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.key === "Escape" || e.code === "Escape") {
+        const target = e.target as HTMLElement;
+        const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+        if (isInputField) {
+          target.blur();
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (onBack) {
+          onBack();
+        } else {
+          setAppMode("floorplan");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showBack, onBack, setAppMode]);
+
+  return (
+    <IonHeader className="ion-no-border" style={{ zIndex: 100 }}>
+      <div 
+        className={`w-full text-white shadow-lg border-b select-none transition-all duration-500 ${
+          isOnline 
+            ? "bg-black border-neutral-900" 
+            : "bg-red-600 border-red-700"
+        }`}
+        style={{
+          fontFamily: "'Space Grotesk', sans-serif",
+          padding: "10px 16px",
+        }}
+      >
+        <div className="flex items-center justify-between gap-3 h-14">
+          {/* Left Section: Back or Menu Button */}
+          <div className="flex items-center gap-3">
+            {showBack ? (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onBack || (() => setAppMode("floorplan"))}
+                className="w-10 h-10 rounded-full bg-indigo-900/40 hover:bg-indigo-800 text-lg flex items-center justify-center transition border-none cursor-pointer outline-none shadow-sm text-amber-400"
+                title="Retroceder (Presiona ESC)"
+              >
+                ⬅️
+              </motion.button>
               ) : showMenu ? (
                 <motion.button
                   whileHover={{ scale: 1.1 }}

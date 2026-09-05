@@ -132,6 +132,31 @@ if (typeof window !== "undefined") {
       window.location.reload();
     });
   };
+
+  // Limpieza preventiva de claves huérfanas en localStorage al arrancar
+  // para blindar contra el límite de 5 MB y evitar QuotaExceededError
+  try {
+    if (localStorage.getItem("pos_history")) {
+      localStorage.removeItem("pos_history");
+    }
+    // Si hay acumulación de llaves viejas de clientes de pestañas cerradas
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("firestore_clients_")) {
+        keysToRemove.push(k);
+      }
+    }
+    // Dejar solo las más recientes si hay más de 10
+    if (keysToRemove.length > 10) {
+      keysToRemove.slice(0, keysToRemove.length - 5).forEach((k) => {
+        try { localStorage.removeItem(k); } catch {}
+      });
+    }
+  } catch (e) {
+    console.warn("Storage auto-cleanup notice:", e);
+  }
 }
+
 
 

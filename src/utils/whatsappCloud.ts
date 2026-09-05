@@ -18,6 +18,9 @@ export interface WhatsAppGatewayConfig {
   isEnabled?: boolean;
 }
 
+/** Clave de almacenamiento en LocalStorage */
+const DEFAULT_CONFIG_KEY = "cocinet_whatsapp_cloud_config";
+
 /** Credenciales globales preconfiguradas para todos los tenants */
 const GLOBAL_DEFAULT_INSTANCE = "instance190130";
 const GLOBAL_DEFAULT_TOKEN = "ayi9d3764t8h8t7s";

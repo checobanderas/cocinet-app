@@ -124,19 +124,54 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
       setAppMode("checkout");
     };
 
+    const handlePrintPrecuenta = async () => {
+      if (tableTotal <= 0 || isPrintingPrecuenta) return;
+      setIsPrintingPrecuenta(true);
+
+      try {
+        setPrecuentaModalType(precuentaTab);
+        if (selectedTable) {
+          await printTicket(selectedTable, precuentaTab);
+        }
+
+        triggerAppNotification(
+          "🖨️ Precuenta Enviada",
+          `Imprimiendo precuenta (${precuentaTab.toUpperCase()}) para ${formatTableName(selectedTable?.zone || "", selectedTable?.label || "")}... ⚡🍽️`,
+          "success"
+        );
+      } catch (err: any) {
+        console.error("Error al imprimir precuenta:", err);
+      } finally {
+        setTimeout(() => setIsPrintingPrecuenta(false), 1200);
+      }
+    };
+
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.repeat) return;
-        if (e.key === "F5" || e.code === "F5") {
+        const target = e.target as HTMLElement;
+        const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+
+        // Atajo Enter / F5: Cobrar Cuenta
+        if (e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "F5" || e.code === "F5") {
+          if (isInputField) target.blur();
           e.preventDefault();
           e.stopPropagation();
           handleGoToCheckout();
+        }
+
+        // Atajo Barra Espaciadora: Imprimir Precuenta
+        if (e.key === " " || e.code === "Space") {
+          if (isInputField) return; // Permitir escribir espacios en inputs
+          e.preventDefault();
+          e.stopPropagation();
+          handlePrintPrecuenta();
         }
       };
 
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [selectedTable, currentUser, appMode, tableTotal]);
+    }, [selectedTable, currentUser, appMode, tableTotal, isPrintingPrecuenta, precuentaTab]);
 
     // Grouping for "Resumen" (Summarized)
     const summarizedItems = allItems
@@ -340,10 +375,10 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
                             letterSpacing: "0.5px",
                           }}
                           className="hover:brightness-110 active:scale-95 cursor-pointer"
-                          title="Cobrar cuenta (Presiona F5)"
+                          title="Cobrar cuenta (Presiona ENTER)"
                         >
                           <IonIcon icon={checkmarkCircleOutline} style={{ fontSize: "1.2rem" }} />
-                          <span>COBRAR CUENTA (F5) 💳</span>
+                          <span>COBRAR CUENTA (ENTER) 💳</span>
                         </button>
                       )}
                     </div>
@@ -820,15 +855,15 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
                         <div style={{ fontWeight: "900", fontSize: "0.95rem", color: "#34d399", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                           {isPrintingPrecuenta
                             ? "Imprimiendo..."
-                            : "Imprimir Precuenta"}
+                            : "Imprimir Precuenta (ESPACIO)"}
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "#cbd5e1", fontWeight: "700" }}>
-                          Toca aquí para imprimir ⚡
+                          Presiona Barra Espaciadora o Toca aquí ⚡
                         </div>
                       </div>
                     </div>
 
-                    {/* Botón Cobrar Cuenta F5 */}
+                    {/* Botón Cobrar Cuenta ENTER */}
                     {currentUser?.role !== "mesero" && (selectedTable?.comandas?.length || 0) > 0 && (
                       <div
                         onClick={(e) => {
@@ -854,10 +889,10 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
                         </span>
                         <div style={{ textAlign: "left" }}>
                           <div style={{ fontWeight: "900", fontSize: "1.05rem", color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                            Cobrar Cuenta
+                            Cobrar Cuenta (ENTER)
                           </div>
                           <div style={{ fontSize: "0.72rem", color: "#d1fae5", fontWeight: "800" }}>
-                            Presiona F5 o Toca aquí ➔
+                            Presiona ENTER o Toca aquí ➔
                           </div>
                         </div>
                       </div>
@@ -993,7 +1028,7 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
                     slot="start"
                     style={{ fontSize: "1.8rem" }}
                   />
-                  COBRAR CUENTA (F5) 💳
+                  COBRAR CUENTA (ENTER) 💳
                 </IonButton>
               )}
             </div>

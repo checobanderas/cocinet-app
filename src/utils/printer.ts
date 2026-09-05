@@ -373,6 +373,7 @@ export class WindowsSpoolerTransport {
   async send(prn: string): Promise<boolean> {
     const key = this.customPrinterName || (WindowsSpoolerTransport.KEY_MAP[this.printerKey.toLowerCase()] ?? this.printerKey);
     const port = this.customPort || getTenantPrinterPort(this.tenantId) || "3010";
+    const startTime = Date.now();
 
     const payload = {
       printer: key,
@@ -387,7 +388,7 @@ export class WindowsSpoolerTransport {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 900);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         const res = await fetch(`http://localhost:${port}/print`, {
           method: "POST",
@@ -397,12 +398,30 @@ export class WindowsSpoolerTransport {
         });
         clearTimeout(timeoutId);
 
+        const durationMs = Date.now() - startTime;
+
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: res.statusText }));
           console.error(`[Printer] Error del sentinel en intento ${attempt}:`, err);
           lastErrorMsg = err?.error || res.statusText;
         } else {
-          console.log(`✅ [Printer] Impresión rápida exitosa en puerto ${port} para '${key}'`);
+          const resData = await res.json().catch(() => ({}));
+          console.log(`✅ [Printer] Impresión rápida exitosa en puerto ${port} para '${key}' (${durationMs}ms)`);
+          
+          fetch('/api/printer-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipo: 'raw_spooler',
+              area: this.printerKey,
+              printerName: key,
+              port,
+              status: resData.ignored ? 'DUPLICATE' : 'SUCCESS',
+              durationMs,
+              details: resData
+            })
+          }).catch(() => {});
+
           return true;
         }
       } catch (err: any) {
@@ -411,9 +430,26 @@ export class WindowsSpoolerTransport {
       }
 
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
+
+    const durationMs = Date.now() - startTime;
+
+    // Registrar fallo en log
+    fetch('/api/printer-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'raw_spooler',
+        area: this.printerKey,
+        printerName: key,
+        port,
+        status: 'ERROR',
+        durationMs,
+        errorMsg: lastErrorMsg
+      })
+    }).catch(() => {});
 
     // 🔴 Si fallaron los retries, notificar al mesero/usuario con una alerta clara en pantalla
     console.error(`❌ [Printer Error] Todos los intentos de impresión en puerto ${port} fallaron. Notificando error.`);

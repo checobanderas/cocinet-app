@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonCard, IonCardContent, IonCol, IonContent, IonFooter, IonGrid, IonIcon, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonSpinner, IonText, IonToolbar } from '@ionic/react';
 import { addOutline, cardOutline, cashOutline, flashOutline, swapHorizontalOutline, trashOutline } from 'ionicons/icons';
@@ -171,6 +171,41 @@ if (currentUser?.role === "mesero") {
       hasTriggeredRef.current = false;
     }, [showPaymentOptions]);
 
+    const [activeSection, setActiveSection] = useState<"methods" | "bills" | "finalize">("methods");
+    const [focusedBillIndex, setFocusedBillIndex] = useState<number>(0);
+    const [finalizeFocus, setFinalizeFocus] = useState<"finalize" | "back">("finalize");
+
+    const billOptions = [
+      { id: "exacto", label: "🎯 Exacto (ENTER)" },
+      { id: "20", label: "💵 +$20", val: 20 },
+      { id: "50", label: "💵 +$50", val: 50 },
+      { id: "100", label: "💵 +$100", val: 100 },
+      { id: "200", label: "💵 +$200", val: 200 },
+      { id: "500", label: "💵 +$500", val: 500 },
+      { id: "1000", label: "💵 +$1000", val: 1000 },
+      { id: "numpad", label: "🔢 Teclado / Importe" },
+      { id: "clear", label: "🚫 Borrar" },
+    ];
+
+    const availablePaymentMethods: Array<"cash" | "lupay" | "card" | "transfer"> = [
+      ...(selectedTenant?.allowEfectivo !== false ? ["cash" as const] : []),
+      ...(selectedTenant?.allowLupay !== false ? ["lupay" as const] : []),
+      ...(selectedTenant?.allowTarjeta !== false ? ["card" as const] : []),
+      ...(selectedTenant?.allowTransferencia !== false ? ["transfer" as const] : []),
+    ];
+
+    const handleSelectPaymentMethod = (method: "cash" | "lupay" | "card" | "transfer") => {
+      setPaymentMethod(method);
+      if (method === "cash") {
+        setPaymentAmountReceived(total.toFixed(2));
+      } else {
+        setPaymentAmountReceived("");
+      }
+      if ((method === "card" || method === "transfer") && selectedTenant?.requireCardDigits !== false) {
+        openNumpad(paymentCardLastFour || "", 0, "card_digits");
+      }
+    };
+
     const handleFinalizePayment = () => {
       if (hasTriggeredRef.current || isProcessingPayment) return;
       hasTriggeredRef.current = true;
@@ -180,7 +215,170 @@ if (currentUser?.role === "mesero") {
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.repeat) return;
-        if (e.key === "F5" || e.code === "F5") {
+        const target = e.target as HTMLElement;
+        const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+        const isEditableInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA") && !(target as HTMLInputElement).readOnly;
+
+        // Cambio de sección con Flechas Arriba / Abajo
+        if ((e.key === "ArrowUp" || e.code === "ArrowUp" || e.key === "Up") && showPaymentOptions) {
+          if (!isEditableInput) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (activeSection === "finalize") {
+              if (paymentMethod === "cash") {
+                setActiveSection("bills");
+              } else {
+                setActiveSection("methods");
+              }
+            } else if (activeSection === "bills") {
+              setActiveSection("methods");
+            }
+            return;
+          }
+        }
+
+        if ((e.key === "ArrowDown" || e.code === "ArrowDown" || e.key === "Down") && showPaymentOptions) {
+          if (!isEditableInput) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (activeSection === "methods") {
+              if (paymentMethod === "cash") {
+                setActiveSection("bills");
+              } else {
+                setActiveSection("finalize");
+                setFinalizeFocus("finalize");
+              }
+            } else if (activeSection === "bills") {
+              // Solo saltar a Finalizar Pago si ya se capturó un importe válido (>= total)
+              const hasSufficientCash = Number(paymentAmountReceived) >= total && Number(paymentAmountReceived) > 0;
+              if (hasSufficientCash) {
+                setActiveSection("finalize");
+                setFinalizeFocus("finalize");
+              }
+            }
+            return;
+          }
+        }
+
+        // Atajo Flechas Izquierda / Derecha: Carrusel según sección activa ◀ ►
+        const isArrowKey = e.key === "ArrowRight" || e.code === "ArrowRight" || e.key === "ArrowLeft" || e.code === "ArrowLeft" || e.key === "Right" || e.key === "Left";
+        if (isArrowKey && showPaymentOptions) {
+          if (!isEditableInput) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (target && target.blur) target.blur();
+
+            if (activeSection === "methods" && availablePaymentMethods.length > 0) {
+              const currentIndex = availablePaymentMethods.indexOf(paymentMethod as any);
+              let nextIndex = 0;
+              if (e.key === "ArrowRight" || e.code === "ArrowRight" || e.key === "Right") {
+                nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % availablePaymentMethods.length;
+              } else {
+                nextIndex = currentIndex === -1 ? 0 : (currentIndex - 1 + availablePaymentMethods.length) % availablePaymentMethods.length;
+              }
+              const nextMethod = availablePaymentMethods[nextIndex];
+              handleSelectPaymentMethod(nextMethod);
+              return;
+            } else if (activeSection === "bills" && paymentMethod === "cash") {
+              let nextIndex = 0;
+              if (e.key === "ArrowRight" || e.code === "ArrowRight" || e.key === "Right") {
+                nextIndex = (focusedBillIndex + 1) % billOptions.length;
+              } else {
+                nextIndex = (focusedBillIndex - 1 + billOptions.length) % billOptions.length;
+              }
+              setFocusedBillIndex(nextIndex);
+              return;
+            } else if (activeSection === "finalize") {
+              setFinalizeFocus((prev) => (prev === "finalize" ? "back" : "finalize"));
+              return;
+            }
+          }
+        }
+
+        // Captura directa de teclado numérico físico (0-9, punto, backspace, delete)
+        const isNumericKey = /^[0-9]$/.test(e.key);
+        const isDecimalKey = e.key === "." || e.key === "," || e.code === "NumpadDecimal";
+        const isBackspace = e.key === "Backspace";
+        const isDelete = e.key === "Delete";
+
+        if (!isEditableInput && showPaymentOptions) {
+          if (paymentMethod === "cash") {
+            if (isNumericKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveSection("bills");
+              setPaymentAmountReceived((prev: string) => {
+                const isExactPreset = prev === total.toFixed(2);
+                if (isExactPreset || !prev || prev === "0") {
+                  return e.key;
+                }
+                return prev + e.key;
+              });
+              return;
+            }
+
+            if (isDecimalKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveSection("bills");
+              setPaymentAmountReceived((prev: string) => {
+                const isExactPreset = prev === total.toFixed(2);
+                if (isExactPreset || !prev) return "0.";
+                if (!prev.includes(".")) return prev + ".";
+                return prev;
+              });
+              return;
+            }
+
+            if (isBackspace) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveSection("bills");
+              setPaymentAmountReceived((prev: string) => {
+                const isExactPreset = prev === total.toFixed(2);
+                if (isExactPreset || prev.length <= 1) return "";
+                return prev.slice(0, -1);
+              });
+              return;
+            }
+
+            if (isDelete) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveSection("bills");
+              setPaymentAmountReceived("");
+              return;
+            }
+          }
+
+          if (paymentMethod === "card" || paymentMethod === "transfer") {
+            if (isNumericKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              setPaymentCardLastFour((prev: string) => ((prev || "") + e.key).slice(0, 4));
+              return;
+            }
+
+            if (isBackspace) {
+              e.preventDefault();
+              e.stopPropagation();
+              setPaymentCardLastFour((prev: string) => (prev || "").slice(0, -1));
+              return;
+            }
+
+            if (isDelete) {
+              e.preventDefault();
+              e.stopPropagation();
+              setPaymentCardLastFour("");
+              return;
+            }
+          }
+        }
+
+        if (e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "F5" || e.code === "F5") {
+          if (isInputField) {
+            target.blur();
+          }
           e.preventDefault();
           e.stopPropagation();
 
@@ -188,6 +386,49 @@ if (currentUser?.role === "mesero") {
             setShowPaymentOptions(true);
           } else {
             if (hasTriggeredRef.current || isProcessingPayment) return;
+
+            // Si está en la sección de finalizar pago:
+            if (activeSection === "finalize") {
+              if (finalizeFocus === "back") {
+                setShowPaymentOptions(false);
+                return;
+              } else {
+                handleFinalizePayment();
+                return;
+              }
+            }
+
+            // Si está en la sección de billetes y presiona Enter sobre una opción enfocada:
+            if (activeSection === "bills" && paymentMethod === "cash") {
+              const selectedBill = billOptions[focusedBillIndex];
+              if (selectedBill.id === "exacto") {
+                if (paymentAmountReceived !== total.toFixed(2)) {
+                  setPaymentAmountReceived(total.toFixed(2));
+                  return;
+                }
+              } else if (selectedBill.val) {
+                const cur = parseFloat(paymentAmountReceived) || 0;
+                setPaymentAmountReceived((cur + selectedBill.val).toString());
+                return;
+              } else if (selectedBill.id === "numpad") {
+                openNumpad(paymentAmountReceived || total.toFixed(2), total, "checkout");
+                return;
+              } else if (selectedBill.id === "clear") {
+                setPaymentAmountReceived("");
+                return;
+              }
+            }
+
+            // Si es efectivo y aún no se ha colocado el monto recibido (o es menor al total):
+            if (
+              paymentMethod === "cash" &&
+              (Number(paymentAmountReceived) < total || !paymentAmountReceived)
+            ) {
+              setPaymentAmountReceived(total.toFixed(2));
+              setActiveSection("bills");
+              return;
+            }
+
             const canFinalize =
               !(
                 paymentMethod === "cash" &&
@@ -209,6 +450,24 @@ if (currentUser?.role === "mesero") {
             }
           }
         }
+
+        // Atajo ESC: Retroceder / Cancelar cobro
+        if (e.key === "Escape" || e.code === "Escape") {
+          if (isInputField) {
+            target.blur();
+          }
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (showPaymentOptions) {
+            setShowPaymentOptions(false);
+          } else {
+            const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : "table-details");
+            setAppMode(nextMode);
+            setPrecuentaComensal(1);
+            setPrecuentaTab("resumen");
+          }
+        }
       };
 
       window.addEventListener("keydown", handleKeyDown);
@@ -221,6 +480,16 @@ if (currentUser?.role === "mesero") {
       total,
       selectedTenant,
       paymentCardLastFour,
+      setPaymentAmountReceived,
+      setPaymentMethod,
+      openNumpad,
+      finalizePayment,
+      availablePaymentMethods,
+      setPaymentCardLastFour,
+      activeSection,
+      focusedBillIndex,
+      billOptions,
+      finalizeFocus,
     ]);
 
     return (
@@ -777,7 +1046,7 @@ if (currentUser?.role === "mesero") {
                           expand="block"
                           color="success"
                           onClick={() => setShowPaymentOptions(true)}
-                          title="Cobrar (Presiona F5)"
+                          title="Cobrar (Presiona ENTER)"
                           style={{
                             height: "60px",
                             "--border-radius": "16px",
@@ -785,64 +1054,85 @@ if (currentUser?.role === "mesero") {
                             fontSize: "1.2rem",
                           }}
                         >
-                          COBRAR (F5) 💳
+                          COBRAR (ENTER) 💳
                         </IonButton>
                       ) : (
                         <div style={{ animation: "fadeIn 0.3s ease" }}>
-                          <IonText color="medium">
-                            <p
-                              style={{
-                                fontSize: "0.75rem",
-                                fontWeight: "bold",
-                                textTransform: "uppercase",
-                                textAlign: "center",
-                                marginBottom: "12px",
-                              }}
-                            >
-                              Seleccione Método de Pago
-                            </p>
-                          </IonText>
-                          <IonSegment
-                            value={paymentMethod}
-                            onIonChange={(e) => {
-                              const method = e.detail.value as any;
-                              setPaymentMethod(method);
-                              if (method === "cash") {
-                                setPaymentAmountReceived(total.toFixed(2));
-                              } else {
-                                setPaymentAmountReceived("");
-                              }
-                              if (method === "transfer") {
-                                openNumpad(paymentCardLastFour || "", 0, "card_digits");
-                              }
+                          <div
+                            onClick={() => setActiveSection("methods")}
+                            style={{
+                              padding: "14px 16px",
+                              borderRadius: "20px",
+                              transition: "all 0.25s ease",
+                              background: activeSection === "methods" ? "#e0e7ff" : "#f8fafc",
+                              border: activeSection === "methods" ? "3px solid #4f46e5" : "2px solid #cbd5e1",
+                              boxShadow: activeSection === "methods" ? "0 8px 25px rgba(79, 70, 229, 0.28)" : "none",
+                              marginBottom: "16px",
+                              cursor: "pointer",
                             }}
-                            style={{ marginBottom: "16px" }}
                           >
-                            {selectedTenant?.allowEfectivo !== false && (
-                              <IonSegmentButton value="cash">
-                                <IonIcon icon={cashOutline} />
-                                <IonLabel style={{ fontSize: "11px" }}>Efectivo</IonLabel>
-                              </IonSegmentButton>
-                            )}
-                            {selectedTenant?.allowLupay !== false && (
-                              <IonSegmentButton value="lupay">
-                                <IonIcon icon={flashOutline} />
-                                <IonLabel style={{ fontSize: "11px" }}>Lúpay</IonLabel>
-                              </IonSegmentButton>
-                            )}
-                            {selectedTenant?.allowTarjeta !== false && (
-                              <IonSegmentButton value="card">
-                                <IonIcon icon={cardOutline} />
-                                <IonLabel style={{ fontSize: "11px" }}>Tarjeta</IonLabel>
-                              </IonSegmentButton>
-                            )}
-                            {selectedTenant?.allowTransferencia !== false && (
-                              <IonSegmentButton value="transfer">
-                                <IonIcon icon={swapHorizontalOutline} />
-                                <IonLabel style={{ fontSize: "11px" }}>Transf.</IonLabel>
-                              </IonSegmentButton>
-                            )}
-                          </IonSegment>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                              <p
+                                style={{
+                                  fontSize: "0.85rem",
+                                  fontWeight: "900",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.5px",
+                                  margin: 0,
+                                  color: activeSection === "methods" ? "#312e81" : "#475569",
+                                }}
+                              >
+                                💳 Método de Pago
+                              </p>
+                              <span
+                                style={{
+                                  fontSize: "0.72rem",
+                                  fontWeight: "900",
+                                  color: activeSection === "methods" ? "#ffffff" : "#475569",
+                                  background: activeSection === "methods" ? "#4338ca" : "#e2e8f0",
+                                  padding: "3px 10px",
+                                  borderRadius: "8px",
+                                  border: activeSection === "methods" ? "1px solid #312e81" : "1px solid #cbd5e1",
+                                  boxShadow: activeSection === "methods" ? "0 2px 6px rgba(67, 56, 202, 0.3)" : "none",
+                                }}
+                              >
+                                {activeSection === "methods" ? "● ACTIVO: Flechas ◄ ► cambian | Pulsa ↓ para Billetes" : "Pulsa ↑ para Activar Métodos"}
+                              </span>
+                            </div>
+                            <IonSegment
+                              value={paymentMethod}
+                              onIonChange={(e) => {
+                                const method = e.detail.value as any;
+                                handleSelectPaymentMethod(method);
+                              }}
+                              style={{ marginBottom: "0px" }}
+                            >
+                              {selectedTenant?.allowEfectivo !== false && (
+                                <IonSegmentButton value="cash">
+                                  <IonIcon icon={cashOutline} />
+                                  <IonLabel style={{ fontSize: "11px" }}>Efectivo</IonLabel>
+                                </IonSegmentButton>
+                              )}
+                              {selectedTenant?.allowLupay !== false && (
+                                <IonSegmentButton value="lupay">
+                                  <IonIcon icon={flashOutline} />
+                                  <IonLabel style={{ fontSize: "11px" }}>Lúpay</IonLabel>
+                                </IonSegmentButton>
+                              )}
+                              {selectedTenant?.allowTarjeta !== false && (
+                                <IonSegmentButton value="card">
+                                  <IonIcon icon={cardOutline} />
+                                  <IonLabel style={{ fontSize: "11px" }}>Tarjeta</IonLabel>
+                                </IonSegmentButton>
+                              )}
+                              {selectedTenant?.allowTransferencia !== false && (
+                                <IonSegmentButton value="transfer">
+                                  <IonIcon icon={swapHorizontalOutline} />
+                                  <IonLabel style={{ fontSize: "11px" }}>Transf.</IonLabel>
+                                </IonSegmentButton>
+                              )}
+                            </IonSegment>
+                          </div>
 
                           {/* Debit / Credit card subtype selection */}
                           {false && paymentMethod === "card" && requiresInvoice && (
@@ -994,14 +1284,45 @@ if (currentUser?.role === "mesero") {
                           {/* Cash Input */}
                           {paymentMethod === "cash" && (
                             <div
+                              onClick={() => setActiveSection("bills")}
                               style={{
                                 marginBottom: "16px",
                                 padding: "16px",
-                                background: "#f1f5f9",
-                                borderRadius: "16px",
-                                border: "2px solid #cbd5e1",
+                                background: activeSection === "bills" ? "#dcfce7" : "#f8fafc",
+                                borderRadius: "20px",
+                                border: activeSection === "bills" ? "3px solid #16a34a" : "2px solid #cbd5e1",
+                                boxShadow: activeSection === "bills" ? "0 8px 25px rgba(22, 163, 74, 0.28)" : "none",
+                                transition: "all 0.25s ease",
+                                cursor: "pointer",
                               }}
                             >
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                                <IonText
+                                  style={{
+                                    fontWeight: "900",
+                                    display: "block",
+                                    fontSize: "0.9rem",
+                                    color: activeSection === "bills" ? "#064e3b" : "#475569",
+                                  }}
+                                >
+                                  Efectivo Recibido 💵
+                                </IonText>
+                                <span
+                                  style={{
+                                    fontSize: "0.72rem",
+                                    fontWeight: "900",
+                                    color: activeSection === "bills" ? "#ffffff" : "#475569",
+                                    background: activeSection === "bills" ? "#15803d" : "#e2e8f0",
+                                    padding: "3px 10px",
+                                    borderRadius: "8px",
+                                    border: activeSection === "bills" ? "1px solid #14532d" : "1px solid #cbd5e1",
+                                    boxShadow: activeSection === "bills" ? "0 2px 6px rgba(21, 128, 61, 0.3)" : "none",
+                                  }}
+                                >
+                                  {activeSection === "bills" ? "● ACTIVO: Flechas ◄ ► seleccionan Billete | Pulsa ↑ para Métodos" : "Pulsa ↓ para Activar Billetes"}
+                                </span>
+                              </div>
+
                               <div
                                 style={{
                                   display: "flex",
@@ -1012,23 +1333,13 @@ if (currentUser?.role === "mesero") {
                                 }}
                               >
                                 <div style={{ flex: 1 }}>
-                                  <IonText
-                                    style={{
-                                      fontWeight: "bold",
-                                      display: "block",
-                                      marginBottom: "4px",
-                                      fontSize: "0.85rem",
-                                      color: "#64748b",
-                                    }}
-                                  >
-                                    Efectivo Recibido 💵
-                                  </IonText>
                                   <input
                                     type="text"
                                     inputMode="none"
                                     readOnly={true}
                                     value={paymentAmountReceived}
                                     onClick={() => {
+                                      setActiveSection("bills");
                                       openNumpad(
                                         paymentAmountReceived || total.toFixed(2),
                                         total,
@@ -1039,7 +1350,6 @@ if (currentUser?.role === "mesero") {
                                       setPaymentAmountReceived(e.target.value)
                                     }
                                     placeholder="0.00"
-                                    autoFocus
                                     style={{
                                       width: "100%",
                                       border: "none",
@@ -1055,6 +1365,7 @@ if (currentUser?.role === "mesero") {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    setActiveSection("bills");
                                     openNumpad(
                                       paymentAmountReceived || total.toFixed(2),
                                       total,
@@ -1091,7 +1402,7 @@ if (currentUser?.role === "mesero") {
                                 <span
                                   style={{
                                     fontSize: "0.75rem",
-                                    color: "#64748b",
+                                    color: activeSection === "bills" ? "#047857" : "#64748b",
                                     fontWeight: "bold",
                                     display: "block",
                                     marginBottom: "8px",
@@ -1099,8 +1410,7 @@ if (currentUser?.role === "mesero") {
                                     letterSpacing: "0.5px",
                                   }}
                                 >
-                                  Suma Rápida de Billetes 💵 (Toca para sumar
-                                  acumulado)
+                                  Suma Rápida de Billetes 💵 (Navega con ◄ ► o teclea números)
                                 </span>
                                 <div
                                   style={{
@@ -1109,72 +1419,72 @@ if (currentUser?.role === "mesero") {
                                     overflowX: "auto",
                                     paddingBottom: "6px",
                                     scrollbarWidth: "none",
+                                    alignItems: "center",
                                   }}
                                   className="no-scrollbar"
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setPaymentAmountReceived(total.toFixed(2))
+                                  {billOptions.map((opt, idx) => {
+                                    const isFocused = activeSection === "bills" && focusedBillIndex === idx;
+                                    const isExact = opt.id === "exacto";
+                                    const isNumpad = opt.id === "numpad";
+                                    const isClear = opt.id === "clear";
+
+                                    let bg = "white";
+                                    let color = "#0f172a";
+                                    let border = "1px solid #cbd5e1";
+
+                                    if (isExact) {
+                                      bg = "#3b82f6";
+                                      color = "white";
+                                      border = "none";
+                                    } else if (isNumpad) {
+                                      bg = "#eff6ff";
+                                      color = "#2563eb";
+                                      border = "1px solid #bfdbfe";
+                                    } else if (isClear) {
+                                      bg = "#fee2e2";
+                                      color = "#ef4444";
+                                      border = "1px solid #fca5a5";
                                     }
-                                    style={{
-                                      background: "#3b82f6",
-                                      color: "white",
-                                      border: "none",
-                                      padding: "6px 12px",
-                                      borderRadius: "10px",
-                                      fontSize: "0.75rem",
-                                      fontWeight: "bold",
-                                      whiteSpace: "nowrap",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    🎯 Exacto
-                                  </button>
-                                  {[20, 50, 100, 200, 500, 1000].map((val) => (
-                                    <button
-                                      key={val}
-                                      type="button"
-                                      onClick={() => {
-                                        const cur =
-                                          parseFloat(paymentAmountReceived) ||
-                                          0;
-                                        setPaymentAmountReceived(
-                                          (cur + val).toString(),
-                                        );
-                                      }}
-                                      style={{
-                                        background: "white",
-                                        color: "#0f172a",
-                                        border: "1px solid #cbd5e1",
-                                        padding: "6px 10px",
-                                        borderRadius: "10px",
-                                        fontSize: "0.75rem",
-                                        fontWeight: "800",
-                                        whiteSpace: "nowrap",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      💵 +${val}
-                                    </button>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    onClick={() => setPaymentAmountReceived("")}
-                                    style={{
-                                      background: "#fee2e2",
-                                      color: "#ef4444",
-                                      border: "1px solid #fca5a5",
-                                      padding: "6px 12px",
-                                      borderRadius: "10px",
-                                      fontSize: "0.75rem",
-                                      fontWeight: "bold",
-                                      whiteSpace: "nowrap",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    🚫 Borrar
-                                  </button>
+
+                                    return (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveSection("bills");
+                                          setFocusedBillIndex(idx);
+                                          if (isExact) {
+                                            setPaymentAmountReceived(total.toFixed(2));
+                                          } else if (opt.val) {
+                                            const cur = parseFloat(paymentAmountReceived) || 0;
+                                            setPaymentAmountReceived((cur + opt.val).toString());
+                                          } else if (isNumpad) {
+                                            openNumpad(paymentAmountReceived || total.toFixed(2), total, "checkout");
+                                          } else if (isClear) {
+                                            setPaymentAmountReceived("");
+                                          }
+                                        }}
+                                        style={{
+                                          background: bg,
+                                          color: color,
+                                          border: isFocused ? "2px solid #10b981" : border,
+                                          padding: "6px 12px",
+                                          borderRadius: "10px",
+                                          fontSize: "0.75rem",
+                                          fontWeight: isFocused ? "900" : "800",
+                                          whiteSpace: "nowrap",
+                                          cursor: "pointer",
+                                          transform: isFocused ? "scale(1.08)" : "scale(1)",
+                                          boxShadow: isFocused ? "0 0 0 3px rgba(16, 185, 129, 0.4), 0 4px 10px rgba(0,0,0,0.12)" : "none",
+                                          transition: "all 0.15s ease",
+                                          zIndex: isFocused ? 2 : 1,
+                                        }}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
 
@@ -1283,50 +1593,91 @@ if (currentUser?.role === "mesero") {
                              )}
                            </div>
 
-                          <div style={{ display: "flex", gap: "8px" }}>
-                            <IonButton
-                              fill="outline"
-                              color="medium"
-                              onClick={() => setShowPaymentOptions(false)}
-                              style={{
-                                flex: 1,
-                                height: "55px",
-                                "--border-radius": "16px",
-                              }}
-                            >
-                              Atrás
-                            </IonButton>
-                            <IonButton
-                              expand="block"
-                              color="primary"
-                              onClick={handleFinalizePayment}
-                              disabled={
-                                isProcessingPayment ||
-                                (paymentMethod === "cash" &&
-                                  (Number(paymentAmountReceived) < total ||
-                                    !paymentAmountReceived)) ||
-                                (paymentMethod === "card" &&
-                                  (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4))) ||
-                                (paymentMethod === "transfer" &&
-                                  (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)))
-                              }
-                              title="Finalizar Pago (Presiona F5)"
-                              style={{
-                                flex: 2,
-                                height: "55px",
-                                "--border-radius": "16px",
-                                fontWeight: "900",
-                              }}
-                            >
-                              {isProcessingPayment ? (
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-                                  <IonSpinner name="crescent" color="light" />
-                                  <span>PROCESANDO...</span>
-                                </div>
-                              ) : (
-                                "FINALIZAR PAGO (F5) ✅"
-                              )}
-                            </IonButton>
+                          <div
+                            onClick={() => {
+                              setActiveSection("finalize");
+                              setFinalizeFocus("finalize");
+                            }}
+                            style={{
+                              marginTop: "16px",
+                              padding: "14px 16px",
+                              borderRadius: "20px",
+                              background: activeSection === "finalize" ? "#dbeafe" : "#f8fafc",
+                              border: activeSection === "finalize" ? "3px solid #2563eb" : "2px solid #cbd5e1",
+                              boxShadow: activeSection === "finalize" ? "0 8px 25px rgba(37, 99, 235, 0.28)" : "none",
+                              transition: "all 0.25s ease",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+                              <span
+                                style={{
+                                  fontSize: "0.72rem",
+                                  fontWeight: "900",
+                                  color: activeSection === "finalize" ? "#ffffff" : "#475569",
+                                  background: activeSection === "finalize" ? "#1d4ed8" : "#e2e8f0",
+                                  padding: "3px 10px",
+                                  borderRadius: "8px",
+                                  border: activeSection === "finalize" ? "1px solid #1e40af" : "1px solid #cbd5e1",
+                                  boxShadow: activeSection === "finalize" ? "0 2px 6px rgba(29, 78, 216, 0.3)" : "none",
+                                  transition: "all 0.2s ease",
+                                }}
+                              >
+                                {activeSection === "finalize" ? "● ACTIVO: Pulsa ENTER para Finalizar Pago | Pulsa ↑ para Volver Arriba" : "Pulsa ↓ para Finalizar Pago"}
+                              </span>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <IonButton
+                                fill="outline"
+                                color="medium"
+                                onClick={() => setShowPaymentOptions(false)}
+                                style={{
+                                  flex: 1,
+                                  height: "55px",
+                                  "--border-radius": "16px",
+                                  transform: activeSection === "finalize" && finalizeFocus === "back" ? "scale(1.03)" : "scale(1)",
+                                  boxShadow: activeSection === "finalize" && finalizeFocus === "back" ? "0 0 0 3px #94a3b8, 0 4px 12px rgba(0,0,0,0.1)" : "none",
+                                  fontWeight: activeSection === "finalize" && finalizeFocus === "back" ? "900" : "bold",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
+                                Atrás
+                              </IonButton>
+                              <IonButton
+                                expand="block"
+                                color="primary"
+                                onClick={handleFinalizePayment}
+                                disabled={
+                                  isProcessingPayment ||
+                                  (paymentMethod === "cash" &&
+                                    (Number(paymentAmountReceived) < total ||
+                                      !paymentAmountReceived)) ||
+                                  (paymentMethod === "card" &&
+                                    (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4))) ||
+                                  (paymentMethod === "transfer" &&
+                                    (selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)))
+                                }
+                                title="Finalizar Pago (Presiona ENTER)"
+                                style={{
+                                  flex: 2,
+                                  height: "55px",
+                                  "--border-radius": "16px",
+                                  fontWeight: "900",
+                                  transform: activeSection === "finalize" && finalizeFocus === "finalize" ? "scale(1.03)" : "scale(1)",
+                                  boxShadow: activeSection === "finalize" && finalizeFocus === "finalize" ? "0 0 0 4px #3b82f6, 0 8px 20px rgba(59, 130, 246, 0.45)" : "none",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
+                                {isProcessingPayment ? (
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                                    <IonSpinner name="crescent" color="light" />
+                                    <span>PROCESANDO...</span>
+                                  </div>
+                                ) : (
+                                  "FINALIZAR PAGO (ENTER) ✅"
+                                )}
+                              </IonButton>
+                            </div>
                           </div>
                         </div>
                       )}

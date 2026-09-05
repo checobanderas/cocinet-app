@@ -11,6 +11,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 import { logoToUse, logoUrl } from 'ionicons/icons';
+import { getLockedTerminalTenantId } from '../../services/pwaTerminalService';
 
 interface LoginViewProps {
   setCompanyCatalog: any;
@@ -306,6 +307,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [confirmMasterPinInput, setConfirmMasterPinInput] = React.useState("");
   const [isSavingMasterPin, setIsSavingMasterPin] = React.useState(false);
 
+  // 🏢 Resolver Tenant activo e identidad de marca (Logo / Avatar / Nombre)
+  const lockedTerminalId = typeof window !== "undefined" ? getLockedTerminalTenantId() : null;
+  const effectiveTenant = selectedTenant || (lockedTerminalId ? COMPANY_CATALOG?.find((c: any) => c.id === lockedTerminalId) : null);
+
+  const effectiveOwnerObj = effectiveTenant?.ownerKey
+    ? (Array.isArray(customOwners) ? customOwners.find((o: any) => o.key === effectiveTenant.ownerKey) : null)
+    : null;
+
+  const resolvedTenantLogo = (effectiveTenant && (effectiveTenant.logoUrl || effectiveTenant.logo)) || (effectiveOwnerObj && effectiveOwnerObj.logo) || "";
+  const resolvedTenantName = effectiveTenant ? (effectiveTenant.name || effectiveTenant.sucursalDefault || "COCINET") : "COCINET Pro";
+  const resolvedTenantAvatar = effectiveTenant?.avatar || "🍽️";
+  const resolvedAccentColor = effectiveTenant?.accentColor || "#2563eb";
+  const neutralPlatformLogo = "https://img.icons8.com/fluency/256/restaurant.png";
+
 return (
       <IonPage>
         <TenantUsersModal
@@ -525,7 +540,7 @@ return (
                   }}
                 ></div>
 
-                {/* 🌊 MARCA DE AGUA DEL LOGO OFICIAL COCINET */}
+                {/* 🌊 MARCA DE AGUA DEL LOGO OFICIAL COCINET / TENANT */}
                 {/* 🎨 EMBLEMA / LOGO DE FONDO (MARCA DE AGUA) */}
                 <div
                   style={{
@@ -535,24 +550,51 @@ return (
                     transform: "translate(-50%, -50%)",
                     width: "min(85vw, 480px)",
                     height: "min(85vh, 480px)",
-                    backgroundImage: `url('${(selectedTenant && (selectedTenant.logoUrl || selectedTenant.logo)) ? (selectedTenant.logoUrl || selectedTenant.logo) : '/cocinet-logo.png'}')`,
+                    backgroundImage: resolvedTenantLogo
+                      ? `url('${resolvedTenantLogo}')`
+                      : `url('${neutralPlatformLogo}')`,
                     backgroundRepeat: "no-repeat",
                     backgroundPosition: "center",
                     backgroundSize: "contain",
-                    opacity: 0.12,
+                    opacity: resolvedTenantLogo ? 0.12 : 0.04,
                     pointerEvents: "none",
                     zIndex: 1,
                   }}
                 />
 
-                {/* 🎨 EMBLEMA / LOGO SUPERIOR DEL SISTEMA */}
+                {/* 🎨 EMBLEMA / LOGO SUPERIOR DEL SISTEMA O DE LA SUCURSAL */}
                 <div className="relative z-10 mb-2 flex flex-col items-center justify-center">
-                  <img
-                    src={(selectedTenant && (selectedTenant.logoUrl || selectedTenant.logo)) ? (selectedTenant.logoUrl || selectedTenant.logo) : "/cocinet-logo.png"}
-                    alt={selectedTenant ? selectedTenant.name : "Logo COCINET"}
-                    className="h-20 sm:h-24 max-h-[22vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
-                    style={{ filter: "drop-shadow(0px 4px 10px rgba(45, 36, 28, 0.18))" }}
-                  />
+                  {resolvedTenantLogo ? (
+                    <img
+                      src={resolvedTenantLogo}
+                      alt={resolvedTenantName}
+                      className="h-20 sm:h-24 max-h-[22vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
+                      style={{ filter: "drop-shadow(0px 4px 10px rgba(45, 36, 28, 0.18))" }}
+                    />
+                  ) : effectiveTenant ? (
+                    <div className="flex flex-col items-center justify-center gap-1.5 p-2.5 px-5 rounded-2xl bg-white/80 backdrop-blur-xs border border-amber-900/15 shadow-xs">
+                      <div 
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl sm:text-4xl shadow-inner"
+                        style={{ backgroundColor: `${resolvedAccentColor}18`, border: `2px solid ${resolvedAccentColor}50` }}
+                      >
+                        <span>{resolvedTenantAvatar}</span>
+                      </div>
+                      <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800 text-center max-w-[280px] leading-tight">
+                        {resolvedTenantName}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <img
+                        src={neutralPlatformLogo}
+                        alt="COCINET Pro"
+                        className="h-16 sm:h-20 max-h-[18vh] w-auto object-contain drop-shadow-md"
+                      />
+                      <span className="text-sm sm:text-base font-black tracking-wider text-slate-900 uppercase">
+                        COCINET <span className="text-blue-600 font-extrabold">PRO</span>
+                      </span>
+                    </div>
+                  )}
                   <span
                     className="mt-2 px-3.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-widest text-[#2d241c]/75 bg-[#2d241c]/5 border border-[#2d241c]/10 shadow-2xs"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
@@ -838,7 +880,7 @@ return (
 
                     <div className="text-center space-y-1 pb-2">
                       <span className="text-[13px] uppercase font-extrabold text-indigo-700 tracking-widest bg-indigo-50 px-3.5 py-1 rounded-full inline-block mb-1.5 shadow-2xs">
-                        Acceso al Sistema 🔒
+                        {effectiveTenant ? `Sucursal: ${resolvedTenantName} 🏪` : "Acceso al Sistema 🔒"}
                       </span>
                       <h4 className="text-lg font-black text-slate-800 tracking-tight">
                         Ingrese su PIN de Seguridad 🔑
@@ -979,21 +1021,29 @@ return (
                             </div>
                           </div>
                
-                          {!restrictedOwnerKey && (
+                          {!restrictedOwnerKey && (activeOwnerFilter || !isMasterAdmin) && (
                             <button
                               type="button"
                               onClick={() => {
-                                setIsOwnerUnlocked(false);
-                                if (!isMasterAdmin) {
+                                if (isMasterAdmin) {
+                                  setActiveOwnerFilter(null);
+                                  localStorage.removeItem("cocinet_active_owner_filter");
+                                  triggerAppNotification(
+                                    "👥 Directorio de Patrones",
+                                    "Regresando al directorio general de propietarios.",
+                                    "info"
+                                  );
+                                } else {
+                                  setIsOwnerUnlocked(false);
                                   localStorage.setItem("cocinet_is_owner_unlocked", "false");
+                                  setActiveOwnerFilter(null);
+                                  localStorage.removeItem("cocinet_active_owner_filter");
+                                  triggerAppNotification(
+                                    "🔒 Filtro Retirado",
+                                    "Regresando a la selección del propietario principal.",
+                                    "info"
+                                  );
                                 }
-                                setActiveOwnerFilter(null);
-                                localStorage.removeItem("cocinet_active_owner_filter");
-                                triggerAppNotification(
-                                  "🔒 Filtro Retirado",
-                                  "Regresando a la selección del propietario principal.",
-                                  "info"
-                                );
                               }}
                               className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl px-4 py-2 text-xs font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-xs"
                             >

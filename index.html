@@ -9,16 +9,33 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="COCINET Pro" />
     <script>
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        document.title = "COCINET [DEV]";
-        document.write('<link rel="manifest" href="/manifest-dev.json" />');
-        document.write('<link rel="icon" href="https://img.icons8.com/plasticine/128/restaurant.png" type="image/png" />');
-        document.write('<link rel="apple-touch-icon" href="https://img.icons8.com/plasticine/512/restaurant.png" />');
-      } else {
-        document.write('<link rel="manifest" href="/manifest.json" />');
-        document.write('<link rel="icon" href="https://img.icons8.com/fluency/128/restaurant.png" type="image/png" />');
-        document.write('<link rel="apple-touch-icon" href="https://img.icons8.com/fluency/512/restaurant.png" />');
-      }
+      window.__COCINET_PWA_PROMPT__ = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__COCINET_PWA_PROMPT__ = e;
+        console.log('📲 [PWA Early Listener] Evento beforeinstallprompt capturado en index.html');
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__COCINET_PWA_PROMPT__ = null;
+        console.log('🎉 [PWA Early Listener] App instalada exitosamente.');
+      });
+
+      // Detectar tenant desde URL o candado de terminal de Windows
+      var params = new URLSearchParams(window.location.search);
+      var tenantParam = params.get('tenant') || params.get('sucursal') || params.get('company') || params.get('id');
+      var lockedTenant = localStorage.getItem('cocinet_locked_terminal_tenant_id');
+      var activeTenant = tenantParam || (lockedTenant ? lockedTenant.replace(/^tenant-/, '') : null);
+
+      var manifestHref = activeTenant 
+        ? ('/manifest-pwa.json?tenant=' + encodeURIComponent(activeTenant)) 
+        : ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '/manifest-dev.json' : '/manifest.json');
+      var iconHref = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+        ? 'https://img.icons8.com/plasticine/128/restaurant.png' 
+        : 'https://img.icons8.com/fluency/128/restaurant.png';
+
+      document.write('<link id="pwa-manifest-link" rel="manifest" href="' + manifestHref + '" />');
+      document.write('<link id="pwa-icon-link" rel="icon" href="' + iconHref + '" type="image/png" />');
+      document.write('<link id="pwa-apple-icon-link" rel="apple-touch-icon" href="' + iconHref + '" />');
     </script>
 
     <!-- Script de auto-recuperación de caché IndexedDB de Firestore contra límites de serialización en navegadores (ej: Firefox 256MB) -->

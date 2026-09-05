@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromCache,
   setDoc,
   updateDoc,
   onSnapshot,
@@ -18,6 +19,11 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { getOperatingDay } from "./appHelpers";
+import {
+  saveSaleToOutbox,
+  markOutboxSaleSynced,
+  saveSingleLocalHistoryItem,
+} from "./db";
 
 
 export enum OperationType {
@@ -149,7 +155,7 @@ export function getCurrentTenantId(): string {
         if (clean.startsWith("tenant-")) return clean;
         if (clean === "xoxo") return "tenant-1";
         if (clean === "plaxa bella" || clean.includes("bella")) return "tenant-2";
-        if (clean === "plaxa tecno" || clean === "tecno") return "tenant-3";
+        if (clean === "plaxa tecno" || clean === "tecno" || clean === "tlayudas" || clean.includes("tlayuda")) return "tenant-3";
         if (clean === "plaza tecno2" || clean === "tecno2") return "tenant-4";
         if (clean === "macro plaza" || clean.includes("macro")) return "tenant-5";
         if (clean === "universidad") return "tenant-6";
@@ -284,8 +290,25 @@ export function subscribeToHistory(
     collection(db, "history"),
     where("tenantId", "==", tenantId)
   );
+
+  // ⚡ Entrega inmediata en 0 milisegundos desde caché local de Firestore
+  getDocsFromCache(q)
+    .then((snap) => {
+      if (snap && !snap.empty) {
+        const cachedHistory = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        cachedHistory.sort((a: any, b: any) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return timeB - timeA;
+        });
+        callback(cachedHistory);
+      }
+    })
+    .catch(() => {});
+
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
       const history = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       // Sort in client (descending by timestamp)
@@ -999,6 +1022,15 @@ export async function checkoutTableInFirebase(
 
 
 
+  // 🛡️ BLINDAJE TRANSACCIONAL INMUTABLE (Zero Data Loss)
+  // Se asegura de inmediato en disco local (IndexedDB) antes de cualquier intento de red
+  try {
+    await saveSaleToOutbox(closedAccount);
+    await saveSingleLocalHistoryItem(closedAccount);
+  } catch (dbErr) {
+    console.warn("Error asegurando venta en Outbox local:", dbErr);
+  }
+
   const batch = writeBatch(db);
   batch.set(historyRef, closedAccount);
 
@@ -1078,6 +1110,11 @@ export async function checkoutTableInFirebase(
   }
 
   await runWrite(batch.commit());
+  // Acuse de recibo confirmado: marcamos la venta sincronizada en Outbox
+  try {
+    await markOutboxSaleSynced(closedId);
+  } catch (e) {}
+
   } finally {
     setTimeout(() => {
       activeCheckoutTables.delete(tableId);

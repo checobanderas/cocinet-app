@@ -1463,45 +1463,91 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         const companyName = ticketBusinessName || selectedTenant?.name || "Cocinet App";
         const textDailyReport = generateDailyReportText(history || [], products || [], targetOpDay, companyName);
 
-        const metaConfig = getWhatsAppCloudConfig();
+        // Recopilar destinatarios administradores de forma exhaustiva
+        const phonesSet = new Set<string>();
+        const recipients: Array<{ name: string; phone: string }> = [];
 
-        if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
-          const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
-          const recipients = tenantUsers.filter(
-            (u) =>
-              (u.isReportRecipient ||
-                u.id.endsWith("-admin") ||
-                u.id.endsWith("-manager") ||
-                u.id.endsWith("-sistemas") ||
-                u.role === "admin") &&
-              u.phone
-          );
-
-          if (recipients.length > 0) {
-            recipients.forEach((r) => {
-              // Envío 1: Corte de Turno (Saldo en Caja)
-              sendSilentWhatsAppMessage(r.phone!, textCorte).catch((e) =>
-                console.error("Error silent send corte:", e)
-              );
-              // Envío 2: Reporte del Día (Productos, Cuentas, Desglose) con intervalo suave
-              setTimeout(() => {
-                sendSilentWhatsAppMessage(r.phone!, textDailyReport).catch((e) =>
-                  console.error("Error silent send daily report:", e)
-                );
-              }, 1500);
-            });
-            triggerAppNotification(
-              "WhatsApp Silencioso Entregado 🚀✅",
-              `Corte de caja y Reporte del día enviados a (${recipients.map((r) => r.name).join(", ")}).`,
-              "success"
-            );
-          } else {
-            const encodedText = encodeURIComponent(textCorte);
-            window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+        const addRecipient = (name: string, rawPhone?: string) => {
+          if (!rawPhone) return;
+          const clean = rawPhone.replace(/\D/g, "");
+          if (clean.length >= 10 && !phonesSet.has(clean)) {
+            phonesSet.add(clean);
+            recipients.push({ name, phone: clean });
           }
+        };
+
+        const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+        tenantUsers.forEach((u) => {
+          if ((u.isReportRecipient || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.role === "admin") && u.phone) {
+            addRecipient(u.name, u.phone);
+          }
+        });
+
+        if (currentUser?.phone && (currentUser.role === "admin" || currentUser.id?.endsWith("-admin") || currentUser.id?.endsWith("-sistemas"))) {
+          addRecipient(currentUser.name || "Admin", currentUser.phone);
+        }
+        if (selectedTenant?.phone) addRecipient(selectedTenant.name || "Admin", selectedTenant.phone);
+        if (selectedTenant?.adminPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.adminPhone);
+        if (selectedTenant?.whatsappPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.whatsappPhone);
+
+        const metaConfig = getWhatsAppCloudConfig();
+        let anySentSilently = false;
+        let silentErrors: string[] = [];
+
+        if (metaConfig.isEnabled !== false && ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken))) {
+          if (recipients.length > 0) {
+            for (const r of recipients) {
+              try {
+                const resCorte = await sendSilentWhatsAppMessage(r.phone, textCorte);
+                if (resCorte.success) {
+                  anySentSilently = true;
+                  setTimeout(() => {
+                    sendSilentWhatsAppMessage(r.phone, textDailyReport).catch((e) => console.error("Error daily report silent send:", e));
+                  }, 1200);
+                } else {
+                  silentErrors.push(`${r.name}: ${resCorte.error || "Error de pasarela"}`);
+                }
+              } catch (e: any) {
+                silentErrors.push(`${r.name}: ${e.message || "Error de conexión"}`);
+              }
+            }
+          }
+        }
+
+        if (anySentSilently) {
+          triggerAppNotification(
+            "WhatsApp Silencioso Entregado 🚀✅",
+            `Corte de caja y Reporte del día enviados a (${recipients.map((r) => r.name).join(", ")}).`,
+            "success"
+          );
         } else {
           const encodedText = encodeURIComponent(textCorte);
-          window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+          const firstPhone = recipients[0]?.phone;
+          const waUrl = firstPhone
+            ? `https://wa.me/52${firstPhone}?text=${encodedText}`
+            : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+          window.open(waUrl, "_blank");
+
+          if (silentErrors.length > 0) {
+            triggerAppNotification(
+              "Aviso de Envío WhatsApp ⚠️",
+              `No se pudo enviar en segundo plano (${silentErrors[0]}). Se abrió WhatsApp para enviar manualmente.`,
+              "warning"
+            );
+          } else if (recipients.length === 0) {
+            triggerAppNotification(
+              "WhatsApp Preparado 📲",
+              "No se encontró un número de administrador registrado. Abriendo WhatsApp para seleccionar destinatario.",
+              "info"
+            );
+          } else {
+            triggerAppNotification(
+              "WhatsApp Preparado 📲",
+              `Abriendo WhatsApp para entregar a ${recipients[0]?.name || "Administrador"}.`,
+              "info"
+            );
+          }
         }
 
         // 3. Exportación y descarga automática del archivo Excel del Reporte Diario
@@ -1553,13 +1599,15 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       const phoneTarget = cleanPhone ? (cleanPhone.length === 10 ? `52${cleanPhone}` : cleanPhone) : "";
 
       const metaConfig = getWhatsAppCloudConfig();
-      if (metaConfig.phoneNumberId && metaConfig.accessToken && cleanPhone) {
-        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Conectando con Meta para entregar corte a +52 ${cleanPhone}...`, "info");
+      if (metaConfig.isEnabled !== false && ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) && cleanPhone) {
+        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Conectando con pasarela para entregar corte a +52 ${cleanPhone}...`, "info");
         const res = await sendSilentWhatsAppMessage(cleanPhone, text);
         setShowTestWhatsappModal(false);
         if (res.success) {
           triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte de prueba entregado en segundo plano a +52 ${cleanPhone}.`, "success");
           return;
+        } else {
+          triggerAppNotification("Aviso de Pasarela ⚠️", `${res.error || "No se pudo enviar automáticamente"}. Abriendo WhatsApp directo...`, "warning");
         }
       }
 
@@ -1587,36 +1635,54 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       const text = generateCorteText();
       const metaConfig = getWhatsAppCloudConfig();
 
-      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
-        const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
-        const recipients = tenantUsers.filter(
-          (u) =>
-            (u.isReportRecipient ||
-              u.id.endsWith("-admin") ||
-              u.id.endsWith("-manager") ||
-              u.id.endsWith("-sistemas") ||
-              u.role === "admin") &&
-            u.phone
-        );
+      const phonesSet = new Set<string>();
+      const recipients: Array<{ name: string; phone: string }> = [];
 
+      const addRecipient = (name: string, rawPhone?: string) => {
+        if (!rawPhone) return;
+        const clean = rawPhone.replace(/\D/g, "");
+        if (clean.length >= 10 && !phonesSet.has(clean)) {
+          phonesSet.add(clean);
+          recipients.push({ name, phone: clean });
+        }
+      };
+
+      const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+      tenantUsers.forEach((u) => {
+        if ((u.isReportRecipient || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.role === "admin") && u.phone) {
+          addRecipient(u.name, u.phone);
+        }
+      });
+      if (currentUser?.phone && (currentUser.role === "admin" || currentUser.id?.endsWith("-admin") || currentUser.id?.endsWith("-sistemas"))) {
+        addRecipient(currentUser.name || "Admin", currentUser.phone);
+      }
+      if (selectedTenant?.phone) addRecipient(selectedTenant.name || "Admin", selectedTenant.phone);
+      if (selectedTenant?.adminPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.adminPhone);
+      if (selectedTenant?.whatsappPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.whatsappPhone);
+
+      if (metaConfig.isEnabled !== false && ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken))) {
         if (recipients.length > 0) {
           triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Entregando corte a administradores...`, "info");
-          recipients.forEach((r) => {
-            sendSilentWhatsAppMessage(r.phone!, text).catch((e) =>
-              console.error("Error silent send:", e)
+          let sentOk = false;
+          for (const r of recipients) {
+            const res = await sendSilentWhatsAppMessage(r.phone, text);
+            if (res.success) sentOk = true;
+          }
+          if (sentOk) {
+            triggerAppNotification(
+              "WhatsApp Silencioso Entregado 🚀✅",
+              `Corte entregado en segundo plano a ${recipients.map((r) => r.name).join(", ")}.`,
+              "success"
             );
-          });
-          triggerAppNotification(
-            "WhatsApp Silencioso Entregado 🚀✅",
-            `Corte entregado en segundo plano a ${recipients.map((r) => r.name).join(", ")}.`,
-            "success"
-          );
-          return;
+            return;
+          }
         }
       }
 
       const encodedText = encodeURIComponent(text);
-      window.open(`https://api.whatsapp.com/send?text=${encodedText}`, "_blank");
+      const firstPhone = recipients[0]?.phone;
+      const waUrl = firstPhone ? `https://wa.me/52${firstPhone}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;
+      window.open(waUrl, "_blank");
       triggerAppNotification("WhatsApp", "Enlace de WhatsApp generado con éxito 📲💬", "success");
     };
 

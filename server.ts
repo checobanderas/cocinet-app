@@ -603,6 +603,85 @@ async function startServer() {
     }
   });
 
+  app.post('/api/printer-log', (req, res) => {
+    try {
+      const {
+        timestamp,
+        tipo,
+        area,
+        folio,
+        folioInterno,
+        mesa,
+        mesero,
+        printerName,
+        port,
+        items,
+        status,
+        durationMs,
+        errorMsg,
+        details
+      } = req.body;
+
+      const nowStr = timestamp || new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+      const separator = "=".repeat(80);
+      
+      let itemsBlock = "";
+      if (Array.isArray(items) && items.length > 0) {
+        itemsBlock = items.map((i: any) => `  * ${i.cantidad || i.quantity || 1}x ${i.nombre || i.name} [Cat: ${i.category || i.product?.category || 'N/A'}, Dest: ${i.destination || i.product?.destination || 'N/A'}]${i.notas || i.notes ? ' (Notas: ' + (i.notas || i.notes) + ')' : ''}`).join("\n");
+      } else {
+        itemsBlock = "  (Sin detalle de ítems o reporte general)";
+      }
+
+      const logText = [
+        separator,
+        `[${nowStr}] ENVÍO A IMPRESORA: ${(area || tipo || "DESCONOCIDO").toUpperCase()}`,
+        `- Folio: ${folio || "S/F"} (Cmd #${folioInterno || folio || "S/F"}) | Mesa: ${mesa || "S/M"} | Mesero: ${mesero || "S/M"}`,
+        `- Destino Lógico: ${area || "general"} | Impresora Destino: ${printerName || area || "default"} | Puerto: ${port || "3010"}`,
+        `- Ítems enviados en este ticket (${Array.isArray(items) ? items.length : 0} items):`,
+        itemsBlock,
+        `- Estado del Envío: ${status === "SUCCESS" ? "✅ EXITOSO" : status === "DUPLICATE" ? "⚠️ DUPLICADO" : "❌ ERROR"} (${durationMs ? durationMs + "ms" : ""})`,
+        errorMsg ? `- Detalle del Error: ${errorMsg}` : null,
+        details ? `- Info Adicional: ${typeof details === 'object' ? JSON.stringify(details) : details}` : null,
+        ""
+      ].filter(Boolean).join("\n");
+
+      // Escribir en dist/envioprinter.log y en envioprinter.log de la raíz
+      const logPaths = [
+        path.join(process.cwd(), 'dist', 'envioprinter.log'),
+        path.join(process.cwd(), 'envioprinter.log')
+      ];
+
+      for (const p of logPaths) {
+        try {
+          const dir = path.dirname(p);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.appendFileSync(p, logText + "\n", 'utf8');
+        } catch (e) {
+          console.warn(`No se pudo escribir en log: ${p}`, e);
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error en /api/printer-log:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/printer-log', (req, res) => {
+    try {
+      const p = path.join(process.cwd(), 'dist', 'envioprinter.log');
+      if (fs.existsSync(p)) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(fs.readFileSync(p, 'utf8'));
+      } else {
+        res.send("No hay registros aún en envioprinter.log");
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/config/:key', (req, res) => {
     const { value } = req.body;
     db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').run(req.params.key, value);
@@ -1100,6 +1179,71 @@ Retorna EXCLUSIVAMENTE el JSON directo, sin bloques markdown de código (como \`
     } catch (error: any) {
       console.error("Error designing database in server:", error);
       res.status(500).json({ error: error.message || "Fallo de Gemini al procesar diseño de base de datos." });
+    }
+  });
+
+  // Dynamic PWA Web App Manifest Endpoint para Windows / Edge
+  app.get('/manifest-pwa.json', (req, res) => {
+    try {
+      const tenantParam = String(req.query.tenant || req.query.id || '').trim();
+      const tenantNameParam = String(req.query.name || '').trim();
+      const logoParam = String(req.query.logo || '').trim();
+      const colorParam = String(req.query.color || '#0f172a').trim();
+
+      let appName = 'COCINET Pro Version 2026';
+      let shortName = 'COCINET Pro';
+      let startUrl = '/';
+      let themeColor = '#0f172a';
+      let iconSrc = 'https://img.icons8.com/fluency/512/restaurant.png';
+
+      if (tenantParam) {
+        const cleanId = tenantParam.replace(/^tenant-/, '');
+        const cleanName = tenantNameParam || `Sucursal ${cleanId}`;
+        appName = `COCINET - ${cleanName}`;
+        shortName = cleanName.length > 12 ? cleanName.slice(0, 12) : cleanName;
+        startUrl = `/?tenant=${encodeURIComponent(cleanId)}`;
+        themeColor = colorParam || '#0f172a';
+        if (logoParam && logoParam.startsWith('http')) {
+          iconSrc = logoParam;
+        }
+      }
+
+      const isSvg = iconSrc.startsWith('data:image/svg+xml');
+      const iconType = isSvg ? 'image/svg+xml' : 'image/png';
+
+      const manifestData = {
+        id: `cocinet-pwa-${tenantParam || 'default'}`,
+        name: appName,
+        short_name: shortName,
+        description: `Sistema de restaurante inteligente COCINET Pro para ${appName}`,
+        start_url: startUrl,
+        scope: '/',
+        display: 'standalone',
+        background_color: '#0f172a',
+        theme_color: themeColor,
+        orientation: 'portrait',
+        icons: [
+          {
+            src: iconSrc,
+            sizes: '512x512',
+            type: iconType,
+            purpose: 'any maskable'
+          },
+          {
+            src: iconSrc,
+            sizes: '192x192',
+            type: iconType,
+            purpose: 'any maskable'
+          }
+        ]
+      };
+
+      res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.json(manifestData);
+    } catch (err: any) {
+      console.error('Error generating manifest-pwa.json:', err);
+      return res.status(500).json({ error: 'Error generating manifest' });
     }
   });
 

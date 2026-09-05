@@ -1,5 +1,5 @@
-import { Comanda, Destination, TableData, ClosedAccount } from '../utils/appHelpers';
-import { getFormattedProductName } from '../utils/appHelpers';
+import { Comanda, Destination, TableData, ClosedAccount, getFormattedProductName, getProductDestination } from '../utils/appHelpers';
+import { formatComandaItemLines } from '../utils/formatters';
 import { createTransport, PrinterArea, EscPosDriver, PosPrinterJob } from '../utils/printer';
 import { addPedidoToPrinter, getMexicoISOString } from '../utils/firestore';
 
@@ -15,11 +15,11 @@ export interface ComandaPrintOptions {
   systemLocalWindowsAutoPrint?: boolean;
 }
 
-export function getComandaDestinations(comanda: Comanda): Destination[] {
-  const dests = new Set<Destination>();
-  comanda.items.forEach((item) => {
-    if (!item.isCancelled && item.product.destination) {
-      dests.add(item.product.destination as Destination);
+export function getComandaDestinations(comanda: Comanda): ("kitchen" | "bar")[] {
+  const dests = new Set<"kitchen" | "bar">();
+  (comanda?.items || []).forEach((item) => {
+    if (!item.isCancelled && item.product) {
+      dests.add(getProductDestination(item.product));
     }
   });
   return Array.from(dests);
@@ -39,10 +39,10 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
   } = options;
 
   const filteredItems = target
-    ? comanda.items.filter(
-        (item) => !item.isCancelled && item.product.destination === target,
+    ? (comanda?.items || []).filter(
+        (item) => !item.isCancelled && getProductDestination(item.product) === target,
       )
-    : comanda.items.filter((item) => !item.isCancelled);
+    : (comanda?.items || []).filter((item) => !item.isCancelled);
 
   if (filteredItems.length === 0) {
     return false;
@@ -58,21 +58,24 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
 
       addPedidoToPrinter(selectedTenant.id, {
         folio: comanda.folio,
+        folioInterno: comanda.folioInterno || null,
         mesa: tableLabel,
         items: filteredItems.map((i) => ({
           nombre: getFormattedProductName(i.product),
           cantidad: i.quantity,
           notas: i.notes || "",
           comensal: i.plate,
+          destination: getProductDestination(i.product),
         })),
         tipo: "comanda",
-        area: target || "general",
+        area: target === "bar" ? "barra" : target === "kitchen" ? "cocina" : (target || "cocina"),
         timestamp: getMexicoISOString(),
         mesero: comanda.createdBy?.name || "S/M",
         deliveryClientName: dClient,
         deliveryClientPhone: dPhone,
         deliveryAddress: dAddr,
         deliveryNotes: dNotes,
+        generalNotes: comanda.generalNotes || null,
       }).catch((err) => console.warn("Centinela Sync Error:", err));
     }
 
@@ -81,6 +84,31 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
     }
 
     const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
+
+    // Registrar envío de comanda con desglose de ítems en log del sistema (dist/envioprinter.log)
+    fetch('/api/printer-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'comanda',
+        area: target === "bar" ? "barra" : target === "kitchen" ? "cocina" : (target || "general"),
+        folio: comanda.folio,
+        folioInterno: comanda.folioInterno,
+        mesa: tableLabel,
+        mesero: comanda.createdBy?.name || 'S/M',
+        printerName: printerArea,
+        items: filteredItems.map((i) => ({
+          nombre: getFormattedProductName(i.product),
+          cantidad: i.quantity,
+          category: i.product?.category,
+          destination: getProductDestination(i.product),
+          notas: i.notes || '',
+        })),
+        status: 'SUCCESS',
+        details: { totalItemsInComanda: (comanda?.items || []).length, filteredCount: filteredItems.length }
+      })
+    }).catch(() => {});
+
     const transport = await createTransport(printerArea, selectedTenant?.id);
     const driver = new EscPosDriver();
     const job = new PosPrinterJob(driver, transport as any);
@@ -97,14 +125,16 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
     // Encabezado compacto y optimizado para ahorro de papel
     job.center();
     job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
+    job.printLine("================================");
     job.printLine(`*** ${destName} - MESA: ${tableLabel} ***`);
     job.bold(false);
     job.printLine(
       `Cmd #${comanda.folioInterno || comanda.folio} | Hora: ${new Date(comanda.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     );
     if (comanda.createdBy?.name) {
-      job.bold(true).printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`).bold(false);
+      job.printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`);
     }
+    job.printLine("================================");
 
     const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
     if (isDelivery) {
@@ -113,7 +143,7 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
       const dAddr = selectedDeliveryAddress || (selectedTable as any)?.deliveryAddress || "";
       const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
       
-      job.printLine("--------------------------------");
+      job.left();
       if (dClient) job.bold(true).printLine(`CTE: ${dClient.toUpperCase()}`).bold(false);
       if (dPhone) job.printLine(`TEL: ${dPhone}`);
       if (dAddr) {
@@ -132,10 +162,13 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
       }
       if (dNotes) job.bold(true).printLine(`NOTAS: ${dNotes.toUpperCase()}`).bold(false);
+      job.printLine("--------------------------------");
     }
 
-    job.printLine("--------------------------------");
+    // Cabecera tipo tabla para los productos
     job.left();
+    job.bold(true).printLine("CANT  DESCRIPCION").bold(false);
+    job.printLine("--------------------------------");
 
     if (target === "kitchen") {
       // COCINA: Agrupar por comensal solo si hay múltiples comensales
@@ -148,21 +181,26 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
       plates.forEach((plateNum) => {
         if (hasMultiplePlates) {
           job
+            .center()
             .bold(true)
             .printLine(`-- COMENSAL ${plateNum} --`)
-            .bold(false);
+            .bold(false)
+            .left();
         }
 
         filteredItems
           .filter((i) => (i.plate || 1) === plateNum)
           .forEach((item) => {
-            job.bold(true).printLine(
-              `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
-            ).bold(false);
-
-            if (item.notes && item.notes.trim()) {
-              job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
-            }
+            const lines = formatComandaItemLines(
+              item.quantity,
+              getFormattedProductName(item.product),
+              item.notes,
+              32
+            );
+            job.bold(true);
+            lines.forEach((l) => job.printLine(l));
+            job.bold(false);
+            job.printLine("--------------------------------");
           });
       });
     } else if (target === "bar") {
@@ -187,28 +225,32 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
       });
 
       Object.values(grouped).forEach((item) => {
-        job.bold(true).printLine(`${item.quantity}x ${item.name.toUpperCase()}`).bold(false);
-        const uniqueNotes = Array.from(new Set(item.notes));
-        uniqueNotes.forEach((n) => {
-          job.bold(true).printLine(`  >> NOTA: ${n.toUpperCase()}`).bold(false);
-        });
+        const notesStr = Array.from(new Set(item.notes)).join(", ");
+        const lines = formatComandaItemLines(item.quantity, item.name, notesStr, 32);
+        job.bold(true);
+        lines.forEach((l) => job.printLine(l));
+        job.bold(false);
+        job.printLine("--------------------------------");
       });
     } else {
       // Fallback/General
       filteredItems.forEach((item) => {
-        job.bold(true).printLine(
-          `${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`
-        ).bold(false);
-
-        if (item.notes && item.notes.trim()) {
-          job.bold(true).printLine(`  >> NOTA: ${item.notes.toUpperCase()}`).bold(false);
-        }
+        const lines = formatComandaItemLines(
+          item.quantity,
+          getFormattedProductName(item.product),
+          item.notes,
+          32
+        );
+        job.bold(true);
+        lines.forEach((l) => job.printLine(l));
+        job.bold(false);
+        job.printLine("--------------------------------");
       });
     }
 
     if (comanda.generalNotes && comanda.generalNotes.trim()) {
-      job.printLine("--------------------------------");
       job.bold(true).printLine(`OBS: ${comanda.generalNotes.toUpperCase()}`).bold(false);
+      job.printLine("--------------------------------");
     }
 
     // Corte limpio con feed mínimo para no desperdiciar papel

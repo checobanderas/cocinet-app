@@ -86,8 +86,12 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      // Atajo F5: Enviar y Confirmar Pedido
-      if (e.key === "F5" || e.code === "F5") {
+      const target = e.target as HTMLElement;
+      const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+
+      // Atajo Enter / F5: Enviar y Confirmar Pedido
+      if (e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "F5" || e.code === "F5") {
+        if (isInputField) target.blur();
         e.preventDefault();
         e.stopPropagation();
         handleConfirmSendOrder();
@@ -680,14 +684,14 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
                     fontSize: "1.1rem",
                     boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.3)",
                   }}
-                  title="Confirmar y Enviar Pedido (Presiona F5)"
+                  title="Confirmar y Enviar Pedido (Presiona ENTER)"
                 >
                   {isGeneratingOrder ? (
                     <IonSpinner name="crescent" color="light" />
                   ) : (
                     <>
                       <IonIcon icon={isTakeout ? "wallet-outline" : restaurantOutline} slot="start" />
-                      {isTakeout && appMode === "gestion_cuentas" ? "Confirmar, Enviar y Cobrar (F5) 💳" : "Confirmar y Enviar Pedido (F5) 🍽️"}
+                      {isTakeout && appMode === "gestion_cuentas" ? "Confirmar, Enviar y Cobrar (ENTER) 💳" : "Confirmar y Enviar Pedido (ENTER) 🍽️"}
                     </>
                   )}
                 </IonButton>

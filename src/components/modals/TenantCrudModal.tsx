@@ -1,7 +1,13 @@
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
-import { trashOutline, saveOutline, swapHorizontalOutline, documentTextOutline, mapOutline, colorPaletteOutline, businessOutline, closeOutline } from 'ionicons/icons';
 import { CompanyTenant } from '../utils/companyCatalog';
+import {
+  lockTerminalToTenant,
+  unlockTerminal,
+  getLockedTerminalTenantId,
+  triggerPwaInstall,
+  updatePwaManifestForTenant
+} from '../../services/pwaTerminalService';
 
 interface TenantCrudModalProps {
   showTenantCrudModal: boolean;
@@ -60,8 +66,8 @@ interface TenantCrudModalProps {
   handleDeleteTenant: () => Promise<void>;
   executeTenantTransfer: () => Promise<void>;
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
-  setSelectedTenant: any;
-  setShowBluetoothConfigModal: any;
+  setSelectedTenant?: any;
+  setShowBluetoothConfigModal?: any;
 }
 
 export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
@@ -630,6 +636,94 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                   className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
                 />
               </div>
+
+              {/* Sección Terminal Windows & Instalación PWA (Aislamiento de Sucursal) */}
+              {editingTenant && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-4.5 space-y-3.5 shadow-xs mt-4 text-left">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">🖥️</span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h4 className="text-xs font-black text-blue-950 uppercase tracking-wider m-0">
+                          Terminal Windows & Instalación PWA
+                        </h4>
+                        {getLockedTerminalTenantId() === editingTenant.id ? (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                            🔒 Esta PC está Vinculada a esta Sucursal
+                          </span>
+                        ) : (
+                          <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                            🔓 Sin Bloqueo en este Equipo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-bold text-blue-800 m-0 mt-0.5 leading-snug">
+                        Configura y ancla esta computadora física exclusivamente a <strong>{editingTenant.name}</strong> para evitar confusiones de PINs o accesos a otras sucursales.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        lockTerminalToTenant(editingTenant);
+                        if (setSelectedTenant) setSelectedTenant(editingTenant);
+                        updatePwaManifestForTenant(editingTenant);
+                        
+                        const cleanId = editingTenant.id.replace(/^tenant-/, "");
+                        try {
+                          window.history.replaceState({}, document.title, `/?tenant=${encodeURIComponent(cleanId)}`);
+                        } catch (e) {}
+
+                        const res = await triggerPwaInstall();
+                        if (res === "installed") {
+                          triggerAppNotification(
+                            "🎉 App Instalada en Windows",
+                            `Acceso directo creado con el logotipo y nombre de ${editingTenant.name}.`,
+                            "success"
+                          );
+                        } else if (res === "dismissed") {
+                          triggerAppNotification(
+                            "🔒 Terminal Vinculada",
+                            `Este equipo quedó vinculado a ${editingTenant.name}.`,
+                            "info"
+                          );
+                        } else {
+                          triggerAppNotification(
+                            "🔒 Terminal Vinculada con Éxito",
+                            `Este equipo quedó configurado para "${editingTenant.name}" con su logotipo e icono oficial.`,
+                            "success"
+                          );
+                        }
+                      }}
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all border-none cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>🚀</span> Vincular e Instalar App Windows
+                    </button>
+
+                    {getLockedTerminalTenantId() === editingTenant.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("¿Seguro que deseas desvincular este equipo de esta sucursal? Volverá al modo neutral.")) {
+                            unlockTerminal();
+                            triggerAppNotification(
+                              "🔓 Terminal Desvinculada",
+                              "Este equipo ahora puede seleccionar o asignarse a cualquier otra sucursal.",
+                              "warning"
+                            );
+                            setShowTenantCrudModal(false);
+                          }
+                        }}
+                        className="px-3.5 py-2.5 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-black text-xs uppercase tracking-wider rounded-xl transition-all border-none cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>🔓</span> Desvincular este Equipo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Sección Traspaso de Inquilino a otro Propietario / Dueño (Despliegue Inline sin modales) */}
               {editingTenant && (

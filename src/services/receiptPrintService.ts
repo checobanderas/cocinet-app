@@ -1,6 +1,6 @@
 import { TableData, User } from '../utils/appHelpers';
 import { getFormattedProductName } from '../utils/appHelpers';
-import { numeroALetras } from '../utils/formatters';
+import { numeroALetras, formatReceiptItemLines } from '../utils/formatters';
 import { createTransport, EscPosDriver, PosPrinterJob, formatPhone } from '../utils/printer';
 import { addPedidoToPrinter, getMexicoISOString } from '../utils/firestore';
 
@@ -224,14 +224,9 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
         }, []);
       summarized.forEach((item) => {
         const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-        const maxDescLen = Math.max(10, 32 - price.length - 4);
-        const rawName = getFormattedProductName(item.product).toUpperCase();
-        const cleanName = rawName.length > maxDescLen ? rawName.substring(0, maxDescLen) : rawName;
-        const line = `${item.quantity}x ${cleanName}`;
-        const padding = " ".repeat(
-          Math.max(1, 32 - line.length - price.length),
-        );
-        job.printLine(line + padding + price);
+        const rawName = getFormattedProductName(item.product);
+        const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
+        itemLines.forEach((l) => job.printLine(l));
       });
 
       const cancelled = allItems.filter((i) => i.isCancelled);
@@ -263,12 +258,10 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
         comanda.items
           .filter((i) => !i.isCancelled)
           .forEach((item) => {
-            const line = `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`;
             const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-            const padding = " ".repeat(
-              Math.max(1, 32 - line.length - price.length),
-            );
-            job.printLine(line + padding + price);
+            const rawName = getFormattedProductName(item.product);
+            const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
+            itemLines.forEach((l) => job.printLine(l));
           });
 
         const cancelled = comanda.items.filter((i) => i.isCancelled);
@@ -292,12 +285,10 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
         allItems
           .filter((i) => !i.isCancelled && i.plate === cNum)
           .forEach((item) => {
-            const line = `  ${item.quantity}x ${getFormattedProductName(item.product).toUpperCase()}`;
             const price = `$${(item.quantity * item.product.price).toFixed(2)}`;
-            const padding = " ".repeat(
-              Math.max(1, 32 - line.length - price.length),
-            );
-            job.printLine(line + padding + price);
+            const rawName = getFormattedProductName(item.product);
+            const itemLines = formatReceiptItemLines(item.quantity, rawName, price, 32);
+            itemLines.forEach((l) => job.printLine(l));
           });
 
         const cancelled = allItems.filter(

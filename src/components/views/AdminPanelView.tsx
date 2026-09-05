@@ -781,6 +781,18 @@ setCheckoutReturnMode(null);
                             };
                             await addTenantToFirebase(updatedTenant);
                             setSelectedTenant(updatedTenant);
+                            try {
+                              localStorage.setItem("pos_selected_tenant", JSON.stringify(updatedTenant));
+                              const cachedTenants = localStorage.getItem("cocinet_custom_tenants_v3");
+                              if (cachedTenants) {
+                                const parsed = JSON.parse(cachedTenants);
+                                const tIdx = parsed.findIndex((t: any) => t.id === selectedTenant.id);
+                                if (tIdx !== -1) {
+                                  parsed[tIdx] = { ...parsed[tIdx], ...updatedTenant };
+                                  localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(parsed));
+                                }
+                              }
+                            } catch (e) {}
                           }
 
                           triggerAppNotification(
