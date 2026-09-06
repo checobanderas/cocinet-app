@@ -20,6 +20,32 @@ export function getFriendlyTitleDate(todayOperatingDay: string): string {
   return todayOperatingDay;
 }
 
+export const getAccountComandaFolios = (h: any): string[] => {
+  const folios: string[] = [];
+  (h.comandas || []).forEach((c: any) => {
+    const f = c.folioInterno !== undefined && c.folioInterno !== null && String(c.folioInterno).trim() !== ""
+      ? String(c.folioInterno).trim()
+      : (c.folio !== undefined && c.folio !== null && String(c.folio).trim() !== "" ? String(c.folio).trim() : "");
+    if (f && !folios.includes(f)) {
+      folios.push(f);
+    }
+  });
+  return folios;
+};
+
+export const formatAccountComandaFolios = (h: any): string => {
+  const folios = getAccountComandaFolios(h);
+  if (folios.length === 0) return "S/F";
+  return folios.map(f => `#${f}`).join(", ");
+};
+
+export const getAccountSortFolio = (h: any): number => {
+  const folios = getAccountComandaFolios(h);
+  if (folios.length === 0) return 999999999;
+  const num = parseInt(folios[0].replace(/\D/g, ""), 10);
+  return isNaN(num) ? 999999999 : num;
+};
+
 export function processDailyReportData(history: any[], products: any[] = [], targetDate?: string) {
   const todayOperatingDay = targetDate || getOperatingDay(new Date());
   const friendlyTitleDate = getFriendlyTitleDate(todayOperatingDay);
@@ -32,6 +58,16 @@ export function processDailyReportData(history: any[], products: any[] = [], tar
     const dateA = new Date(a.timestamp).getTime();
     const dateB = new Date(b.timestamp).getTime();
     return dateB - dateA;
+  });
+
+  const dailyHistoryByFolio = [...dailyHistory].sort((a, b) => {
+    const numA = getAccountSortFolio(a);
+    const numB = getAccountSortFolio(b);
+    if (numA !== numB) return numA - numB;
+    const strA = formatAccountComandaFolios(a);
+    const strB = formatAccountComandaFolios(b);
+    if (strA !== strB) return strA.localeCompare(strB);
+    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
   });
 
   const dailyCancellations: Array<{
@@ -201,6 +237,7 @@ export function processDailyReportData(history: any[], products: any[] = [], tar
     todayOperatingDay,
     friendlyTitleDate,
     dailyHistory,
+    dailyHistoryByFolio,
     dailyCancellations,
     totalCancellations,
     productSummary,
@@ -236,7 +273,7 @@ export function generateDailyReportText(
   text += `💰 *RESUMEN DE CUENTAS & COMANDAS (${dailyHistory.length}):*\n`;
   dailyHistory.forEach((h, idx) => {
     const consecutive = dailyHistory.length - idx;
-    const foliosInt = (h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(", ");
+    const foliosInt = formatAccountComandaFolios(h);
     text += `• #${consecutive} | Mesa ${h.tableLabel || "N/A"} | Folio Int: *${foliosInt}* | Total: *$${(h.total || 0).toFixed(2)}*\n`;
   });
   text += `\n`;
@@ -278,6 +315,17 @@ export function generateDailyReportText(
   return text;
 }
 
+function escapeXml(unsafe: any): string {
+  if (unsafe === null || unsafe === undefined) return "";
+  const str = String(unsafe);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 export function exportDailyReportExcel(
   history: any[],
   products: any[] = [],
@@ -291,320 +339,24 @@ export function exportDailyReportExcel(
     dailyCancellations,
     totalCancellations,
     productSummary,
-    groupedProducts,
+    totalAccounts,
     totalProducts,
     paymentBreakdown,
   } = processDailyReportData(history, products, targetDate);
 
-  const wb = XLSX.utils.book_new();
   const cleanCompany = (companyName || "Cocinet")
     .replace(/[^a-zA-Z0-9\s_-]/g, "")
     .trim()
     .replace(/\s+/g, "_");
 
-  const formatWorksheet = (ws: XLSX.WorkSheet, headerRowIdx: number = 6) => {
-    Object.keys(ws).forEach((key) => {
-      if (key.startsWith("!")) return;
-      const col = key.replace(/[0-9]/g, "");
-      const row = parseInt(key.replace(/[^0-9]/g, ""), 10);
-      const cell = ws[key];
-      if (!cell) return;
+  const totalSoldPieces = productSummary.reduce((sum, p) => sum + (p.quantity || 0), 0);
+  const avgTicket = dailyHistory.length > 0 ? (totalProducts - paymentBreakdown.discount) / dailyHistory.length : 0;
 
-      if (!cell.s) cell.s = {};
-
-      if (row === 1) {
-        cell.s = {
-          fill: { fgColor: { rgb: "1E3A8A" } },
-          font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "FFFFFF" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      } else if (row === 2) {
-        cell.s = {
-          fill: { fgColor: { rgb: "2563EB" } },
-          font: { name: "Calibri", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      } else if (row === 3 || row === 4) {
-        cell.s = {
-          fill: { fgColor: { rgb: "F1F5F9" } },
-          font: { name: "Calibri", sz: 10, italic: row === 4, color: { rgb: "334155" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      } else if (row === headerRowIdx) {
-        cell.s = {
-          fill: { fgColor: { rgb: "1E293B" } },
-          font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-    });
-  };
-
-  // ==================== SHEET 1: CUENTAS ====================
-  const accountsAOA: any[][] = [];
-  accountsAOA.push([`${companyName.toUpperCase()} - REPORTE DE OPERACIONES`]);
-  accountsAOA.push(["REPORTE DIARIO DE CUENTAS COBRADAS Y DESGLOSE"]);
-  accountsAOA.push([`FECHA DE OPERACIÓN: ${friendlyTitleDate}`]);
-  accountsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
-  accountsAOA.push([]);
-
-  accountsAOA.push([
-    "CONSECUTIVO",
-    "FOLIO CUENTA",
-    "FOLIO INTERNO COMANDAS",
-    "FECHA / HORA DE CIERRE",
-    "MESA",
-    "MÉTODO DE PAGO",
-    "REQUIERE FACTURA",
-    "TOTAL COBRADO"
-  ]);
-
-  const N = dailyHistory.length;
-
-  dailyHistory.forEach((h, index) => {
-    const consecutive = dailyHistory.length - index;
-    const foliosInternos = (h.comandas || []).map((c: any) => c.folioInterno ? `#${c.folioInterno}` : `#${c.folio}`).join(", ");
-    accountsAOA.push([
-      `#${consecutive}`,
-      h.folio || `CUT-${consecutive}`,
-      foliosInternos,
-      h.timestamp instanceof Date ? h.timestamp.toLocaleString() : h.timestamp,
-      h.tableLabel || "N/A",
-      h.paymentMethod || "Efectivo",
-      h.requiresInvoice ? (h.invoicePhone ? `Sí (${h.invoicePhone})` : "Sí") : "No",
-      h.total
-    ]);
-  });
-
-  accountsAOA.push([]);
-
-  const desgloseStartRow = accountsAOA.length + 1;
-  accountsAOA.push(["SECTION_HEADER:DESGLOSE POR FORMA DE PAGO", "MONTO RECAUDADO"]);
-  accountsAOA.push(["💵 EFECTIVO", paymentBreakdown.cash]);
-  accountsAOA.push(["💳 TARJETA CRÉDITO / DÉBITO", paymentBreakdown.card]);
-  accountsAOA.push(["📲 TRANSFERENCIA INTERBANCARIA", paymentBreakdown.transfer]);
-  accountsAOA.push(["⚡ COBRO LUPAY", paymentBreakdown.lupay]);
-  accountsAOA.push(["💜 CORTESÍA / EMPLEADOS", paymentBreakdown.cortesia]);
-  accountsAOA.push(["🏷️ DESCUENTOS APLICADOS", paymentBreakdown.discount]);
-
-  accountsAOA.push([]);
-
-  const totalsStartRow = accountsAOA.length + 1;
-  accountsAOA.push(["SECTION_HEADER:RESUMEN Y TOTALES GENERALES", "MONTO TOTAL"]);
-  accountsAOA.push(["TOTAL DE CUENTAS COBRADAS", { t: "n", f: `SUM(H7:H${6 + N})` }]);
-  accountsAOA.push(["TOTAL BRUTO DE PRODUCTOS", totalProducts]);
-  accountsAOA.push(["TOTAL DE CANCELACIONES", totalCancellations]);
-  if (paymentBreakdown.discount > 0) {
-    accountsAOA.push(["(-) DESCUENTOS APLICADOS", -paymentBreakdown.discount]);
-    accountsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", { t: "n", f: `B${totalsStartRow + 2}+B${totalsStartRow + 4}` }]);
-  }
-
-  const wsAccounts = XLSX.utils.aoa_to_sheet(accountsAOA);
-  wsAccounts['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 7 } }
-  ];
-  wsAccounts['!cols'] = [
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 26 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 20 },
-    { wch: 16 }
-  ];
-
-  Object.keys(wsAccounts).forEach((key) => {
-    if (key.startsWith('!')) return;
-    const col = key.replace(/[0-9]/g, '');
-    const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-    if (row <= 5) return;
-    const cell = wsAccounts[key];
-    if (cell && (cell.t === 'n' || cell.f)) {
-      if (col === 'H' || col === 'B') {
-        cell.z = '$#,##0.00';
-      }
-    }
-    if (cell && typeof cell.v === 'string' && cell.v.startsWith('SECTION_HEADER:')) {
-      cell.v = cell.v.replace('SECTION_HEADER:', '');
-      cell.s = {
-        fill: { fgColor: { rgb: "E0E7FF" } },
-        font: { bold: true, color: { rgb: "1E1B4B" } }
-      };
-    }
-  });
-
-  formatWorksheet(wsAccounts);
-  XLSX.utils.book_append_sheet(wb, wsAccounts, "Cuentas");
-
-  // ==================== SHEET 2: PRODUCTOS ====================
-  const productsAOA: any[][] = [];
-  productsAOA.push([`${companyName.toUpperCase()} - PRODUCTOS VENDIDOS`]);
-  productsAOA.push(["REPORTE DIARIO DE PRODUCTOS VENDIDOS POR SUBGRUPO"]);
-  productsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-  productsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
-  productsAOA.push([]);
-
-  productsAOA.push(["PRODUCTO / PLATILLO", "CANTIDAD VENDIDA", "TOTAL RECAUDADO"]);
-
-  groupedProducts.forEach(group => {
-    productsAOA.push([]);
-    productsAOA.push([`GROUP_HEADER:📂 ${group.groupName.toUpperCase()}`, "", ""]);
-    group.items.forEach(p => {
-      productsAOA.push([p.name, p.quantity, p.total]);
-    });
-  });
-
-  const L = productsAOA.length;
-
-  productsAOA.push([]);
-  productsAOA.push(["TOTAL BRUTO DE PRODUCTOS", { t: "n", f: `SUM(B7:B${L})` }, { t: "n", f: `SUM(C7:C${L})` }]);
-  
-  if (paymentBreakdown.discount > 0) {
-    productsAOA.push(["(-) DESCUENTOS APLICADOS", "", -paymentBreakdown.discount]);
-    productsAOA.push(["TOTAL PRODUCTOS CON DESCUENTOS", "", { t: "n", f: `C${L + 2}+C${L + 3}` }]);
-  }
-
-  const wsProducts = XLSX.utils.aoa_to_sheet(productsAOA);
-  wsProducts['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } }
-  ];
-
-  wsProducts['!cols'] = [
-    { wch: 50 },
-    { wch: 20 },
-    { wch: 20 }
-  ];
-
-  Object.keys(wsProducts).forEach((key) => {
-    if (key.startsWith('!')) return;
-    const col = key.replace(/[0-9]/g, '');
-    const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-    if (row <= 5) return;
-    const cell = wsProducts[key];
-    if (cell) {
-      if (cell.t === 'n' || cell.f) {
-        if (col === 'C') {
-          cell.z = '$#,##0.00';
-        } else if (col === 'B') {
-          cell.z = '#,##0.0';
-        }
-      }
-      if (typeof cell.v === 'string' && cell.v.startsWith('GROUP_HEADER:')) {
-        cell.v = cell.v.replace('GROUP_HEADER:', '');
-        cell.s = {
-          fill: { fgColor: { rgb: "E0E7FF" } },
-          font: { bold: true, color: { rgb: "1E1B4B" } }
-        };
-      }
-    }
-  });
-
-  formatWorksheet(wsProducts);
-  XLSX.utils.book_append_sheet(wb, wsProducts, "Productos");
-
-  // ==================== SHEET 3: CANCELACIONES ====================
-  const cancellationsAOA: any[][] = [];
-  cancellationsAOA.push([`${companyName.toUpperCase()} - CANCELACIONES`]);
-  cancellationsAOA.push(["REPORTE DIARIO DE CANCELACIONES Y ANULACIONES"]);
-  cancellationsAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-  cancellationsAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
-  cancellationsAOA.push([]);
-
-  cancellationsAOA.push([
-    "CONSECUTIVO",
-    "FOLIO",
-    "TIPO",
-    "FECHA / HORA",
-    "MESA / ORDEN",
-    "PRODUCTO / CONCEPTO",
-    "CANTIDAD",
-    "MOTIVO",
-    "AUTORIZADO POR",
-    "TOTAL PERDIDO / CANCELADO"
-  ]);
-
-  const C = dailyCancellations.length;
-
-  dailyCancellations.forEach((item, index) => {
-    const consecutive = dailyCancellations.length - index;
-    cancellationsAOA.push([
-      `#${consecutive}`,
-      item.folio || `CAN-${consecutive}`,
-      item.type === 'cuenta' ? "Cuenta Completa" : "Producto Individual",
-      item.timestamp instanceof Date ? item.timestamp.toLocaleString() : item.timestamp,
-      item.tableLabel || "N/A",
-      item.description,
-      item.quantity,
-      item.reason,
-      item.user,
-      item.total
-    ]);
-  });
-
-  cancellationsAOA.push([]);
-  cancellationsAOA.push(["TOTAL CANCELACIONES DEL DÍA", "", "", "", "", "", "", "", "", { t: "n", f: `SUM(J7:J${6 + C})` }]);
-
-  const wsCancellations = XLSX.utils.aoa_to_sheet(cancellationsAOA);
-  wsCancellations['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 9 } }
-  ];
-
-  wsCancellations['!cols'] = [
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 35 },
-    { wch: 12 },
-    { wch: 30 },
-    { wch: 22 },
-    { wch: 18 }
-  ];
-
-  Object.keys(wsCancellations).forEach((key) => {
-    if (key.startsWith('!')) return;
-    const col = key.replace(/[0-9]/g, '');
-    const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-    if (row <= 5) return;
-    const cell = wsCancellations[key];
-    if (cell && (cell.t === 'n' || cell.f)) {
-      if (col === 'J') {
-        cell.z = '$#,##0.00';
-      } else if (col === 'G') {
-        cell.z = '#,##0.0';
-      }
-    }
-  });
-
-  formatWorksheet(wsCancellations);
-  XLSX.utils.book_append_sheet(wb, wsCancellations, "Cancelaciones");
-
-  // ==================== SHEET 4: CATÁLOGO EN ORDEN CONSECUTIVO ====================
   const soldMap: Record<string, { quantity: number, total: number }> = {};
   productSummary.forEach(p => {
     if (p.product?.id) soldMap[String(p.product.id)] = { quantity: p.quantity, total: p.total };
     soldMap[(p.name || "").toLowerCase().trim()] = { quantity: p.quantity, total: p.total };
   });
-
-  const catalogAOA: any[][] = [];
-  catalogAOA.push([`${companyName.toUpperCase()} - CATÁLOGO GENERAL DE PRODUCTOS`]);
-  catalogAOA.push(["LISTADO COMPLETO DE PRODUCTOS Y ESTADO DE VENTAS DEL DÍA (ORDEN AUDITORÍA)"]);
-  catalogAOA.push([`FECHA DE CONSULTA: ${friendlyTitleDate}`]);
-  catalogAOA.push([`EMITIDO POR: COCINET POS SYSTEM - HORA: ${new Date().toLocaleTimeString()}`]);
-  catalogAOA.push([]);
-
-  catalogAOA.push(["# ORDEN", "PRODUCTO / PLATILLO", "PRECIO LISTA", "ESTADO EN VENTAS", "CANT. VENDIDA", "TOTAL RECAUDADO"]);
 
   const sortedDirectCatalog = [...(products || [])]
     .filter((p: any) => !(p.name || "").includes("---") && !p.isDeleted)
@@ -615,66 +367,695 @@ export function exportDailyReportExcel(
       return (a.name || "").localeCompare(b.name || "");
     });
 
-  sortedDirectCatalog.forEach((prod, idx) => {
-    const orderNum = prod.sortOrder !== undefined && prod.sortOrder !== null && prod.sortOrder !== 9999 
-      ? prod.sortOrder 
-      : (prod.consecutive || (idx + 1));
-    const liveName = getProductReportName(prod);
-    const sold = soldMap[String(prod.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(prod.name || "").toLowerCase().trim()] || { quantity: 0, total: 0 };
-    const priceVal = Number(prod.price || 0);
-
-    if (sold.quantity > 0) {
-      catalogAOA.push([orderNum, liveName, priceVal, `🟢 SÍ VENDIDO (${sold.quantity})`, sold.quantity, sold.total]);
-    } else {
-      catalogAOA.push([orderNum, liveName, priceVal, "⚪ SIN VENTAS (0)", 0, 0]);
-    }
+  let soldCatalogCount = 0;
+  let unsoldCatalogCount = 0;
+  sortedDirectCatalog.forEach(p => {
+    const liveName = getProductReportName(p);
+    const sold = soldMap[String(p.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(p.name || "").toLowerCase().trim()];
+    if (sold && sold.quantity > 0) soldCatalogCount++;
+    else unsoldCatalogCount++;
   });
 
-  const M = catalogAOA.length;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Author>Cocinet POS</Author>
+  <Created>${new Date().toISOString()}</Created>
+ </DocumentProperties>
+ <Styles>
+    <Style ss:ID="Default" ss:Name="Normal">
+      <Alignment ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#1E293B"/>
+    </Style>
+    <Style ss:ID="HeaderMain">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#1E3A8A" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="SubHeader">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="9" ss:Color="#334155"/>
+      <Interior ss:Color="#F1F5F9" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="SectionTitleSky">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#0284C7" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="SectionTitleTeal">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#0D9488" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="SectionTitleIndigo">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="SectionTitleRose">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#BE123C" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
 
-  catalogAOA.push([]);
-  catalogAOA.push(["TOTAL GENERAL DEL CATÁLOGO", "", "", "", { t: "n", f: `SUM(E7:E${M})` }, { t: "n", f: `SUM(F7:F${M})` }]);
+    <Style ss:ID="KpiHeader">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Font ss:FontName="Calibri" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#1E293B" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="KpiValue">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="13" ss:Bold="1" ss:Color="#1E3A8A"/>
+      <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="KpiValueInt">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="13" ss:Bold="1" ss:Color="#1E3A8A"/>
+      <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="#,##0"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="KpiValueDanger">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="13" ss:Bold="1" ss:Color="#BE123C"/>
+      <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
 
-  const wsCatalog = XLSX.utils.aoa_to_sheet(catalogAOA);
-  wsCatalog['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }
-  ];
-  wsCatalog['!cols'] = [
-    { wch: 10 },
-    { wch: 45 },
-    { wch: 16 },
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 20 }
-  ];
+    <Style ss:ID="ColHeadTeal">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#0F766E"/>
+      <Interior ss:Color="#CCFBF1" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ColHeadIndigo">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#3730A3"/>
+      <Interior ss:Color="#E0E7FF" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ColHeadRose">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#9F1239"/>
+      <Interior ss:Color="#FFE4E6" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ColHeadSky">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#0369A1"/>
+      <Interior ss:Color="#E0F2FE" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
 
-  Object.keys(wsCatalog).forEach((key) => {
-    if (key.startsWith('!')) return;
-    const col = key.replace(/[0-9]/g, '');
-    const row = parseInt(key.replace(/[^0-9]/g, ''), 10);
-    if (row <= 5) return;
-    const cell = wsCatalog[key];
-    if (!cell) return;
+    <Style ss:ID="CellCenter">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellCenterBold">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#1E293B"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellLeft">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellLeftBold">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#1E293B"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellRight">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellCurrency">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CellCurrencyBold">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#1E293B"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
 
-    if (!cell.s) cell.s = {};
+    <Style ss:ID="ProdSoldLeft">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#065F46"/>
+      <Interior ss:Color="#D1FAE5" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdSoldCenter">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#047857"/>
+      <Interior ss:Color="#D1FAE5" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdSoldRight">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#065F46"/>
+      <Interior ss:Color="#D1FAE5" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdSoldQty">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#065F46"/>
+      <Interior ss:Color="#D1FAE5" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="#,##0"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
 
-    if (cell.t === 'n' || cell.f) {
-      if (col === 'C' || col === 'F') {
-        cell.z = '$#,##0.00';
-      } else if (col === 'E') {
-        cell.z = '#,##0.0';
+    <Style ss:ID="ProdUnsoldLeft">
+      <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#64748B"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdUnsoldCenter">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#64748B"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdUnsoldRight">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#64748B"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="ProdUnsoldQty">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#64748B"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="#,##0"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+
+    <Style ss:ID="TotalRowLabel">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#166534"/>
+      <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="TotalRowValue">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#166534"/>
+      <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="TotalRowQty">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#166534"/>
+      <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="#,##0"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+
+    <Style ss:ID="CancelTotalRowLabel">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#991B1B"/>
+      <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="CancelTotalRowValue">
+      <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#991B1B"/>
+      <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+      <NumberFormat ss:Format="$#,##0.00"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0BEC5"/>
+      </Borders>
+    </Style>
+ </Styles>
+
+ <!-- PESTAÑA 1: DASHBOARD EJECUTIVO -->
+ <Worksheet ss:Name="Dashboard">
+  <Table ss:DefaultColumnWidth="100">
+    <Column ss:Width="160"/>
+    <Column ss:Width="160"/>
+    <Column ss:Width="120"/>
+    <Column ss:Width="120"/>
+    <Column ss:Width="120"/>
+    <Column ss:Width="120"/>
+    <Column ss:Width="120"/>
+    <Column ss:Width="140"/>
+
+    <Row ss:Height="30">
+      <Cell ss:MergeAcross="7" ss:StyleID="HeaderMain"><Data ss:Type="String">REPORTE DIARIO DE OPERACIONES — ${escapeXml(companyName.toUpperCase())}</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="7" ss:StyleID="SubHeader"><Data ss:Type="String">Fecha de Operación: ${escapeXml(friendlyTitleDate)} | Emisión: ${escapeXml(new Date().toLocaleTimeString())} | Sistema: Cocinet POS System</Data></Cell>
+    </Row>
+    <Row ss:Height="10"/>
+
+    <!-- WIDGETS / TARJETAS KPI -->
+    <Row ss:Height="24">
+      <Cell ss:MergeAcross="7" ss:StyleID="SectionTitleSky"><Data ss:Type="String">1. RESUMEN GENERAL Y ARQUEO DE CAJA (PANEL EJECUTIVO)</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="1" ss:StyleID="KpiHeader"><Data ss:Type="String">TOTAL VENDIDO (NETO)</Data></Cell>
+      <Cell ss:StyleID="KpiHeader"><Data ss:Type="String">TOTAL CUENTAS</Data></Cell>
+      <Cell ss:StyleID="KpiHeader"><Data ss:Type="String">DESCUENTOS</Data></Cell>
+      <Cell ss:StyleID="KpiHeader"><Data ss:Type="String">TOTAL CANCELADO</Data></Cell>
+      <Cell ss:StyleID="KpiHeader"><Data ss:Type="String">PLATILLOS VENDIDOS</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="KpiHeader"><Data ss:Type="String">TICKET PROMEDIO</Data></Cell>
+    </Row>
+    <Row ss:Height="28">
+      <Cell ss:MergeAcross="1" ss:StyleID="KpiValue"><Data ss:Type="Number">${(totalProducts - paymentBreakdown.discount).toFixed(2)}</Data></Cell>
+      <Cell ss:StyleID="KpiValueInt"><Data ss:Type="Number">${dailyHistory.length}</Data></Cell>
+      <Cell ss:StyleID="KpiValueDanger"><Data ss:Type="Number">${(-paymentBreakdown.discount).toFixed(2)}</Data></Cell>
+      <Cell ss:StyleID="KpiValueDanger"><Data ss:Type="Number">${totalCancellations.toFixed(2)}</Data></Cell>
+      <Cell ss:StyleID="KpiValueInt"><Data ss:Type="Number">${totalSoldPieces}</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="KpiValue"><Data ss:Type="Number">${avgTicket.toFixed(2)}</Data></Cell>
+    </Row>
+    <Row ss:Height="10"/>
+
+    <!-- DESGLOSE DE PAGO -->
+    <Row ss:Height="22">
+      <Cell ss:MergeAcross="2" ss:StyleID="ColHeadSky"><Data ss:Type="String">DESGLOSE POR MÉTODO DE PAGO</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="ColHeadSky"><Data ss:Type="String">TIPO / ORIGEN</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="ColHeadSky"><Data ss:Type="String">MONTO RECAUDADO ($)</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">💵 Efectivo en Caja</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">Ingreso Directo Caja</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${paymentBreakdown.cash.toFixed(2)}</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">💳 Tarjetas Débito / Crédito</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">Terminal Bancaria</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${paymentBreakdown.card.toFixed(2)}</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">📲 Transferencias Interbancarias</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">BBVA / STP / SPEI</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${paymentBreakdown.transfer.toFixed(2)}</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">⚡ Cobros LUPAY</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">Plataforma Digital QR</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${paymentBreakdown.lupay.toFixed(2)}</Data></Cell>
+    </Row>
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">💜 Cortesías / Consumo Personal</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">Consumo Interno</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${paymentBreakdown.cortesia.toFixed(2)}</Data></Cell>
+    </Row>
+    ${paymentBreakdown.discount > 0 ? `
+    <Row ss:Height="20">
+      <Cell ss:MergeAcross="2" ss:StyleID="CellLeftBold"><Data ss:Type="String">🏷️ Descuentos Promocionales</Data></Cell>
+      <Cell ss:MergeAcross="1" ss:StyleID="CellCenter"><Data ss:Type="String">Deducción de Venta</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${(-paymentBreakdown.discount).toFixed(2)}</Data></Cell>
+    </Row>
+    ` : ''}
+    <Row ss:Height="24">
+      <Cell ss:MergeAcross="4" ss:StyleID="TotalRowLabel"><Data ss:Type="String">TOTAL GENERAL NETO (ARQUEO CUADRADO):</Data></Cell>
+      <Cell ss:MergeAcross="2" ss:StyleID="TotalRowValue"><Data ss:Type="Number">${(totalProducts - paymentBreakdown.discount).toFixed(2)}</Data></Cell>
+    </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+    <DisplayGridlines/>
+  </WorksheetOptions>
+ </Worksheet>
+
+ <!-- PESTAÑA 2: CUENTAS COBRADAS -->
+ <Worksheet ss:Name="Cuentas">
+  <Table ss:DefaultColumnWidth="100">
+    <Column ss:Width="65"/>
+    <Column ss:Width="105"/>
+    <Column ss:Width="140"/>
+    <Column ss:Width="145"/>
+    <Column ss:Width="70"/>
+    <Column ss:Width="125"/>
+    <Column ss:Width="105"/>
+    <Column ss:Width="120"/>
+
+    <Row ss:Height="26">
+      <Cell ss:MergeAcross="7" ss:StyleID="SectionTitleTeal">
+        <Data ss:Type="String">2. LISTADO DETALLADO DE CUENTAS COBRADAS (${dailyHistory.length} CUENTAS)</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="18">
+      <Cell ss:MergeAcross="7" ss:StyleID="SubHeader">
+        <Data ss:Type="String">Orden Cronológico | Cuentas Registradas: ${dailyHistory.length} | Filtros Excel Activados</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="22">
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String"># Consec.</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Folio Cuenta</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Folio Interno Comandas</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Fecha / Hora Cierre</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Mesa</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Método de Pago</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Factura</Data></Cell>
+      <Cell ss:StyleID="ColHeadTeal"><Data ss:Type="String">Total Cobrado ($)</Data></Cell>
+    </Row>
+    ${dailyHistory.map((h, idx) => {
+      const consecutive = dailyHistory.length - idx;
+      const foliosInternos = formatAccountComandaFolios(h);
+      const timeStr = h.timestamp instanceof Date ? h.timestamp.toLocaleString() : (typeof h.timestamp === 'string' ? h.timestamp : new Date(h.timestamp).toLocaleString());
+      const invStr = h.requiresInvoice ? (h.invoicePhone ? `Sí (${h.invoicePhone})` : "Sí") : "No";
+      return `
+      <Row ss:Height="20">
+        <Cell ss:StyleID="CellCenterBold"><Data ss:Type="String">#${consecutive}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(h.folio || `CUT-${consecutive}`)}</Data></Cell>
+        <Cell ss:StyleID="CellCenterBold"><Data ss:Type="String">${escapeXml(foliosInternos)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(timeStr)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(h.tableLabel || "N/A")}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(h.paymentMethod || "Efectivo")}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(invStr)}</Data></Cell>
+        <Cell ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${Number(h.total || 0).toFixed(2)}</Data></Cell>
+      </Row>
+      `;
+    }).join('')}
+    <Row ss:Height="24">
+      <Cell ss:MergeAcross="6" ss:StyleID="TotalRowLabel"><Data ss:Type="String">TOTAL DE CUENTAS (${dailyHistory.length}):</Data></Cell>
+      <Cell ss:StyleID="TotalRowValue"><Data ss:Type="Number">${totalAccounts.toFixed(2)}</Data></Cell>
+    </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+    <DisplayGridlines/>
+    <AutoFilter x:Range="R3C1:R3C8"/>
+  </WorksheetOptions>
+ </Worksheet>
+
+ <!-- PESTAÑA 3: CATÁLOGO DE PRODUCTOS -->
+ <Worksheet ss:Name="Productos">
+  <Table ss:DefaultColumnWidth="100">
+    <Column ss:Width="65"/>
+    <Column ss:Width="260"/>
+    <Column ss:Width="160"/>
+    <Column ss:Width="110"/>
+    <Column ss:Width="140"/>
+    <Column ss:Width="100"/>
+    <Column ss:Width="130"/>
+
+    <Row ss:Height="26">
+      <Cell ss:MergeAcross="6" ss:StyleID="SectionTitleIndigo">
+        <Data ss:Type="String">3. CATÁLOGO GENERAL DE PRODUCTOS Y RENDIMIENTO (${soldCatalogCount} Con Venta / ${unsoldCatalogCount} Sin Venta)</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="18">
+      <Cell ss:MergeAcross="6" ss:StyleID="SubHeader">
+        <Data ss:Type="String">Orden de Catálogo | Total Productos: ${sortedDirectCatalog.length} | Filtros Excel Activados</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="22">
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String"># Orden</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Producto / Platillo</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Categoría / Subgrupo</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Precio Lista ($)</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Estado en Ventas</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Cant. Vendida</Data></Cell>
+      <Cell ss:StyleID="ColHeadIndigo"><Data ss:Type="String">Total Recaudado ($)</Data></Cell>
+    </Row>
+    ${sortedDirectCatalog.map((prod, idx) => {
+      const orderNum = prod.sortOrder !== undefined && prod.sortOrder !== null && prod.sortOrder !== 9999 
+        ? prod.sortOrder 
+        : (prod.consecutive || (idx + 1));
+      const liveName = getProductReportName(prod);
+      const category = (prod.subgroup || prod.subcategory || "OTROS").toUpperCase().trim();
+      const sold = soldMap[String(prod.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(prod.name || "").toLowerCase().trim()] || { quantity: 0, total: 0 };
+      const priceVal = Number(prod.price || 0);
+
+      if (sold.quantity > 0) {
+        return `
+        <Row ss:Height="20">
+          <Cell ss:StyleID="ProdSoldCenter"><Data ss:Type="Number">${orderNum}</Data></Cell>
+          <Cell ss:StyleID="ProdSoldLeft"><Data ss:Type="String">${escapeXml(liveName)}</Data></Cell>
+          <Cell ss:StyleID="ProdSoldCenter"><Data ss:Type="String">${escapeXml(category)}</Data></Cell>
+          <Cell ss:StyleID="ProdSoldRight"><Data ss:Type="Number">${priceVal.toFixed(2)}</Data></Cell>
+          <Cell ss:StyleID="ProdSoldCenter"><Data ss:Type="String">🟢 SÍ VENDIDO (${sold.quantity})</Data></Cell>
+          <Cell ss:StyleID="ProdSoldQty"><Data ss:Type="Number">${sold.quantity}</Data></Cell>
+          <Cell ss:StyleID="ProdSoldRight"><Data ss:Type="Number">${sold.total.toFixed(2)}</Data></Cell>
+        </Row>
+        `;
+      } else {
+        return `
+        <Row ss:Height="20">
+          <Cell ss:StyleID="ProdUnsoldCenter"><Data ss:Type="Number">${orderNum}</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldLeft"><Data ss:Type="String">${escapeXml(liveName)}</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldCenter"><Data ss:Type="String">${escapeXml(category)}</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldRight"><Data ss:Type="Number">${priceVal.toFixed(2)}</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldCenter"><Data ss:Type="String">⚪ SIN VENTAS (0)</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldQty"><Data ss:Type="Number">0</Data></Cell>
+          <Cell ss:StyleID="ProdUnsoldRight"><Data ss:Type="Number">0.00</Data></Cell>
+        </Row>
+        `;
       }
-    }
-  });
+    }).join('')}
+    <Row ss:Height="24">
+      <Cell ss:MergeAcross="4" ss:StyleID="TotalRowLabel"><Data ss:Type="String">TOTAL PRODUCTOS (${totalSoldPieces} PIEZAS VENDIDAS):</Data></Cell>
+      <Cell ss:StyleID="TotalRowQty"><Data ss:Type="Number">${totalSoldPieces}</Data></Cell>
+      <Cell ss:StyleID="TotalRowValue"><Data ss:Type="Number">${totalProducts.toFixed(2)}</Data></Cell>
+    </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+    <DisplayGridlines/>
+    <AutoFilter x:Range="R3C1:R3C7"/>
+  </WorksheetOptions>
+ </Worksheet>
 
-  formatWorksheet(wsCatalog);
-  XLSX.utils.book_append_sheet(wb, wsCatalog, "Productos de Lista");
+ <!-- PESTAÑA 4: CANCELACIONES Y ANULACIONES -->
+ <Worksheet ss:Name="Cancelaciones">
+  <Table ss:DefaultColumnWidth="100">
+    <Column ss:Width="65"/>
+    <Column ss:Width="95"/>
+    <Column ss:Width="110"/>
+    <Column ss:Width="145"/>
+    <Column ss:Width="70"/>
+    <Column ss:Width="230"/>
+    <Column ss:Width="75"/>
+    <Column ss:Width="190"/>
+    <Column ss:Width="130"/>
+    <Column ss:Width="120"/>
 
-  const exportFilename = `ReporteDiario_${cleanCompany}_${todayOperatingDay}.xlsx`;
-  XLSX.writeFile(wb, exportFilename);
+    <Row ss:Height="26">
+      <Cell ss:MergeAcross="9" ss:StyleID="SectionTitleRose">
+        <Data ss:Type="String">4. REGISTRO DETALLADO DE CANCELACIONES Y ANULACIONES (${dailyCancellations.length} REGISTROS)</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="18">
+      <Cell ss:MergeAcross="9" ss:StyleID="SubHeader">
+        <Data ss:Type="String">Total de Cancelaciones: ${dailyCancellations.length} registros | Monto Cancelado: $${totalCancellations.toFixed(2)} | Filtros Excel Activados</Data>
+      </Cell>
+    </Row>
+    <Row ss:Height="22">
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String"># Consec.</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Folio</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Tipo</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Fecha / Hora</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Mesa</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Producto / Concepto</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Cantidad</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Motivo de Cancelación</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Autorizado Por</Data></Cell>
+      <Cell ss:StyleID="ColHeadRose"><Data ss:Type="String">Total Cancelado ($)</Data></Cell>
+    </Row>
+    ${dailyCancellations.map((item, index) => {
+      const consecutive = dailyCancellations.length - index;
+      const timeStr = item.timestamp instanceof Date ? item.timestamp.toLocaleString() : (typeof item.timestamp === 'string' ? item.timestamp : new Date(item.timestamp).toLocaleString());
+      return `
+      <Row ss:Height="20">
+        <Cell ss:StyleID="CellCenterBold"><Data ss:Type="String">#${consecutive}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(item.folio)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(item.type === 'cuenta' ? 'Cuenta Completa' : 'Producto')}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(timeStr)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(item.tableLabel)}</Data></Cell>
+        <Cell ss:StyleID="CellLeftBold"><Data ss:Type="String">${escapeXml(item.description)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="Number">${item.quantity}</Data></Cell>
+        <Cell ss:StyleID="CellLeft"><Data ss:Type="String">${escapeXml(item.reason)}</Data></Cell>
+        <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(item.user)}</Data></Cell>
+        <Cell ss:StyleID="CellCurrencyBold"><Data ss:Type="Number">${Number(item.total || 0).toFixed(2)}</Data></Cell>
+      </Row>
+      `;
+    }).join('')}
+    <Row ss:Height="24">
+      <Cell ss:MergeAcross="8" ss:StyleID="CancelTotalRowLabel"><Data ss:Type="String">TOTAL CANCELACIONES (${dailyCancellations.length} REGISTROS):</Data></Cell>
+      <Cell ss:StyleID="CancelTotalRowValue"><Data ss:Type="Number">${totalCancellations.toFixed(2)}</Data></Cell>
+    </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+    <DisplayGridlines/>
+    <AutoFilter x:Range="R3C1:R3C10"/>
+  </WorksheetOptions>
+ </Worksheet>
+
+</Workbook>`;
+
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ReporteDiario_${cleanCompany}_${todayOperatingDay}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export async function sendAutomated5AMDailyReport(
