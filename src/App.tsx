@@ -38,6 +38,9 @@ import {
   setPreferredTablesMode
 } from "./utils/appHelpers";
 
+import { sendSilentWhatsAppMessage } from "./utils/whatsappCloud";
+import { triggerDeviceNotification } from "./utils/fcm";
+
 import { OwnerCrudModal } from './components/modals/OwnerCrudModal';
 import { TenantCrudModal } from './components/modals/TenantCrudModal';
 import { TenantUsersModal } from './components/modals/TenantUsersModal';
@@ -958,6 +961,12 @@ export default function App() {
             tokenParam = parts[1];
           }
         }
+      }
+
+      const reqParam = (params.get("req") || params.get("cancellation") || params.get("folio") || "").trim();
+      if (reqParam) {
+        setTargetCancellationFolio(reqParam);
+        setShowNotificationModal(true);
       }
 
       const ownerParam =
@@ -5719,6 +5728,7 @@ export default function App() {
     },
   ]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [targetCancellationFolio, setTargetCancellationFolio] = useState<string | null>(null);
 
   // Reloj en tiempo real de México 🇲🇽
   const [mexicoTime, setMexicoTime] = useState<string>("");
@@ -5782,6 +5792,77 @@ export default function App() {
 
   const [showPrintPreviewModal, setShowPrintPreviewModal] = useState(false);
 
+  const notifyAdminsAboutCancellation = async (
+    tenantId: string,
+    branchName: string,
+    cancellationFolio: string
+  ) => {
+    try {
+      const origin = window.location.origin;
+      const pathname = window.location.pathname;
+      const link = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
+      
+      // Mensaje ultra-corto (< 120 chars) para evitar cortes en WhatsApp / Push móvil
+      const shortMsg = `🚨 CANCELACIÓN PENDIENTE\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${link}`;
+
+      const tenantUsers = getTenantUsers(tenantId);
+      const adminRecipients = tenantUsers.filter((u) => 
+        u.role === "admin" || 
+        u.id.endsWith("-admin") || 
+        u.id.endsWith("-sistemas") || 
+        u.isReportRecipient || 
+        u.role === "owner"
+      );
+
+      adminRecipients.forEach((admin) => {
+        if (admin.phone) {
+          sendSilentWhatsAppMessage(admin.phone, shortMsg).catch((e) =>
+            console.warn("Error enviando WhatsApp silencioso de cancelación:", e)
+          );
+        }
+      });
+
+      triggerDeviceNotification(`🚨 Solicitud #${cancellationFolio}`, `Sucursal: ${branchName}`);
+    } catch (err) {
+      console.error("Error en notifyAdminsAboutCancellation:", err);
+    }
+  };
+
+  const notifyAdminsCancellationResolved = async (
+    tenantId: string,
+    branchName: string,
+    cancellationFolio: string,
+    isApproved: boolean,
+    adminName: string
+  ) => {
+    try {
+      const statusEmoji = isApproved ? "✅" : "❌";
+      const statusText = isApproved ? "AUTORIZADA" : "RECHAZADA";
+      const shortMsg = `${statusEmoji} CANCELACIÓN ${statusText}\n📍 Sucursal: ${branchName}\n📋 Folio: #${cancellationFolio}\n👤 Atendió: ${adminName}`;
+
+      const tenantUsers = getTenantUsers(tenantId);
+      const adminRecipients = tenantUsers.filter((u) => 
+        u.role === "admin" || 
+        u.id.endsWith("-admin") || 
+        u.id.endsWith("-sistemas") || 
+        u.isReportRecipient || 
+        u.role === "owner"
+      );
+
+      adminRecipients.forEach((admin) => {
+        if (admin.phone) {
+          sendSilentWhatsAppMessage(admin.phone, shortMsg).catch((e) =>
+            console.warn("Error enviando resolución WhatsApp a admin:", e)
+          );
+        }
+      });
+
+      triggerDeviceNotification(`${statusEmoji} Cancelación #${cancellationFolio} ${statusText}`, `Autorizó: ${adminName}`);
+    } catch (err) {
+      console.error("Error en notifyAdminsCancellationResolved:", err);
+    }
+  };
+
   const triggerAppNotification = (
     title: string,
     body: string,
@@ -5807,6 +5888,15 @@ export default function App() {
       addNotificationToFirebase(newNotif).catch((err) => {
         console.error("Error writing notification to Firebase:", err);
       });
+    }
+
+    // Notificar a los administradores del tenant por WhatsApp si es una solicitud de cancelación con folio
+    if ((metadata?.isCancellationRequest || metadata?.isClosedAccountCancellationRequest) && metadata?.cancellationFolio) {
+      notifyAdminsAboutCancellation(
+        selectedTenant?.id || newNotif.tenantId || "tenant-1",
+        metadata?.branchName || selectedTenant?.name || "Cocinet",
+        metadata.cancellationFolio
+      );
     }
     
     setNotificationsList((prev) => {
@@ -12696,6 +12786,12 @@ Instrucciones:
     if (!admin) {
       return null;
     }
+
+    const notif = notificationsList.find(n => n.id === notifId);
+    if (notif?.status === "approved" || notif?.status === "rejected") {
+      return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
+    }
+
     const table = tables.find(t => t.id === tableId) || {};
     try {
       await finalizeComandaItemsCancellationInFirebase(
@@ -12706,12 +12802,27 @@ Instrucciones:
       );
       
       // Persist the approval in Firebase so other devices see it
-      await updateNotificationInFirebase(notifId, { status: "approved", authorizedBy: admin.name });
+      await updateNotificationInFirebase(notifId, { 
+        status: "approved", 
+        authorizedBy: admin.name,
+        authorizedAt: new Date().toISOString()
+      });
 
       // Update local state of notifications to reflect the approval
       setNotificationsList(prev => prev.map(n => 
         n.id === notifId ? { ...n, status: "approved", authorizedBy: admin.name } : n
       ));
+
+      // Broadcast resolution to all tenant admins
+      if (notif?.cancellationFolio) {
+        notifyAdminsCancellationResolved(
+          notif.tenantId || selectedTenant?.id || "tenant-1",
+          notif.branchName || selectedTenant?.name || "Cocinet",
+          notif.cancellationFolio,
+          true,
+          admin.name
+        );
+      }
 
       return admin;
     } catch (err) {
@@ -12723,9 +12834,17 @@ Instrucciones:
   const handleRejectCancellationFromNotification = async (
     tableId: string,
     items: { folio: number; productId: string; plate: number }[],
-    notifId: string
-  ): Promise<void> => {
+    notifId: string,
+    adminUser?: User | null
+  ): Promise<any> => {
+    const notif = notificationsList.find(n => n.id === notifId);
+    if (notif?.status === "approved" || notif?.status === "rejected") {
+      return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
+    }
+
     const table = tables.find(t => t.id === tableId) || {};
+    const adminName = adminUser?.name || currentUser?.name || "Administrador";
+
     try {
       for (const item of items) {
         await revertComandaItemsCancellationInFirebase(
@@ -12738,12 +12857,29 @@ Instrucciones:
       }
 
       // Persist the rejection in Firebase so other devices see it
-      await updateNotificationInFirebase(notifId, { status: "rejected" });
+      await updateNotificationInFirebase(notifId, { 
+        status: "rejected",
+        authorizedBy: adminName,
+        authorizedAt: new Date().toISOString()
+      });
 
       // Update local state of notifications to reflect the rejection
       setNotificationsList(prev => prev.map(n => 
-        n.id === notifId ? { ...n, status: "rejected" } : n
+        n.id === notifId ? { ...n, status: "rejected", authorizedBy: adminName } : n
       ));
+
+      // Broadcast resolution to all tenant admins
+      if (notif?.cancellationFolio) {
+        notifyAdminsCancellationResolved(
+          notif.tenantId || selectedTenant?.id || "tenant-1",
+          notif.branchName || selectedTenant?.name || "Cocinet",
+          notif.cancellationFolio,
+          false,
+          adminName
+        );
+      }
+
+      return { success: true };
     } catch (err) {
       console.error("Error rejecting from notification:", err);
       throw err;
@@ -12759,18 +12895,39 @@ Instrucciones:
     if (!admin) {
       return null;
     }
+
+    const notif = notificationsList.find(n => n.id === notifId);
+    if (notif?.status === "approved" || notif?.status === "rejected") {
+      return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
+    }
+
     try {
       const account = history.find(a => a.id === accountId);
       const reason = account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
       await cancelClosedAccountInFirebase(accountId, reason, admin);
       
       // Persist the approval in Firebase so other devices see it
-      await updateNotificationInFirebase(notifId, { status: "approved", authorizedBy: admin.name });
+      await updateNotificationInFirebase(notifId, { 
+        status: "approved", 
+        authorizedBy: admin.name,
+        authorizedAt: new Date().toISOString()
+      });
 
       // Update local state of notifications to reflect the approval
       setNotificationsList(prev => prev.map(n => 
         n.id === notifId ? { ...n, status: "approved", authorizedBy: admin.name } : n
       ));
+
+      // Broadcast resolution to all tenant admins
+      if (notif?.cancellationFolio) {
+        notifyAdminsCancellationResolved(
+          notif.tenantId || selectedTenant?.id || "tenant-1",
+          notif.branchName || selectedTenant?.name || "Cocinet",
+          notif.cancellationFolio,
+          true,
+          admin.name
+        );
+      }
 
       return admin;
     } catch (err) {
@@ -12781,18 +12938,43 @@ Instrucciones:
 
   const handleRejectClosedAccountCancellationFromNotification = async (
     accountId: string,
-    notifId: string
-  ): Promise<void> => {
+    notifId: string,
+    adminUser?: User | null
+  ): Promise<any> => {
+    const notif = notificationsList.find(n => n.id === notifId);
+    if (notif?.status === "approved" || notif?.status === "rejected") {
+      return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
+    }
+
+    const adminName = adminUser?.name || currentUser?.name || "Administrador";
+
     try {
       await revertAccountCancellationInFirebase(accountId);
 
       // Persist the rejection in Firebase so other devices see it
-      await updateNotificationInFirebase(notifId, { status: "rejected" });
+      await updateNotificationInFirebase(notifId, { 
+        status: "rejected",
+        authorizedBy: adminName,
+        authorizedAt: new Date().toISOString()
+      });
 
       // Update local state of notifications to reflect the rejection
       setNotificationsList(prev => prev.map(n => 
-        n.id === notifId ? { ...n, status: "rejected" } : n
+        n.id === notifId ? { ...n, status: "rejected", authorizedBy: adminName } : n
       ));
+
+      // Broadcast resolution to all tenant admins
+      if (notif?.cancellationFolio) {
+        notifyAdminsCancellationResolved(
+          notif.tenantId || selectedTenant?.id || "tenant-1",
+          notif.branchName || selectedTenant?.name || "Cocinet",
+          notif.cancellationFolio,
+          false,
+          adminName
+        );
+      }
+
+      return { success: true };
     } catch (err) {
       console.error("Error rejecting closed account from notification:", err);
       throw err;
@@ -12835,7 +13017,10 @@ Instrucciones:
       <InstallPWA />
       <NotificationsModal 
         isOpen={showNotificationModal}
-        onClose={() => setShowNotificationModal(false)}
+        onClose={() => {
+          setShowNotificationModal(false);
+          setTargetCancellationFolio(null);
+        }}
         notificationsList={notificationsList}
         setNotificationsList={setNotificationsList}
         onReprint={printPedidoFromNetwork}
@@ -12844,6 +13029,7 @@ Instrucciones:
         onAuthorizeClosedAccountCancellation={handleAuthorizeClosedAccountCancellationFromNotification}
         onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
         activeSessionOpenedAt={activeSessionForCorte?.openedAt}
+        targetCancellationFolio={targetCancellationFolio}
       />
       {isSwitchingTenant && renderSwitchingTenantOverlay()}
       {showTenantPinModal && renderPinModalOverlay()}

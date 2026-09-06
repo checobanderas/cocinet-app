@@ -54,7 +54,7 @@ interface NotificationsModalProps {
     tableId: string,
     items: { folio: number; productId: string; plate: number }[],
     notifId: string
-  ) => Promise<void>;
+  ) => Promise<any>;
   onAuthorizeClosedAccountCancellation?: (
     accountId: string,
     pin: string,
@@ -63,8 +63,9 @@ interface NotificationsModalProps {
   onRejectClosedAccountCancellation?: (
     accountId: string,
     notifId: string
-  ) => Promise<void>;
+  ) => Promise<any>;
   activeSessionOpenedAt?: string;
+  targetCancellationFolio?: string | null;
 }
 
 const formatNotificationDate = (createdAt?: string, defaultTime?: string) => {
@@ -97,6 +98,7 @@ function NotificationCard({
   onRejectCancellation,
   onAuthorizeClosedAccountCancellation,
   onRejectClosedAccountCancellation,
+  isTarget,
 }: {
   key?: string;
   notif: NotificationItem;
@@ -112,7 +114,7 @@ function NotificationCard({
     tableId: string,
     items: { folio: number; productId: string; plate: number }[],
     notifId: string
-  ) => Promise<void>;
+  ) => Promise<any>;
   onAuthorizeClosedAccountCancellation?: (
     accountId: string,
     pin: string,
@@ -121,7 +123,8 @@ function NotificationCard({
   onRejectClosedAccountCancellation?: (
     accountId: string,
     notifId: string
-  ) => Promise<void>;
+  ) => Promise<any>;
+  isTarget?: boolean;
 }) {
   const [pin, setPin] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -144,17 +147,21 @@ function NotificationCard({
     try {
       if (notif.isClosedAccountCancellationRequest) {
         if (!onAuthorizeClosedAccountCancellation) return;
-        const admin = await onAuthorizeClosedAccountCancellation(notif.accountId || "", pin, notif.id);
-        if (admin) {
-          alert(`¡Cancelación de Cuenta Cerrada Autorizada con éxito por ${admin.name}! ✅`);
+        const res = await onAuthorizeClosedAccountCancellation(notif.accountId || "", pin, notif.id);
+        if (res?.alreadyProcessed) {
+          alert(`ℹ️ Esta solicitud ya fue atendida por ${res.authorizedBy || 'otro administrador'}.`);
+        } else if (res) {
+          alert(`¡Cancelación de Cuenta Cerrada Autorizada con éxito por ${res.name}! ✅`);
         } else {
           alert("PIN de Administrador incorrecto ❌");
         }
       } else {
         if (!onAuthorizeCancellation) return;
-        const admin = await onAuthorizeCancellation(notif.tableId || "", notif.itemsToCancel || [], pin, notif.id);
-        if (admin) {
-          alert(`¡Cancelación de Productos Autorizada con éxito por ${admin.name}! ✅`);
+        const res = await onAuthorizeCancellation(notif.tableId || "", notif.itemsToCancel || [], pin, notif.id);
+        if (res?.alreadyProcessed) {
+          alert(`ℹ️ Esta solicitud ya fue atendida por ${res.authorizedBy || 'otro administrador'}.`);
+        } else if (res) {
+          alert(`¡Cancelación de Productos Autorizada con éxito por ${res.name}! ✅`);
         } else {
           alert("PIN de Administrador incorrecto ❌");
         }
@@ -173,12 +180,20 @@ function NotificationCard({
     try {
       if (notif.isClosedAccountCancellationRequest) {
         if (!onRejectClosedAccountCancellation) return;
-        await onRejectClosedAccountCancellation(notif.accountId || "", notif.id);
-        alert("La solicitud ha sido rechazada y la cuenta vuelve a estar completada. ✕");
+        const res = await onRejectClosedAccountCancellation(notif.accountId || "", notif.id);
+        if (res?.alreadyProcessed) {
+          alert(`ℹ️ Esta solicitud ya fue atendida por ${res.authorizedBy || 'otro administrador'}.`);
+        } else {
+          alert("La solicitud ha sido rechazada y la cuenta vuelve a estar completada. ✕");
+        }
       } else {
         if (!onRejectCancellation) return;
-        await onRejectCancellation(notif.tableId || "", notif.itemsToCancel || [], notif.id);
-        alert("La solicitud ha sido rechazada y los productos vuelven a estar activos. ✕");
+        const res = await onRejectCancellation(notif.tableId || "", notif.itemsToCancel || [], notif.id);
+        if (res?.alreadyProcessed) {
+          alert(`ℹ️ Esta solicitud ya fue atendida por ${res.authorizedBy || 'otro administrador'}.`);
+        } else {
+          alert("La solicitud ha sido rechazada y los productos vuelven a estar activos. ✕");
+        }
       }
     } catch (err: any) {
       alert("Error al rechazar: " + (err.message || err));
@@ -190,12 +205,16 @@ function NotificationCard({
   return (
     <div
       style={{
-        background: isAnyCancellationRequest
+        background: isTarget
+          ? "#fff1f2"
+          : isAnyCancellationRequest
           ? "#fff1f2"
           : notif.read
           ? "white"
           : "#fffbeb",
-        border: isAnyCancellationRequest
+        border: isTarget
+          ? "2px solid #e11d48"
+          : isAnyCancellationRequest
           ? "1.5px solid #f43f5e"
           : notif.read
           ? "1px solid #e2e8f0"
@@ -203,7 +222,9 @@ function NotificationCard({
         borderRadius: "18px",
         padding: "16px",
         marginBottom: "12px",
-        boxShadow: isAnyCancellationRequest
+        boxShadow: isTarget
+          ? "0 0 0 3px rgba(225, 29, 72, 0.2), 0 6px 20px rgba(225, 29, 72, 0.18)"
+          : isAnyCancellationRequest
           ? "0 4px 14px rgba(244,63,94,0.12)"
           : notif.read
           ? "none"
@@ -216,7 +237,12 @@ function NotificationCard({
         <h4 style={{ margin: "0 0 4px 0", fontSize: "0.95rem", fontWeight: "900", color: isAnyCancellationRequest ? "#be123c" : "#1e293b" }}>
           {notif.title}
         </h4>
-        <div className="flex gap-1.5 items-center">
+        <div className="flex gap-1.5 items-center flex-wrap justify-end">
+          {isTarget && (
+            <span className="bg-indigo-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full animate-pulse uppercase tracking-tight shadow-sm">
+              🎯 ENLACE DIRECTO
+            </span>
+          )}
           {isAnyCancellationRequest && (
             <span className="bg-rose-500 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full animate-pulse uppercase">
               REQUERIDO
@@ -268,12 +294,24 @@ function NotificationCard({
 
           <div className="border-t border-rose-200/50 pt-3">
             {notif.status === "approved" ? (
-              <div className="bg-emerald-500 text-white font-black text-center py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm">
-                <span>✓</span> ¡Cancelación Autorizada por {notif.authorizedBy}!
+              <div className="bg-emerald-600 text-white font-black text-center py-2.5 px-3 rounded-xl text-xs flex flex-col items-center justify-center gap-0.5 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <span>✓</span> <span>¡Cancelación Autorizada!</span>
+                </div>
+                <div className="text-[11px] font-normal text-emerald-100">
+                  Atendida por <strong className="text-white font-bold">{notif.authorizedBy || "Administrador"}</strong>
+                </div>
               </div>
             ) : notif.status === "rejected" ? (
-              <div className="bg-slate-500 text-white font-black text-center py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm">
-                <span>✕</span> Solicitud Rechazada / Revertida
+              <div className="bg-slate-600 text-white font-black text-center py-2.5 px-3 rounded-xl text-xs flex flex-col items-center justify-center gap-0.5 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <span>✕</span> <span>Solicitud Rechazada / Revertida</span>
+                </div>
+                {notif.authorizedBy && (
+                  <div className="text-[11px] font-normal text-slate-200">
+                    Atendida por <strong className="text-white font-bold">{notif.authorizedBy}</strong>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -354,6 +392,7 @@ export default function NotificationsModal({
   onAuthorizeClosedAccountCancellation,
   onRejectClosedAccountCancellation,
   activeSessionOpenedAt,
+  targetCancellationFolio,
 }: NotificationsModalProps) {
   
   const [activeFilter, setActiveFilter] = React.useState<"all" | "cancellations">("all");
@@ -361,6 +400,14 @@ export default function NotificationsModal({
   const [soundEnabled, setSoundEnabled] = React.useState<boolean>(() => {
     return localStorage.getItem("notification_sound_enabled") !== "false";
   });
+
+  // Auto-focus cancellations if deep link has targetCancellationFolio
+  React.useEffect(() => {
+    if (isOpen && targetCancellationFolio) {
+      setActiveFilter("cancellations");
+      setShowHistory(true);
+    }
+  }, [isOpen, targetCancellationFolio]);
 
   const handleToggleSound = (enabled: boolean) => {
     setSoundEnabled(enabled);
@@ -389,7 +436,7 @@ export default function NotificationsModal({
 
   // 1. Filter by current turn or show entire history
   const baseNotifications = notificationsList.filter((n) => {
-    if (showHistory) return true;
+    if (showHistory || (targetCancellationFolio && n.cancellationFolio === targetCancellationFolio)) return true;
     return isFromCurrentTurn(n);
   });
 
@@ -400,6 +447,16 @@ export default function NotificationsModal({
     }
     return true;
   });
+
+  // 3. Prioritize targeted cancellation folio at the top
+  const sortedNotifications = React.useMemo(() => {
+    if (!targetCancellationFolio) return filteredNotifications;
+    return [...filteredNotifications].sort((a, b) => {
+      if (a.cancellationFolio === targetCancellationFolio) return -1;
+      if (b.cancellationFolio === targetCancellationFolio) return 1;
+      return 0;
+    });
+  }, [filteredNotifications, targetCancellationFolio]);
 
   const handleMarkAllAsRead = () => {
     const updated = notificationsList.map((n) => {
@@ -564,7 +621,7 @@ export default function NotificationsModal({
           style={{ background: "transparent", borderRadius: "16px" }}
           lines="none"
         >
-          {filteredNotifications.length === 0 ? (
+          {sortedNotifications.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px" }}>
               <div style={{ fontSize: "3rem" }}>📭</div>
               <p
@@ -578,7 +635,7 @@ export default function NotificationsModal({
               </p>
             </div>
           ) : (
-            filteredNotifications.map((notif) => (
+            sortedNotifications.map((notif) => (
               <NotificationCard
                 key={notif.id}
                 notif={notif}
@@ -588,6 +645,7 @@ export default function NotificationsModal({
                 onRejectCancellation={onRejectCancellation}
                 onAuthorizeClosedAccountCancellation={onAuthorizeClosedAccountCancellation}
                 onRejectClosedAccountCancellation={onRejectClosedAccountCancellation}
+                isTarget={!!(targetCancellationFolio && notif.cancellationFolio === targetCancellationFolio)}
               />
             ))
           )}
