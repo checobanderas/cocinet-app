@@ -3,7 +3,7 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, settingsOutline } from 'ionicons/icons';
 import { formatMexicoPhone } from '../../utils/appHelpers';
 import { requestFCMToken, triggerDeviceNotification, addNotificationDeliveryLog } from '../../utils/fcm';
-import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 
 interface TenantUsersModalProps {
   showTenantUsersModal: boolean;
