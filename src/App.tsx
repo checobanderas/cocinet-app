@@ -6039,7 +6039,7 @@ export default function App() {
             const branch = notif.branchName || selectedTenant?.name || "Cocinet";
             const targetTenantId = notif.tenantId || selectedTenant?.id || "tenant-1";
             const directLink = `${origin}${pathname}?tenant=${targetTenantId}&token=sistemas&req=${notif.cancellationFolio}`;
-            const escalationMsg = `⏳ ALERTA DE ESCALAMIENTO (+5 MIN SIN RESPUESTA)\n🚨 Folio: #${notif.cancellationFolio}\n📍 Sucursal: ${branch}\n👤 Solicitó: ${notif.waiterName || 'Mesero/Cajero'}\n⚠️ Ningún administrador local atendió la solicitud.\n🔗 Atender como Sistemas (Bypass 4020):\n${directLink}`;
+            const escalationMsg = `⏳ ALERTA DE ESCALAMIENTO (+5 MIN SIN RESPUESTA)\n🚨 Folio: #${notif.cancellationFolio}\n📍 Sucursal: ${branch}\n👤 Solicitó: ${notif.waiterName || 'Mesero/Cajero'}\n⚠️ Ningún administrador local atendió la solicitud.\n🔗 Atender como Área de Sistemas:\n${directLink}`;
 
             sendSilentWhatsAppMessage("9511273796", escalationMsg)
               .then((res) => {

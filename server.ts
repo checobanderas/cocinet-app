@@ -682,6 +682,78 @@ async function startServer() {
     }
   });
 
+  // 📱 Registro de auditoría y trazabilidad en disco: mensajes_sms.log
+  app.post('/api/sms-log', (req, res) => {
+    try {
+      const {
+        timestamp = new Date().toISOString(),
+        cancellationFolio = "N/A",
+        tenantId = "N/A",
+        branchName = "N/A",
+        recipientName = "N/A",
+        recipientRole = "N/A",
+        recipientPhone = "Sin número",
+        channel = "SMS/WhatsApp",
+        status = "unknown",
+        detail = "",
+        targetUrl = ""
+      } = req.body || {};
+
+      const statusTag = status === "success" ? "✅ EXITOSO" : status === "failed" ? "❌ FALLIDO" : "⏭️ OMITIDO";
+      const localTime = new Date(timestamp).toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+
+      const logText = [
+        `================================================================================`,
+        `[${timestamp}] (${localTime}) - CANAL: ${String(channel).toUpperCase()} - ESTADO: ${statusTag}`,
+        `Folio Cancelación: #${cancellationFolio}`,
+        `Sucursal: ${branchName} (ID: ${tenantId})`,
+        `Destinatario: ${recipientName} [Rol: ${recipientRole}]`,
+        `Teléfono Destino: ${recipientPhone}`,
+        `Detalle / Respuesta Pasarela: ${detail}`,
+        targetUrl ? `URL Directa: ${targetUrl}` : null,
+        `================================================================================\n`
+      ].filter(Boolean).join("\n");
+
+      const logPaths = [
+        path.join(process.cwd(), 'mensajes_sms.log'),
+        path.join(process.cwd(), 'dist', 'mensajes_sms.log')
+      ];
+
+      for (const p of logPaths) {
+        try {
+          const dir = path.dirname(p);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.appendFileSync(p, logText + "\n", 'utf8');
+        } catch (e) {
+          console.warn(`No se pudo escribir en ${p}:`, e);
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error en /api/sms-log:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/sms-log', (req, res) => {
+    try {
+      const p = path.join(process.cwd(), 'mensajes_sms.log');
+      const distP = path.join(process.cwd(), 'dist', 'mensajes_sms.log');
+      const targetPath = fs.existsSync(p) ? p : fs.existsSync(distP) ? distP : null;
+
+      if (targetPath && fs.existsSync(targetPath)) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(fs.readFileSync(targetPath, 'utf8'));
+      } else {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(`=== REGISTRO DE MENSAJES SMS Y WHATSAPP (mensajes_sms.log) ===\nIniciando archivo de registro...\n`);
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/config/:key', (req, res) => {
     const { value } = req.body;
     db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').run(req.params.key, value);

@@ -152,6 +152,15 @@ export function addNotificationDeliveryLog(log: Omit<NotificationDeliveryLog, "i
     } catch (e) {
       console.warn("Error guardando log de notificación:", e);
     }
+
+    // Persistir físicamente en el archivo mensajes_sms.log del servidor
+    try {
+      fetch("/api/sms-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newEntry),
+      }).catch(() => {});
+    } catch (e) {}
   }
 
   return newEntry;

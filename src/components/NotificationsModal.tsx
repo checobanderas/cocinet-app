@@ -293,9 +293,9 @@ function NotificationCard({
             <div className="bg-amber-100 border border-amber-300 text-amber-950 p-2.5 rounded-xl font-bold text-xs flex items-center gap-2">
               <span className="text-lg">⏳</span>
               <div>
-                <span className="font-black text-amber-900 block">ESCALADO A SISTEMAS (+5 MIN SIN RESPUESTA)</span>
+                <span className="font-black text-amber-900 block">REDIRIGIDO A SISTEMAS (+5 MIN SIN RESPUESTA)</span>
                 <span className="text-[11px] font-medium text-amber-800 leading-tight block">
-                  Esta comanda superó el tiempo límite sin respuesta de administradores locales. Habilitada para autorización por Área de Sistemas (PIN Maestro: <b>4020</b>).
+                  Esta comanda superó el tiempo límite sin respuesta de administradores locales y fue canalizada al Área de Sistemas.
                 </span>
               </div>
             </div>
@@ -348,16 +348,8 @@ function NotificationCard({
               </div>
             ) : (
               <div className="space-y-2.5">
-                <div className="text-rose-900 font-extrabold text-[11px] uppercase tracking-wider flex items-center justify-between">
+                <div className="text-rose-900 font-extrabold text-[11px] uppercase tracking-wider">
                   <span className="flex items-center gap-1">🔒 Escribe aquí tu PIN para autorizar:</span>
-                  <button
-                    type="button"
-                    onClick={() => setPin("4020")}
-                    className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-black px-2 py-0.5 rounded cursor-pointer border-none"
-                    title="Usar PIN Maestro de Sistemas (4020)"
-                  >
-                    Usar PIN Sistemas 🛠️
-                  </button>
                 </div>
                 <input
                   type="password"
@@ -746,7 +738,7 @@ export default function NotificationsModal({
                     const testNotif: NotificationItem = {
                       id: `test_${Date.now()}`,
                       title: `⏳ Solicitud de Prueba #${testFolio}`,
-                      body: `Prueba de circuito bidireccional.\nFolio: ${testFolio}\nMesero: Sistemas Test\nMotivo: Validación de Diagnóstico\nEscribe PIN (4020) para autorizar.`,
+                      body: `Prueba de circuito bidireccional.\nFolio: ${testFolio}\nMesero: Sistemas Test\nMotivo: Validación de Diagnóstico\nEscribe tu PIN de autorización.`,
                       time: "Ahora mismo",
                       read: false,
                       isCancellationRequest: true,
