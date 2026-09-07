@@ -118,10 +118,17 @@ import { CorteTabla2View } from './components/views/CorteTabla2View';
 import { ReporteMovimientosView } from './components/views/ReporteMovimientosView';
 import { MaterialHeaderView } from './components/views/MaterialHeaderView';
 import { PrecuentaItemView } from './components/views/PrecuentaItemView';
-import { DirectCancellationPortalView } from './components/views/DirectCancellationPortalView';
-import { ExcelDownloadPortalView } from './components/views/ExcelDownloadPortalView';
-import { CustomerInvoicePortalView } from './components/views/CustomerInvoicePortalView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
+
+const DirectCancellationPortalView = React.lazy(() =>
+  import('./components/views/DirectCancellationPortalView').then(m => ({ default: m.DirectCancellationPortalView }))
+);
+const ExcelDownloadPortalView = React.lazy(() =>
+  import('./components/views/ExcelDownloadPortalView').then(m => ({ default: m.ExcelDownloadPortalView }))
+);
+const CustomerInvoicePortalView = React.lazy(() =>
+  import('./components/views/CustomerInvoicePortalView').then(m => ({ default: m.CustomerInvoicePortalView || m.default }))
+);
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -13921,45 +13928,51 @@ Instrucciones:
       />
       {/* Master Render */}
       {targetCancellationFolio ? (
-        <DirectCancellationPortalView
-          folio={targetCancellationFolio}
-          selectedTenant={selectedTenant}
-          notificationsList={notificationsList}
-          onAuthorizeCancellation={handleAuthorizeCancellationFromNotification}
-          onRejectCancellation={handleRejectCancellationFromNotification}
-          onAuthorizeClosedAccountCancellation={handleAuthorizeClosedAccountCancellationFromNotification}
-          onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
-          onClose={() => {
-            setTargetCancellationFolio(null);
-            setShowNotificationModal(false);
-            window.location.href = window.location.origin + window.location.pathname;
-          }}
-        />
+        <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Cargando portal de cancelación...</p></div>}>
+          <DirectCancellationPortalView
+            folio={targetCancellationFolio}
+            selectedTenant={selectedTenant}
+            notificationsList={notificationsList}
+            onAuthorizeCancellation={handleAuthorizeCancellationFromNotification}
+            onRejectCancellation={handleRejectCancellationFromNotification}
+            onAuthorizeClosedAccountCancellation={handleAuthorizeClosedAccountCancellationFromNotification}
+            onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
+            onClose={() => {
+              setTargetCancellationFolio(null);
+              setShowNotificationModal(false);
+              window.location.href = window.location.origin + window.location.pathname;
+            }}
+          />
+        </React.Suspense>
       ) : excelDownloadDay !== null ? (
-        <ExcelDownloadPortalView
-          history={history}
-          products={products}
-          selectedTenant={selectedTenant}
-          targetDate={excelDownloadDay === "today" ? undefined : excelDownloadDay}
-          onClose={() => {
-            setExcelDownloadDay(null);
-            window.location.href = window.location.origin + window.location.pathname;
-          }}
-        />
+        <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Preparando reporte Excel...</p></div>}>
+          <ExcelDownloadPortalView
+            history={history}
+            products={products}
+            selectedTenant={selectedTenant}
+            targetDate={excelDownloadDay === "today" ? undefined : excelDownloadDay}
+            onClose={() => {
+              setExcelDownloadDay(null);
+              window.location.href = window.location.origin + window.location.pathname;
+            }}
+          />
+        </React.Suspense>
       ) : customerInvoicePortalData !== null ? (
-        <CustomerInvoicePortalView
-          initialPhone={customerInvoicePortalData.phone}
-          initialFolio={customerInvoicePortalData.folio}
-          initialTenantId={customerInvoicePortalData.tenant}
-          initialRfc={customerInvoicePortalData.rfc}
-          customers={customers}
-          history={history}
-          selectedTenant={selectedTenant}
-          onClose={() => {
-            setCustomerInvoicePortalData(null);
-            window.location.href = window.location.origin + window.location.pathname;
-          }}
-        />
+        <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Cargando portal de facturación...</p></div>}>
+          <CustomerInvoicePortalView
+            initialPhone={customerInvoicePortalData.phone}
+            initialFolio={customerInvoicePortalData.folio}
+            initialTenantId={customerInvoicePortalData.tenant}
+            initialRfc={customerInvoicePortalData.rfc}
+            customers={customers}
+            history={history}
+            selectedTenant={selectedTenant}
+            onClose={() => {
+              setCustomerInvoicePortalData(null);
+              window.location.href = window.location.origin + window.location.pathname;
+            }}
+          />
+        </React.Suspense>
       ) : !currentUser ? (
         renderLogin()
       ) : (
