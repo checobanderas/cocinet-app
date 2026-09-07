@@ -5807,7 +5807,14 @@ export default function App() {
     tenantId: string,
     branchName: string,
     cancellationFolio: string,
-    isResend = false
+    isResend = false,
+    details?: {
+      waiterName?: string;
+      reason?: string;
+      tableLabel?: string;
+      itemNames?: string;
+      total?: number;
+    }
   ) => {
     try {
       const origin = window.location.origin;
@@ -5815,23 +5822,23 @@ export default function App() {
 
       const tenantUsers = getTenantUsers(tenantId);
       let adminRecipients = tenantUsers.filter((u) => 
-        u.role === "admin" || 
+        (u.role === "admin" || 
         u.id.endsWith("-admin") || 
         u.id.endsWith("-manager") ||
         u.id.endsWith("-sistemas") || 
-        u.isReportRecipient || 
-        u.role === "owner"
+        u.role === "owner") &&
+        Boolean(u.phone && u.phone.trim().replace(/\D/g, "").length >= 10)
       );
 
       // Si la empresa tiene un dueño asignado en el catálogo / customOwners, incluirlo
       const matchedCompany = COMPANY_CATALOG.find((c) => c.id === tenantId);
       if (matchedCompany?.ownerKey) {
         const ownerObj = Array.isArray(customOwners) ? customOwners.find((o: any) => o.key === matchedCompany.ownerKey) : null;
-        if (ownerObj && ownerObj.phone && !adminRecipients.some(a => a.phone === ownerObj.phone)) {
+        if (ownerObj && ownerObj.phone && ownerObj.phone.trim().replace(/\D/g, "").length >= 10 && !adminRecipients.some(a => a.phone === ownerObj.phone)) {
           adminRecipients.push({
             id: `owner-${ownerObj.key}`,
             name: ownerObj.name || "Propietario",
-            role: "owner",
+            role: "admin",
             phone: ownerObj.phone,
           } as any);
         }
@@ -5844,6 +5851,7 @@ export default function App() {
         let tokenParam = "propietario";
         if (admin.id.endsWith("-sistemas")) tokenParam = "sistemas";
         else if (admin.id.endsWith("-manager")) tokenParam = "gerente";
+        else if (admin.pin) tokenParam = admin.pin;
         
         targets.push({
           name: admin.name,
@@ -5853,11 +5861,18 @@ export default function App() {
         });
       });
 
+      const branch = branchName || selectedTenant?.name || "Cocinet";
+      const requester = details?.waiterName || currentUser?.name || "Cajero/Mesero";
+      const tableText = details?.tableLabel ? `\n🍽️ *Mesa/Cuenta:* ${details.tableLabel}` : "";
+      const itemsText = details?.itemNames ? `\n📦 *Productos:* ${details.itemNames}` : "";
+      const totalText = details?.total ? `\n💰 *Total:* $${details.total}` : "";
+      const reasonText = details?.reason ? `\n📝 *Motivo:* ${details.reason}` : "";
+
       // Disparar envíos y registrar logs de auditoría
       for (const target of targets) {
         const directLink = `${origin}${pathname}?tenant=${tenantId}&token=${target.tokenParam}&req=${cancellationFolio}`;
-        const prefix = isResend ? "📲 REENVÍO DE CANCELACIÓN" : "🚨 CANCELACIÓN PENDIENTE";
-        const shortMsg = `${prefix}\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${directLink}`;
+        const prefix = isResend ? "📲 *REENVÍO DE CANCELACIÓN*" : "🚨 *SOLICITUD DE CANCELACIÓN*";
+        const shortMsg = `${prefix}\n📍 *Sucursal:* ${branch}\n👤 *Solicitó:* ${requester}\n📋 *Folio:* #${cancellationFolio}${tableText}${itemsText}${totalText}${reasonText}\n\n🔗 *Autorizar con tu PIN en Cocinet:*\n${directLink}\n\n_Abre el enlace para validar con tu PIN de Administrador._`;
 
         if (target.phone) {
           sendSilentWhatsAppMessage(target.phone, shortMsg)
@@ -5865,13 +5880,13 @@ export default function App() {
               addNotificationDeliveryLog({
                 cancellationFolio,
                 tenantId,
-                branchName,
+                branchName: branch,
                 recipientName: target.name,
                 recipientRole: target.role,
                 recipientPhone: target.phone,
                 channel: "whatsapp",
                 status: res.success ? "success" : "failed",
-                detail: res.success ? `WhatsApp ${isResend ? 'reenviado' : 'entregado'} (ID: ${res.messageId || 'OK'})` : `Error API: ${res.error || 'Fallo desconocido'}`,
+                detail: res.success ? `WhatsApp ${isResend ? 'reenviado' : 'entregado'} silenciosamente (ID: ${res.messageId || 'OK'})` : `Error API: ${res.error || 'Fallo desconocido'}`,
                 targetUrl: directLink,
               });
             })
@@ -5879,7 +5894,7 @@ export default function App() {
               addNotificationDeliveryLog({
                 cancellationFolio,
                 tenantId,
-                branchName,
+                branchName: branch,
                 recipientName: target.name,
                 recipientRole: target.role,
                 recipientPhone: target.phone,
@@ -5893,7 +5908,7 @@ export default function App() {
           addNotificationDeliveryLog({
             cancellationFolio,
             tenantId,
-            branchName,
+            branchName: branch,
             recipientName: target.name,
             recipientRole: target.role,
             recipientPhone: undefined,
@@ -5909,7 +5924,7 @@ export default function App() {
       const mainLink = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
       triggerDeviceNotification(
         `${isResend ? '📲 Reenvío' : '🚨 Solicitud'} #${cancellationFolio}`,
-        `Sucursal: ${branchName} (Toca para autorizar)`,
+        `Sucursal: ${branch} (Toca para autorizar)`,
         "/logo.png",
         mainLink,
         `cancel-${cancellationFolio}`
@@ -5918,7 +5933,7 @@ export default function App() {
       addNotificationDeliveryLog({
         cancellationFolio,
         tenantId,
-        branchName,
+        branchName: branch,
         recipientName: "Dispositivos Conectados (Push)",
         recipientRole: "broadcast",
         channel: "local_push",
@@ -6115,10 +6130,22 @@ export default function App() {
 
     // Notificar a los administradores del tenant por WhatsApp si es una solicitud de cancelación con folio
     if ((metadata?.isCancellationRequest || metadata?.isClosedAccountCancellationRequest) && metadata?.cancellationFolio) {
+      const itemsStr = metadata?.itemsToCancel 
+        ? metadata.itemsToCancel.map((it: any) => `${it.quantity || 1}x ${it.name || it.product?.name || 'Producto'}`).join(", ") 
+        : undefined;
+
       notifyAdminsAboutCancellation(
         selectedTenant?.id || newNotif.tenantId || "tenant-1",
         metadata?.branchName || selectedTenant?.name || "Cocinet",
-        metadata.cancellationFolio
+        metadata.cancellationFolio,
+        false,
+        {
+          waiterName: metadata?.waiterName || currentUser?.name || "Cajero/Mesero",
+          reason: metadata?.reason || metadata?.cancellationReason,
+          tableLabel: metadata?.tableLabel,
+          itemNames: itemsStr,
+          total: metadata?.total || metadata?.totalAmount,
+        }
       );
     }
     
@@ -9708,12 +9735,23 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       const cancellationFolio = matchingNotif?.cancellationFolio || itemOrAccount?.cancellationFolio || `CAN-${folio || String(Date.now()).slice(-5)}`;
 
+      const itemsStr = matchingNotif?.itemsToCancel 
+        ? matchingNotif.itemsToCancel.map((it: any) => `${it.quantity || 1}x ${it.name || 'Producto'}`).join(", ") 
+        : undefined;
+
       // 2. Reenviar únicamente a los administradores / propietario de ESTA sucursal
       await notifyAdminsAboutCancellation(
         matchingNotif?.tenantId || tenantId,
         matchingNotif?.branchName || branchName,
         cancellationFolio,
-        true
+        true,
+        {
+          waiterName: matchingNotif?.waiterName || currentUser?.name || "Cajero/Mesero",
+          reason: matchingNotif?.reason || matchingNotif?.cancellationReason,
+          tableLabel: matchingNotif?.tableLabel,
+          itemNames: itemsStr,
+          total: matchingNotif?.total,
+        }
       );
 
       // 3. Registrar el evento en el timeline si existe el documento de notificación
