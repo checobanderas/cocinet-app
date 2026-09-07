@@ -23,6 +23,7 @@ import { sendSilentWhatsAppMessage } from "../utils/whatsappCloud";
 
 interface NotificationItem {
   id: string;
+  tenantId?: string;
   title: string;
   body: string;
   time: string;
@@ -523,6 +524,7 @@ export default function NotificationsModal({
   activeSessionOpenedAt,
   targetCancellationFolio,
 }: NotificationsModalProps) {
+  const [isolatedTargetFolio, setIsolatedTargetFolio] = React.useState<string | null>(targetCancellationFolio || null);
   const [activeFilter, setActiveFilter] = React.useState<"all" | "cancellations" | "logs">("all");
   const [showHistory, setShowHistory] = React.useState<boolean>(false);
   const [deliveryLogs, setDeliveryLogs] = React.useState<NotificationDeliveryLog[]>([]);
@@ -540,9 +542,10 @@ export default function NotificationsModal({
     }
   }, [isOpen, activeFilter]);
 
-  // Auto-focus cancellations if deep link has targetCancellationFolio
+  // Auto-focus cancellations and set isolatedTargetFolio if deep link has targetCancellationFolio
   React.useEffect(() => {
     if (isOpen && targetCancellationFolio) {
+      setIsolatedTargetFolio(targetCancellationFolio);
       setActiveFilter("cancellations");
       setShowHistory(true);
     }
@@ -573,13 +576,32 @@ export default function NotificationsModal({
     return notifDay === currentOpDay;
   };
 
-  // 1. Filter by current turn or show entire history
+  // 1. Filter by target cancellation folio if isolated
+  const matchingTargetNotifications = React.useMemo(() => {
+    if (!isolatedTargetFolio) return [];
+    const cleanTarget = isolatedTargetFolio.trim().toLowerCase();
+    return notificationsList.filter((n) => {
+      const cleanFolio = (n.cancellationFolio || "").trim().toLowerCase();
+      const cleanId = (n.id || "").trim().toLowerCase();
+      const cleanBody = (n.body || "").toLowerCase();
+      const cleanTitle = (n.title || "").toLowerCase();
+      return (
+        cleanFolio === cleanTarget ||
+        cleanId === cleanTarget ||
+        (cleanFolio && cleanFolio.includes(cleanTarget)) ||
+        cleanBody.includes(cleanTarget) ||
+        cleanTitle.includes(cleanTarget)
+      );
+    });
+  }, [notificationsList, isolatedTargetFolio]);
+
+  // 2. Filter by current turn or show entire history
   const baseNotifications = notificationsList.filter((n) => {
-    if (showHistory || (targetCancellationFolio && n.cancellationFolio === targetCancellationFolio)) return true;
+    if (showHistory || (isolatedTargetFolio && n.cancellationFolio === isolatedTargetFolio)) return true;
     return isFromCurrentTurn(n);
   });
 
-  // 2. Filter by type (Todas vs Cancelaciones)
+  // 3. Filter by type (Todas vs Cancelaciones)
   const filteredNotifications = baseNotifications.filter((n) => {
     if (activeFilter === "cancellations") {
       return isCancellation(n);
@@ -587,15 +609,22 @@ export default function NotificationsModal({
     return true;
   });
 
-  // 3. Prioritize targeted cancellation folio at the top
+  // 4. Prioritize targeted cancellation folio at the top
   const sortedNotifications = React.useMemo(() => {
-    if (!targetCancellationFolio) return filteredNotifications;
+    if (!isolatedTargetFolio) return filteredNotifications;
     return [...filteredNotifications].sort((a, b) => {
-      if (a.cancellationFolio === targetCancellationFolio) return -1;
-      if (b.cancellationFolio === targetCancellationFolio) return 1;
+      if (a.cancellationFolio === isolatedTargetFolio) return -1;
+      if (b.cancellationFolio === isolatedTargetFolio) return 1;
       return 0;
     });
-  }, [filteredNotifications, targetCancellationFolio]);
+  }, [filteredNotifications, isolatedTargetFolio]);
+
+  const displayedNotifications = React.useMemo(() => {
+    if (isolatedTargetFolio) {
+      return matchingTargetNotifications;
+    }
+    return sortedNotifications;
+  }, [isolatedTargetFolio, matchingTargetNotifications, sortedNotifications]);
 
   const handleMarkAllAsRead = () => {
     const updated = notificationsList.map((n) => {
@@ -858,54 +887,97 @@ export default function NotificationsModal({
         ) : (
           /* ─── VISTA 2: LISTA DE NOTIFICACIONES Y CANCELACIONES ─── */
           <>
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
-                  {showHistory ? "🕒 Historial Completo" : "📋 Turno Actual"}
-                </span>
+            {/* Banner destacado si se abrió desde enlace directo de WhatsApp */}
+            {isolatedTargetFolio && (
+              <div className="bg-rose-50 border-2 border-rose-300 p-3.5 rounded-2xl flex items-center justify-between gap-3 mb-4 shadow-sm animate-fade-in">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-2xl">🎯</span>
+                  <div className="min-w-0">
+                    <div className="font-black text-rose-950 text-xs tracking-wide uppercase">
+                      Autorización Directa de Cancelación
+                    </div>
+                    <div className="text-xs text-rose-800 font-bold truncate">
+                      Folio Solicitado: <span className="underline font-black">#{isolatedTargetFolio}</span>
+                    </div>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setShowHistory(!showHistory)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
-                    showHistory
-                      ? "bg-amber-600 border-amber-600 text-white hover:bg-amber-700 shadow-sm"
-                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-                  }`}
+                  onClick={() => setIsolatedTargetFolio(null)}
+                  className="bg-white border border-rose-200 text-rose-800 hover:bg-rose-100 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 shadow-xs"
                 >
-                  {showHistory ? "Ver Turno Actual" : "Ver Historial Anterior"}
+                  Ver todas 📋
                 </button>
               </div>
-              {filteredNotifications.some((n) => !n.read) && (
-                <IonButton
-                  size="small"
-                  fill="outline"
-                  color="warning"
-                  onClick={handleMarkAllAsRead}
-                  style={{ "--border-radius": "10px", fontSize: "0.75rem", margin: 0 }}
-                >
-                  Marcar todo leído
-                </IonButton>
-              )}
-            </div>
+            )}
+
+            {!isolatedTargetFolio && (
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                    {showHistory ? "🕒 Historial Completo" : "📋 Turno Actual"}
+                  </span>
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                      showHistory
+                        ? "bg-amber-600 border-amber-600 text-white hover:bg-amber-700 shadow-sm"
+                        : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                    }`}
+                  >
+                    {showHistory ? "Ver Turno Actual" : "Ver Historial Anterior"}
+                  </button>
+                </div>
+                {filteredNotifications.some((n) => !n.read) && (
+                  <IonButton
+                    size="small"
+                    fill="outline"
+                    color="warning"
+                    onClick={handleMarkAllAsRead}
+                    style={{ "--border-radius": "10px", fontSize: "0.75rem", margin: 0 }}
+                  >
+                    Marcar todo leído
+                  </IonButton>
+                )}
+              </div>
+            )}
 
             <IonList
               style={{ background: "transparent", borderRadius: "16px" }}
               lines="none"
             >
-              {sortedNotifications.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px" }}>
-                  <div style={{ fontSize: "3rem" }}>📭</div>
-                  <p
-                    style={{
-                      color: "#64748b",
-                      fontSize: "0.9rem",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    No tienes notificaciones para este filtro.
-                  </p>
-                </div>
+              {displayedNotifications.length === 0 ? (
+                isolatedTargetFolio ? (
+                  <div className="text-center py-10 px-4 bg-white rounded-2xl border border-dashed border-rose-300 shadow-sm">
+                    <span className="text-4xl mb-2 block animate-pulse">⏳</span>
+                    <h3 className="text-sm font-black text-slate-800 mb-1">
+                      Buscando Cancelación #{isolatedTargetFolio}
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4 max-w-xs mx-auto">
+                      Esperando sincronización de datos o puede que esta solicitud ya haya sido atendida por otro administrador.
+                    </p>
+                    <button
+                      onClick={() => setIsolatedTargetFolio(null)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer"
+                    >
+                      Ver todas las notificaciones
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "40px" }}>
+                    <div style={{ fontSize: "3rem" }}>📭</div>
+                    <p
+                      style={{
+                        color: "#64748b",
+                        fontSize: "0.9rem",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      No tienes notificaciones para este filtro.
+                    </p>
+                  </div>
+                )
               ) : (
-                sortedNotifications.map((notif) => (
+                displayedNotifications.map((notif) => (
                   <NotificationCard
                     key={notif.id}
                     notif={notif}
@@ -915,7 +987,7 @@ export default function NotificationsModal({
                     onRejectCancellation={onRejectCancellation}
                     onAuthorizeClosedAccountCancellation={onAuthorizeClosedAccountCancellation}
                     onRejectClosedAccountCancellation={onRejectClosedAccountCancellation}
-                    isTarget={!!(targetCancellationFolio && notif.cancellationFolio === targetCancellationFolio)}
+                    isTarget={!!(isolatedTargetFolio && (notif.cancellationFolio === isolatedTargetFolio || notif.id === isolatedTargetFolio))}
                   />
                 ))
               )}

@@ -8269,8 +8269,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     />
   );;
 
-  const validateAdminPin = (enteredPin: string): User | null => {
-    // 1. Master/Sistemas Pins (Global allowed)
+  const validateAdminPin = (enteredPin: string, targetTenantId?: string): User | null => {
+    const effectiveTenantId = targetTenantId || selectedTenant?.id || "";
+    const currentTenantObj = COMPANY_CATALOG.find((c) => c.id === effectiveTenantId) || selectedTenant;
+    const currentOwnerKey = currentTenantObj?.ownerKey;
+
+    // 1. Master/Sistemas Pins (Global allowed across all branches)
     if (enteredPin === "4020" || enteredPin === "2052" || enteredPin === "2026") {
       const firstAdmin = users.find((u) => u.role === "admin") || {
         id: "admin-master",
@@ -8278,28 +8282,51 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         role: "admin" as UserRole,
         pin: enteredPin,
         avatar: "fa-solid fa-laptop-code",
-        tenantId: selectedTenant?.id || "",
+        tenantId: effectiveTenantId,
       };
       return firstAdmin;
     }
 
-    // 2. Search for matching admin in the current branch users (Local Tenant)
+    // 2. Direct Owner PIN check for the specific tenant's ownerKey (or supervisor)
+    if (currentOwnerKey) {
+      if (OWNER_PINS[currentOwnerKey] === enteredPin || OWNER_SUPERVISOR_PINS[currentOwnerKey] === enteredPin) {
+        return {
+          id: `owner-${currentOwnerKey}`,
+          name: `Propietario Grupo ${currentOwnerKey}`,
+          role: "admin" as UserRole,
+          pin: enteredPin,
+          avatar: "fa-solid fa-crown",
+          tenantId: effectiveTenantId,
+        };
+      }
+    }
+
+    // 3. Search for matching admin in the target branch users (Local Tenant)
     // Cajeros y meseros NO pueden autorizar. Cualquier otro rol superior local (admin, gerente, etc.) SÍ puede.
-    let localAdmin = users.find((u) => u.pin === enteredPin && u.role !== "mesero" && u.role !== "cajero");
+    const localUsers = effectiveTenantId === selectedTenant?.id ? users : getTenantUsers(effectiveTenantId);
+    const localAdmin = localUsers.find((u) => u.pin === enteredPin && u.role !== "mesero" && u.role !== "cajero");
     if (localAdmin) return localAdmin;
 
-    // 3. Search through ALL users of ALL sucursales (Cross-Tenant)
-    // Los administradores o gerentes de otras sucursales NO pueden cancelar aquí.
-    // SOLO se permite si son de nivel Propietario o Sistemas.
+    // 4. Search through users of OTHER sucursales (Cross-Tenant)
+    // REGLAS ESTRICTAS:
+    // - Administradores o gerentes de otras sucursales NO pueden autorizar en una sucursal ajena (un gerente de Trujano no puede cancelar en Jojo).
+    // - Personal de Sistemas (global) SÍ puede autorizar.
+    // - Propietarios / Dueños SOLO pueden autorizar si la sucursal de origen tiene el MISMO ownerKey.
     for (const company of COMPANY_CATALOG) {
-      if (company.id === selectedTenant?.id) continue;
+      if (company.id === effectiveTenantId) continue;
       const companyUsers = getTenantUsers(company.id);
-      const crossTenantUser = companyUsers.find((x) => x.pin === enteredPin);
+      const crossTenantUser = companyUsers.find((x) => x.pin === enteredPin && x.role !== "mesero" && x.role !== "cajero");
       if (crossTenantUser) {
         const isSistemas = crossTenantUser.id.endsWith("-sistemas") || crossTenantUser.name.toLowerCase().includes("sistemas");
-        const isPropietario = crossTenantUser.id.endsWith("-admin") || crossTenantUser.role === "owner" || (crossTenantUser.role as any) === "supervisor";
+        if (isSistemas) {
+          return crossTenantUser;
+        }
+
+        // Si es propietario/supervisor de otra sucursal, SOLO autoriza si comparten el mismo ownerKey
+        const isOwnerRole = crossTenantUser.role === "owner" || (crossTenantUser.role as any) === "supervisor";
+        const isOwnerSameGroup = currentOwnerKey && company.ownerKey === currentOwnerKey;
         
-        if (isSistemas || isPropietario) {
+        if (isOwnerRole && isOwnerSameGroup) {
           return crossTenantUser;
         }
       }
@@ -8309,7 +8336,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const verifyPinAndCancel = () => {
-    const adminUser = validateAdminPin(cancellationPin);
+    const adminUser = validateAdminPin(cancellationPin, selectedTenant?.id);
 
     if (adminUser) {
       if (pendingCancellation?.type === "item") {
@@ -13245,7 +13272,8 @@ Instrucciones:
     notifId: string
   ): Promise<any> => {
     const notif = notificationsList.find(n => n.id === notifId);
-    const admin = validateAdminPin(pin);
+    const targetTenantId = notif?.tenantId || selectedTenant?.id || "tenant-1";
+    const admin = validateAdminPin(pin, targetTenantId);
     if (!admin) {
       recordCancellationTimelineEvent(notifId, {
         stage: "pin_failed",
@@ -13390,7 +13418,8 @@ Instrucciones:
     notifId: string
   ): Promise<any> => {
     const notif = notificationsList.find(n => n.id === notifId);
-    const admin = validateAdminPin(pin);
+    const targetTenantId = notif?.tenantId || selectedTenant?.id || "tenant-1";
+    const admin = validateAdminPin(pin, targetTenantId);
     if (!admin) {
       recordCancellationTimelineEvent(notifId, {
         stage: "pin_failed",
