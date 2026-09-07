@@ -3237,6 +3237,19 @@ export async function updateNotificationInFirebase(id: string, updateData: any) 
   );
 }
 
+export async function getNotificationFromFirebase(id: string) {
+  try {
+    const ref = doc(db, "notifications", id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as any;
+    }
+  } catch (e) {
+    console.warn("Error fetching notification doc:", e);
+  }
+  return null;
+}
+
 export async function recordCancellationTimelineEvent(
   notifId: string,
   event: {

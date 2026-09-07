@@ -330,6 +330,7 @@ import {
   addNotificationToFirebase,
   subscribeToNotifications,
   updateNotificationInFirebase,
+  getNotificationFromFirebase,
   recordCancellationTimelineEvent,
   saveCompaniesConfigToFirebase,
   subscribeToCompaniesConfigFromFirebase,
@@ -5946,6 +5947,20 @@ export default function App() {
     }
   };
 
+  const sanitizeAuthorizerDisplayName = (name?: string): string => {
+    if (!name) return "Administrador";
+    let clean = name.trim();
+    if (clean.startsWith("Propietario Grupo ")) {
+      const groupKey = clean.replace("Propietario Grupo ", "").trim();
+      const ownerObj = UNIQUE_OWNERS.find((o) => o.key === groupKey);
+      return ownerObj?.name || `Propietario ${groupKey}`;
+    }
+    if (/^user-[a-zA-Z0-9_-]+/i.test(clean) || /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(clean)) {
+      return "Administrador";
+    }
+    return clean;
+  };
+
   const notifyAdminsCancellationResolved = async (
     tenantId: string,
     branchName: string,
@@ -5954,9 +5969,10 @@ export default function App() {
     adminName: string
   ) => {
     try {
+      const cleanAdminName = sanitizeAuthorizerDisplayName(adminName);
       const statusEmoji = isApproved ? "✅" : "❌";
       const statusText = isApproved ? "AUTORIZADA" : "RECHAZADA";
-      const shortMsg = `${statusEmoji} CANCELACIÓN ${statusText}\n📍 Sucursal: ${branchName}\n📋 Folio: #${cancellationFolio}\n👤 Atendió: ${adminName}`;
+      const shortMsg = `${statusEmoji} CANCELACIÓN ${statusText}\n📍 Sucursal: ${branchName}\n📋 Folio: #${cancellationFolio}\n👤 Atendió: ${cleanAdminName}`;
 
       const tenantUsers = getTenantUsers(tenantId);
       const adminRecipients = tenantUsers.filter((u) => 
@@ -6006,18 +6022,18 @@ export default function App() {
 
       triggerDeviceNotification(
         `${statusEmoji} Cancelación #${cancellationFolio} ${statusText}`,
-        `Autorizó: ${adminName}`
+        `Autorizó: ${cleanAdminName}`
       );
     } catch (err) {
       console.error("Error en notifyAdminsCancellationResolved:", err);
     }
   };
 
-  // ⏳ MONITOR DE ESCALAMIENTO AUTOMÁTICO A SISTEMAS (3 A 5 MINUTOS SIN RESPUESTA)
+  // ⏳ MONITOR DE ESCALAMIENTO AUTOMÁTICO A SISTEMAS (5 MINUTOS SIN RESPUESTA)
   useEffect(() => {
     const checkEscalations = async () => {
       const now = Date.now();
-      const ESCALATION_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutos (configurable hasta 5 min)
+      const ESCALATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos exactos
       const origin = window.location.origin;
       const pathname = window.location.pathname;
 
@@ -6026,12 +6042,32 @@ export default function App() {
           (notif.isCancellationRequest || notif.isClosedAccountCancellationRequest) &&
           notif.status !== "approved" &&
           notif.status !== "rejected" &&
+          !notif.authorizedBy &&
           !notif.escalatedToSystems &&
           notif.createdAt
         ) {
           const createdTime = new Date(notif.createdAt).getTime();
           if (!isNaN(createdTime) && (now - createdTime) >= ESCALATION_THRESHOLD_MS) {
-            console.log("⏳ Escalando cancelación #", notif.cancellationFolio, "al Área de Sistemas (+3-5 min sin respuesta local)");
+            // Verificar en tiempo real contra Firebase antes de enviar escalamiento para evitar falsas alarmas
+            try {
+              const liveDoc = await getNotificationFromFirebase(notif.id);
+              if (liveDoc) {
+                if (liveDoc.status === "approved" || liveDoc.status === "rejected" || liveDoc.authorizedBy) {
+                  console.log(`[Escalación] Cancelación #${notif.cancellationFolio} ya fue atendida (${liveDoc.status}) por ${liveDoc.authorizedBy}. Cancelando escalamiento.`);
+                  setNotificationsList((prev) =>
+                    prev.map((n) => (n.id === notif.id ? { ...n, ...liveDoc } : n))
+                  );
+                  continue;
+                }
+                if (liveDoc.escalatedToSystems) {
+                  continue;
+                }
+              }
+            } catch (err) {
+              console.warn("No se pudo consultar estado en vivo de Firebase para escalamiento:", err);
+            }
+
+            console.log("⏳ Escalando cancelación #", notif.cancellationFolio, "al Área de Sistemas (+5 min sin respuesta local)");
 
             const escalatedAt = new Date().toISOString();
             notif.escalatedToSystems = true;
@@ -8278,7 +8314,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     if (enteredPin === "4020" || enteredPin === "2052" || enteredPin === "2026") {
       const firstAdmin = users.find((u) => u.role === "admin") || {
         id: "admin-master",
-        name: enteredPin === "4020" ? "Sistemas Bypass 🛠️" : "Admin Maestro 👑",
+        name: enteredPin === "4020" ? "Sistemas (Soporte) 🛠️" : "Admin Maestro 👑",
         role: "admin" as UserRole,
         pin: enteredPin,
         avatar: "fa-solid fa-laptop-code",
@@ -8290,12 +8326,18 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     // 2. Direct Owner PIN check for the specific tenant's ownerKey (or supervisor)
     if (currentOwnerKey) {
       if (OWNER_PINS[currentOwnerKey] === enteredPin || OWNER_SUPERVISOR_PINS[currentOwnerKey] === enteredPin) {
+        const isSupervisor = OWNER_SUPERVISOR_PINS[currentOwnerKey] === enteredPin;
+        const ownerObj = UNIQUE_OWNERS.find((o) => o.key === currentOwnerKey);
+        let resolvedName = ownerObj?.name || currentTenantObj?.propietario || "Propietario";
+        if (isSupervisor) {
+          resolvedName = `${resolvedName} (Supervisor)`;
+        }
         return {
           id: `owner-${currentOwnerKey}`,
-          name: `Propietario Grupo ${currentOwnerKey}`,
+          name: resolvedName,
           role: "admin" as UserRole,
           pin: enteredPin,
-          avatar: "fa-solid fa-crown",
+          avatar: ownerObj?.avatar || "fa-solid fa-crown",
           tenantId: effectiveTenantId,
         };
       }
@@ -8305,7 +8347,13 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     // Cajeros y meseros NO pueden autorizar. Cualquier otro rol superior local (admin, gerente, etc.) SÍ puede.
     const localUsers = effectiveTenantId === selectedTenant?.id ? users : getTenantUsers(effectiveTenantId);
     const localAdmin = localUsers.find((u) => u.pin === enteredPin && u.role !== "mesero" && u.role !== "cajero");
-    if (localAdmin) return localAdmin;
+    if (localAdmin) {
+      let cleanName = localAdmin.name;
+      if (/^user-[a-zA-Z0-9_-]+/i.test(cleanName) || /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(cleanName)) {
+        cleanName = localAdmin.role === "admin" ? "Administrador Local" : (localAdmin.role === "gerente" ? "Gerente Local" : "Encargado");
+      }
+      return { ...localAdmin, name: cleanName };
+    }
 
     // 4. Search through users of OTHER sucursales (Cross-Tenant)
     // REGLAS ESTRICTAS:
@@ -8327,7 +8375,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         const isOwnerSameGroup = currentOwnerKey && company.ownerKey === currentOwnerKey;
         
         if (isOwnerRole && isOwnerSameGroup) {
-          return crossTenantUser;
+          let cleanName = crossTenantUser.name;
+          if (/^user-[a-zA-Z0-9_-]+/i.test(cleanName) || /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(cleanName)) {
+            const ownerObj = UNIQUE_OWNERS.find((o) => o.key === company.ownerKey);
+            cleanName = ownerObj?.name || "Propietario";
+          }
+          return { ...crossTenantUser, name: cleanName };
         }
       }
     }
