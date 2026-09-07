@@ -42,7 +42,9 @@ import {
 import { 
   sendSilentWhatsAppMessage,
   sendDeliveryOrderConfirmationWhatsApp,
-  sendDeliveryOnTheWayWhatsApp
+  sendDeliveryOnTheWayWhatsApp,
+  sendInvoiceDataRequestWhatsApp,
+  generateInvoicePortalUrl
 } from "./utils/whatsappCloud";
 import { 
   triggerDeviceNotification, 
@@ -118,6 +120,7 @@ import { MaterialHeaderView } from './components/views/MaterialHeaderView';
 import { PrecuentaItemView } from './components/views/PrecuentaItemView';
 import { DirectCancellationPortalView } from './components/views/DirectCancellationPortalView';
 import { ExcelDownloadPortalView } from './components/views/ExcelDownloadPortalView';
+import { CustomerInvoicePortalView } from './components/views/CustomerInvoicePortalView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
@@ -976,6 +979,16 @@ export default function App() {
       if (downloadParam === "excel" || downloadParam === "xlsx") {
         const dayParam = (params.get("date") || params.get("day") || params.get("fecha") || "").trim();
         setExcelDownloadDay(dayParam || "today");
+      }
+
+      const actionParam = (params.get("action") || params.get("modo") || params.get("view") || "").trim().toLowerCase();
+      if (actionParam === "facturacion" || actionParam === "factura") {
+        setCustomerInvoicePortalData({
+          phone: (params.get("phone") || params.get("celular") || params.get("tel") || "").trim(),
+          folio: (params.get("folio") || params.get("ticket") || "").trim(),
+          tenant: (params.get("tenant") || params.get("sucursal") || "").trim(),
+          rfc: (params.get("rfc") || "").trim(),
+        });
       }
 
       const ownerParam =
@@ -5799,6 +5812,23 @@ export default function App() {
     } catch (e) {}
     return null;
   });
+  const [customerInvoicePortalData, setCustomerInvoicePortalData] = useState<any | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const p = new URLSearchParams(window.location.search);
+        const actionParam = (p.get("action") || p.get("modo") || p.get("view") || "").trim().toLowerCase();
+        if (actionParam === "facturacion" || actionParam === "factura") {
+          return {
+            phone: (p.get("phone") || p.get("celular") || p.get("tel") || "").trim(),
+            folio: (p.get("folio") || p.get("ticket") || "").trim(),
+            tenant: (p.get("tenant") || p.get("sucursal") || "").trim(),
+            rfc: (p.get("rfc") || "").trim(),
+          };
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
 
   // Reloj en tiempo real de México 🇲🇽
   const [mexicoTime, setMexicoTime] = useState<string>("");
@@ -9712,6 +9742,28 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         console.error("Error updating invoice requirement:", err);
       }
     }
+
+    // Enviar mensaje de WhatsApp automático con el formulario de datos fiscales
+    const targetAcc = pendingInvoiceTarget?.account;
+    const folioVal = targetAcc?.folio || targetAcc?.folioInterno || selectedTable?.folio;
+    const totalVal = targetAcc?.total || selectedTable?.total;
+    const clientName = targetAcc?.customerName || targetAcc?.clientName || targetAcc?.deliveryClientName || selectedDeliveryClient?.name;
+
+    sendInvoiceDataRequestWhatsApp({
+      phone: cleanP1,
+      clientName: clientName,
+      branchName: selectedTenant?.name || companyConfig.businessName || "Cocinet",
+      folio: folioVal,
+      total: totalVal ? Number(totalVal) : undefined,
+      tenantId: selectedTenant?.id,
+    }).then((res) => {
+      if (res.success) {
+        console.log("✅ Enlace de formulario fiscal enviado por WhatsApp:", cleanP1);
+      }
+    }).catch((err) => {
+      console.warn("Error enviando WhatsApp de formulario fiscal:", err);
+    });
+
     setShowInvoicePhoneModal(false);
     setPendingInvoiceTarget(null);
   };
@@ -9724,6 +9776,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       : new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
 
     const folioStr = account.folio ? `#${account.folio}` : account.id ? `#${String(account.id).slice(-6)}` : "S/F";
+    const rawCleanPhone = (account.invoicePhone || invoicePhone || "").replace(/\D/g, "").slice(-10);
+    const portalUrl = generateInvoicePortalUrl({
+      phone: rawCleanPhone,
+      tenantId: selectedTenant?.id,
+      folio: account.folio || account.folioInterno,
+    });
     
     const m = (account.paymentMethod || account.metodoPago || "").toString().toLowerCase().trim();
     const ct = (account.cardType || account.tipoTarjeta || "").toString().toLowerCase().trim();
@@ -9778,7 +9836,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const totalVal = Number(account.total || (subtotalVal + tipVal - discountVal));
 
     let msg = `¡Hola! 👋 Te saludamos de *${bName}* 🌮🥤\n\n`;
-    msg += `Por este medio nos puedes hacer llegar tu *Constancia de Situación Fiscal (SAT)* 📄 actualizada, así como tu *correo electrónico* ✉️ para poder generarte y enviarte tu factura electrónica.\n\n`;
+    msg += `Para generar tu factura electrónica, por favor ingresa o confirma tus datos fiscales en nuestro formulario seguro en línea:\n`;
+    msg += `🔗 ${portalUrl}\n\n`;
+    msg += `💡 *Si ya has facturado con nosotros anteriormente, al ingresar tu RFC o número celular tus datos se llenarán automáticamente.*\n\n`;
     msg += `📌 *DATOS DEL TICKET A FACTURAR:*\n`;
     msg += `🧾 *Folio:* ${folioStr}\n`;
     msg += `🪑 *Mesa:* ${tableLabel}\n`;
@@ -13876,6 +13936,20 @@ Instrucciones:
             window.location.href = window.location.origin + window.location.pathname;
           }}
         />
+      ) : customerInvoicePortalData !== null ? (
+        <CustomerInvoicePortalView
+          initialPhone={customerInvoicePortalData.phone}
+          initialFolio={customerInvoicePortalData.folio}
+          initialTenantId={customerInvoicePortalData.tenant}
+          initialRfc={customerInvoicePortalData.rfc}
+          customers={customers}
+          history={history}
+          selectedTenant={selectedTenant}
+          onClose={() => {
+            setCustomerInvoicePortalData(null);
+            window.location.href = window.location.origin + window.location.pathname;
+          }}
+        />
       ) : !currentUser ? (
         renderLogin()
       ) : (
@@ -14320,6 +14394,7 @@ Instrucciones:
           setInputInvoicePhone={setInputInvoicePhone}
           setInputInvoicePhoneConfirm={setInputInvoicePhoneConfirm}
           setPendingInvoiceTarget={setPendingInvoiceTarget}
+          allCustomers={customers}
         />
 
       <IonAlert

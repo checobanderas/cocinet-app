@@ -1,4 +1,5 @@
 import { updateInvoiceRequirementInFirebase } from '../../utils/firestore';
+import { sendInvoiceDataRequestWhatsApp } from '../../utils/whatsappCloud';
 import { formatTableName } from '../../utils/formatters';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1015,6 +1016,16 @@ return (
                                                    "🧾 FACTURACIÓN ACTUALIZADA",
                                                    `Cuenta ${account.tableLabel} marcada como: Requiere Factura (Cel: ${editingInvoicePhoneValue})`
                                                  );
+
+                                                 // Enviar WhatsApp silencioso con enlace al formulario de datos fiscales
+                                                 sendInvoiceDataRequestWhatsApp({
+                                                   phone: editingInvoicePhoneValue,
+                                                   clientName: account.deliveryClientName || account.customerName || account.clientName,
+                                                   branchName: "Cocinet",
+                                                   folio: account.folio || account.folioInterno,
+                                                   total: account.total ? Number(account.total) : undefined,
+                                                 }).catch(e => console.warn("Error enviando WhatsApp de formulario fiscal:", e));
+
                                                  setEditingInvoiceAccountId(null);
                                                  setEditingInvoicePhoneValue("");
                                                } catch (err) {

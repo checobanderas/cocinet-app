@@ -318,3 +318,71 @@ ${effectiveGps}`;
   const base = cleanDriver ? `https://api.whatsapp.com/send?phone=${cleanDriver}&text=` : `https://api.whatsapp.com/send?text=`;
   return `${base}${encodeURIComponent(message)}`;
 }
+
+/**
+ * Genera la URL para el Portal de Captura de Datos Fiscales del Cliente.
+ */
+export function generateInvoicePortalUrl(params: {
+  phone?: string;
+  tenantId?: string;
+  folio?: number | string;
+  rfc?: string;
+}): string {
+  const origin = typeof window !== "undefined" && window.location.origin
+    ? window.location.origin
+    : "https://cocinet-prueba.web.app";
+
+  const searchParams = new URLSearchParams();
+  searchParams.set("action", "facturacion");
+  if (params.phone) {
+    const cleanPhone = params.phone.replace(/\D/g, "").slice(-10);
+    searchParams.set("phone", cleanPhone);
+  }
+  if (params.tenantId) {
+    searchParams.set("tenant", params.tenantId);
+  }
+  if (params.folio) {
+    searchParams.set("folio", String(params.folio));
+  }
+  if (params.rfc) {
+    searchParams.set("rfc", params.rfc.toUpperCase().trim());
+  }
+
+  return `${origin}/?${searchParams.toString()}`;
+}
+
+/**
+ * Envía mensaje de solicitud de datos fiscales por WhatsApp con enlace al formulario de auto-facturación.
+ */
+export async function sendInvoiceDataRequestWhatsApp(params: {
+  phone: string;
+  clientName?: string;
+  branchName: string;
+  folio?: number | string;
+  total?: number;
+  portalUrl?: string;
+  tenantId?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { phone, clientName, branchName, folio, total, portalUrl, tenantId } = params;
+
+  const effectiveUrl = portalUrl || generateInvoicePortalUrl({ phone, tenantId, folio });
+
+  const greeting = clientName ? `¡Hola, *${clientName.toUpperCase()}*! 👋` : "¡Hola! 👋";
+
+  const text = 
+`🌮 *SOLICITUD DE FACTURA ELECTRÓNICA*
+🏢 *${branchName}*
+
+${greeting}
+Para poder emitir tu factura electrónica correspondiente a tu consumo ${folio ? `*(Folio #${folio})*` : ''}, por favor ingresa o confirma tus datos fiscales en el siguiente formulario seguro:
+
+🔗 ${effectiveUrl}
+
+💡 *Si ya has facturado con nosotros anteriormente, sólo ingresa tu RFC o celular y tus datos se completarán automáticamente.*
+${total ? `\n💰 *Total del Consumo:* $${Number(total).toFixed(2)}` : ''}
+
+¡Muchas gracias por tu preferencia! 📄✨`;
+
+  return await sendSilentWhatsAppMessage(phone, text);
+}
+
