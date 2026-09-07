@@ -27,6 +27,7 @@ interface GestionCuentasViewProps {
   currentUser?: any;
   updateCompanyConfig?: (updates: any) => void;
   onSwitchTablesMode?: (mode: "floorplan" | "gestion_cuentas") => void;
+  handleTableClick?: (table: any) => void;
 }
 
 export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
@@ -51,7 +52,8 @@ export const GestionCuentasView: React.FC<GestionCuentasViewProps> = ({
   companyConfig,
   currentUser,
   updateCompanyConfig,
-  onSwitchTablesMode
+  onSwitchTablesMode,
+  handleTableClick
 }) => {
   const [presentAlert] = useIonAlert();
   const [isEditingLayout, setIsEditingLayout] = React.useState(false);
@@ -470,7 +472,13 @@ return (
                                     style={{ flex: "0 0 20%", maxWidth: "20%", padding: "8px 4px", minHeight: "125px" }}
                                   >
                                     <div
-                                      onClick={() => { setSelectedTableGestion(table); setSelectedTableId(table.id); }}
+                                      onClick={() => {
+                                        if (handleTableClick) {
+                                          handleTableClick(table);
+                                        }
+                                        setSelectedTableGestion(table);
+                                        setSelectedTableId(table.id);
+                                      }}
                                       style={{
                                         width: "72px",
                                         height: "72px",

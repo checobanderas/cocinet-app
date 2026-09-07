@@ -215,3 +215,106 @@ export async function sendSilentWhatsAppMessage(
     config.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN
   );
 }
+
+/**
+ * Envía mensaje de confirmación al cliente cuando su pedido a domicilio es registrado.
+ */
+export async function sendDeliveryOrderConfirmationWhatsApp(params: {
+  phone: string;
+  clientName: string;
+  branchName: string;
+  folio: number | string;
+  items: { name: string; quantity: number; notes?: string }[];
+  address: string;
+  notes?: string;
+  total?: number;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { phone, clientName, branchName, folio, items, address, notes, total } = params;
+  
+  const itemsList = items.map(i => `• *${i.quantity}x* ${i.name}${i.notes ? ` _(${i.notes})_` : ''}`).join('\n');
+  
+  const text = 
+`🌮 *¡HOLA, ${clientName.toUpperCase()}!*
+Tu pedido para *Servicio a Domicilio* en *${branchName}* ha sido registrado con éxito.
+
+📋 *Folio de Pedido:* #${folio}
+📍 *Dirección de Entrega:* ${address}
+${notes ? `📝 *Referencias:* ${notes}\n` : ''}${total ? `💰 *Total Estimado:* $${total.toFixed(2)}\n` : ''}
+🛍️ *Detalle de tu Pedido:*
+${itemsList}
+
+⏱️ *Estado:* 🍳 En preparación en cocina.
+¡Te avisaremos en cuanto el repartidor vaya en camino! 🛵`;
+
+  return await sendSilentWhatsAppMessage(phone, text);
+}
+
+/**
+ * Envía mensaje al cliente cuando su pedido ya va en camino hacia su domicilio.
+ */
+export async function sendDeliveryOnTheWayWhatsApp(params: {
+  phone: string;
+  clientName: string;
+  branchName: string;
+  address: string;
+  notes?: string;
+  total?: number;
+  paymentMethod?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { phone, clientName, branchName, address, notes, total, paymentMethod } = params;
+  
+  const text = 
+`🛵 *¡TU PEDIDO VA EN CAMINO!*
+¡Hola, *${clientName.toUpperCase()}*! Tu orden de *${branchName}* ya salió con nuestro repartidor.
+
+📍 *Dirección:* ${address}
+${notes ? `📝 *Referencias:* ${notes}\n` : ''}${total ? `💵 *Total a Cobrar:* $${total.toFixed(2)} ${paymentMethod ? `(${paymentMethod.toUpperCase()})` : ''}\n` : ''}
+⏱️ *¡En pocos minutos estará en tu puerta!*
+¡Buen provecho y gracias por tu preferencia! 🎉`;
+
+  return await sendSilentWhatsAppMessage(phone, text);
+}
+
+/**
+ * Genera el mensaje y URL de WhatsApp para enviar la ficha completa del pedido al Repartidor.
+ */
+export function generateDeliveryDriverWhatsAppUrl(params: {
+  driverPhone?: string;
+  clientName: string;
+  clientPhone: string;
+  branchName: string;
+  address: string;
+  notes?: string;
+  gpsUrl?: string;
+  items?: { name: string; quantity: number; notes?: string }[];
+  total?: number;
+  isPaid?: boolean;
+  paymentMethod?: string;
+  folio?: number | string;
+}): string {
+  const { driverPhone, clientName, clientPhone, branchName, address, notes, gpsUrl, items, total, isPaid, paymentMethod, folio } = params;
+
+  let itemsText = "";
+  if (items && items.length > 0) {
+    itemsText = `\n🛍️ *Productos:*\n` + items.map(i => `• ${i.quantity}x ${i.name}`).join('\n') + `\n`;
+  }
+
+  const effectiveGps = gpsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+
+  const message = 
+`🛵 *FICHA DE ENTREGA A DOMICILIO*
+🏢 *Sucursal:* ${branchName}
+${folio ? `📋 *Folio:* #${folio}\n` : ''}
+👤 *Cliente:* ${clientName}
+📞 *Teléfono Cliente:* ${clientPhone}
+📍 *Dirección:* ${address}
+${notes ? `📝 *Referencias:* ${notes}\n` : ''}${itemsText}
+💰 *Total:* ${total ? `$${total.toFixed(2)}` : 'Por liquidar'} | ${isPaid ? '✅ *PAGADO PREVIAMENTE*' : `💵 *COBRAR EN DOMICILIO (${(paymentMethod || 'Efectivo').toUpperCase()})*`}
+
+🗺️ *Navegación GPS / Google Maps:*
+${effectiveGps}`;
+
+  const cleanDriver = driverPhone ? formatMexicoPhone(driverPhone) : "";
+  const base = cleanDriver ? `https://api.whatsapp.com/send?phone=${cleanDriver}&text=` : `https://api.whatsapp.com/send?text=`;
+  return `${base}${encodeURIComponent(message)}`;
+}

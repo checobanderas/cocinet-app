@@ -39,7 +39,11 @@ import {
   getSimplifiedDeviceInfo
 } from "./utils/appHelpers";
 
-import { sendSilentWhatsAppMessage } from "./utils/whatsappCloud";
+import { 
+  sendSilentWhatsAppMessage,
+  sendDeliveryOrderConfirmationWhatsApp,
+  sendDeliveryOnTheWayWhatsApp
+} from "./utils/whatsappCloud";
 import { 
   triggerDeviceNotification, 
   addNotificationDeliveryLog, 
@@ -220,6 +224,10 @@ import {
 } from "./utils/db";
 import { startOfflineSyncService } from "./services/offlineSyncService";
 import { getMatchedOwnerKey, isTenantAccessAllowed } from "./accessHelpers";
+import {
+  sendDeliveryOrderConfirmationWhatsApp,
+  sendDeliveryOnTheWayWhatsApp,
+} from "./utils/whatsappCloud";
 import {
   subscribeToProducts,
   subscribeToTables,
@@ -5010,6 +5018,7 @@ export default function App() {
           job.printLine("--------------------------------");
           job.center().bold(true).printLine("DATOS DE ENVIO").bold(false).left();
           if (pedido.deliveryClientName) job.printLine(`CLIENTE: ${pedido.deliveryClientName.toUpperCase()}`);
+          if (pedido.deliveryClientPhone) job.printLine(`TEL: ${pedido.deliveryClientPhone}`);
           
           if (pedido.deliveryAddress) {
             let cleanAddr = pedido.deliveryAddress;
@@ -5179,21 +5188,41 @@ export default function App() {
         finalAddr = `${finalAddr} (Ref: ${newDeliveryClientAddressRef.trim()})`;
       }
 
-      const initialAddresses = finalAddr ? [finalAddr] : [];
-      const newCust = {
-        name: newDeliveryClientName.trim(),
-        phone: newDeliveryClientPhone.trim(),
-        addresses: initialAddresses,
-        email: "",
-        visits: 1,
-        notes: "Registrado express en reparto"
-      };
+      const cleanPhone = newDeliveryClientPhone.trim().replace(/\D/g, "");
+      const existingCustomer = customers.find(c => (c.phone || "").replace(/\D/g, "") === cleanPhone);
 
-      const newId = await addCustomerToFirebase(newCust);
-      const fullCust = { ...newCust, id: newId, uid: newId };
-      
-      setSelectedDeliveryClient(fullCust);
-      setSelectedDeliveryAddress(finalAddr);
+      if (existingCustomer) {
+        const updatedAddresses = finalAddr 
+          ? Array.from(new Set([...(existingCustomer.addresses || []), finalAddr]))
+          : (existingCustomer.addresses || []);
+        
+        await updateCustomerInFirebase(existingCustomer.id, {
+          ...existingCustomer,
+          name: newDeliveryClientName.trim() || existingCustomer.name,
+          addresses: updatedAddresses,
+        });
+
+        const fullCust = { ...existingCustomer, name: newDeliveryClientName.trim() || existingCustomer.name, addresses: updatedAddresses };
+        setSelectedDeliveryClient(fullCust);
+        setSelectedDeliveryAddress(finalAddr || updatedAddresses[0] || "");
+      } else {
+        const initialAddresses = finalAddr ? [finalAddr] : [];
+        const newCust = {
+          name: newDeliveryClientName.trim(),
+          phone: newDeliveryClientPhone.trim(),
+          addresses: initialAddresses,
+          email: "",
+          visits: 1,
+          notes: "Registrado express en reparto"
+        };
+
+        const newId = await addCustomerToFirebase(newCust);
+        const fullCust = { ...newCust, id: newId, uid: newId };
+        
+        setSelectedDeliveryClient(fullCust);
+        setSelectedDeliveryAddress(finalAddr);
+      }
+
       if (newDeliveryClientAddressRef.trim()) {
         setDeliveryNotes(newDeliveryClientAddressRef.trim());
       }
@@ -5202,7 +5231,7 @@ export default function App() {
       setNewDeliveryClientPhone("");
       setNewDeliveryClientAddress("");
       setNewDeliveryClientAddressRef("");
-      triggerAppNotification("👥 CLIENTE REGISTRADO", `Se guardó a ${newCust.name} en el catálogo de clientes.`, "success");
+      triggerAppNotification("👥 CLIENTE REGISTRADO", `Datos guardados en el catálogo de clientes.`, "success");
     } catch (err) {
       console.error("Error al registrar cliente express:", err);
       alert("Error al registrar el cliente express. ❌");
@@ -6778,6 +6807,7 @@ export default function App() {
           setShowDeliverySetupModal={setShowDeliverySetupModal}
           showDeliverySetupModal={showDeliverySetupModal}
           filteredCustomers={filteredCustomers}
+          allCustomers={customers}
         />
     );
   };
@@ -8649,17 +8679,18 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const tClientName = (table as any).deliveryClientName;
       const tClientPhone = (table as any).deliveryClientPhone;
       
-      if (tClientName && tClientPhone) {
+      if (tClientName || tClientPhone) {
+        const cleanTPhone = (tClientPhone || "").replace(/\D/g, "");
         const found = customers.find(
-          (c) => c.name === tClientName && c.phone === tClientPhone
+          (c) => (cleanTPhone && (c.phone || "").replace(/\D/g, "") === cleanTPhone) || (c.name === tClientName && c.phone === tClientPhone)
         );
         if (found) {
           setSelectedDeliveryClient(found);
           setSelectedDeliveryAddress((table as any).deliveryAddress || found.addresses?.[0] || "");
         } else {
           setSelectedDeliveryClient({
-            name: tClientName,
-            phone: tClientPhone,
+            name: tClientName || "Cliente",
+            phone: tClientPhone || "",
             addresses: (table as any).deliveryAddress ? [(table as any).deliveryAddress] : []
           });
           setSelectedDeliveryAddress((table as any).deliveryAddress || "");
@@ -8667,6 +8698,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       } else {
         setSelectedDeliveryClient(null);
         setSelectedDeliveryAddress("");
+        setShowDeliverySetupModal(true);
       }
     } else {
       setSelectedDeliveryClient(null);
@@ -9245,6 +9277,31 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       ).catch((err) => {
         console.error("Error saving comanda in background to Firebase:", err);
       });
+
+      // Notificación silenciosa automática por WhatsApp al cliente de servicio a domicilio
+      if (isDelivery && dPhone) {
+        const orderTotal = comandaItems.reduce((sum: number, item: any) => sum + (item.quantity * (item.product?.price || 0)), 0);
+        sendDeliveryOrderConfirmationWhatsApp({
+          phone: dPhone,
+          clientName: dClient || "Cliente",
+          branchName: selectedTenant?.name || "Cocinet",
+          folio: finalFolioInterno || folio,
+          items: comandaItems.map((i: any) => ({
+            name: getFormattedProductName(i.product),
+            quantity: i.quantity,
+            notes: i.notes,
+          })),
+          address: dAddr || "Dirección de entrega",
+          notes: dNotes || undefined,
+          total: orderTotal,
+        }).then((res) => {
+          if (res.success) {
+            console.log("✅ WhatsApp de confirmación de pedido enviado al cliente:", dPhone);
+          }
+        }).catch((err) => {
+          console.warn("Error enviando WhatsApp de confirmación a domicilio:", err);
+        });
+      }
     } catch (error: any) {
       console.error("Error dispatching background tasks for comanda:", error);
     }
@@ -9800,6 +9857,34 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         `La cuenta ${account.tableLabel} fue marcada como: ${labelMap[newStatus] || newStatus}`,
         "success"
       );
+
+      // Notificación automática silenciosa de "En Camino" al cliente si cuenta con teléfono
+      if (newStatus === "en_camino") {
+        const cPhone = account.deliveryClientPhone || account.customerPhone || account.clientPhone;
+        const cName = account.deliveryClientName || account.customerName || account.clientName || "Cliente";
+        const cAddr = account.deliveryClientAddress || account.deliveryAddress || account.customerAddress || account.clientAddress || "Domicilio";
+        const cNotes = account.deliveryNotes || account.notas || "";
+        const cTotal = Number(account.total || 0);
+        const cPaymentMethod = account.paymentMethod || account.metodoPago || account.payment_method || "Efectivo";
+
+        if (cPhone) {
+          sendDeliveryOnTheWayWhatsApp({
+            phone: cPhone,
+            clientName: cName,
+            branchName: selectedTenant?.name || "Cocinet",
+            address: cAddr,
+            notes: cNotes || undefined,
+            total: cTotal > 0 ? cTotal : undefined,
+            paymentMethod: cPaymentMethod,
+          }).then((res) => {
+            if (res.success) {
+              console.log("✅ WhatsApp de 'En Camino' enviado silenciosamente:", cPhone);
+            }
+          }).catch((err) => {
+            console.warn("Error enviando WhatsApp en camino:", err);
+          });
+        }
+      }
     } catch (err) {
       console.error("Error updating account status:", err);
       triggerAppNotification("⚠️ Error", "No se pudo actualizar el estatus de la cuenta.", "warning");
@@ -11403,9 +11488,9 @@ Instrucciones:
       selectedDeliveryClient={selectedDeliveryClient}
       selectedTable={selectedTable}
       setShowDeliverySetupModal={setShowDeliverySetupModal}
-      
+      selectedTenant={selectedTenant}
     />
-  );;
+  );
 
   const renderMenu = () => (
     <MenuView
@@ -13032,6 +13117,7 @@ Instrucciones:
             saveCompanyConfigInFirebase(selectedTenant.id, updated).catch(console.error);
           }}
           onSwitchTablesMode={handleSwitchTablesMode}
+          handleTableClick={handleTableClick}
     />
   );;
 

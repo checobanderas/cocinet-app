@@ -272,6 +272,9 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
       if (dClientEsc) {
         job.printLine(`CLIENTE: ${dClientEsc.toUpperCase()}`);
       }
+      if (dPhoneEsc) {
+        job.printLine(`TEL: ${dPhoneEsc}`);
+      }
       if (dAddrEsc) {
         let cleanAddr = "";
         let refText = "";
