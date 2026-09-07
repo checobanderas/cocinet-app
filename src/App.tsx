@@ -113,6 +113,7 @@ import { ReporteMovimientosView } from './components/views/ReporteMovimientosVie
 import { MaterialHeaderView } from './components/views/MaterialHeaderView';
 import { PrecuentaItemView } from './components/views/PrecuentaItemView';
 import { DirectCancellationPortalView } from './components/views/DirectCancellationPortalView';
+import { ExcelDownloadPortalView } from './components/views/ExcelDownloadPortalView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
@@ -961,6 +962,12 @@ export default function App() {
       const reqParam = (params.get("req") || params.get("cancellation") || params.get("folio") || "").trim();
       if (reqParam) {
         setTargetCancellationFolio(reqParam);
+      }
+
+      const downloadParam = (params.get("download") || params.get("export") || "").trim().toLowerCase();
+      if (downloadParam === "excel" || downloadParam === "xlsx") {
+        const dayParam = (params.get("date") || params.get("day") || params.get("fecha") || "").trim();
+        setExcelDownloadDay(dayParam || "today");
       }
 
       const ownerParam =
@@ -5741,6 +5748,7 @@ export default function App() {
   ]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [targetCancellationFolio, setTargetCancellationFolio] = useState<string | null>(null);
+  const [excelDownloadDay, setExcelDownloadDay] = useState<string | null>(null);
 
   // Reloj en tiempo real de México 🇲🇽
   const [mexicoTime, setMexicoTime] = useState<string>("");
@@ -13731,6 +13739,17 @@ Instrucciones:
           onClose={() => {
             setTargetCancellationFolio(null);
             setShowNotificationModal(false);
+            window.location.href = window.location.origin + window.location.pathname;
+          }}
+        />
+      ) : excelDownloadDay !== null ? (
+        <ExcelDownloadPortalView
+          history={history}
+          products={products}
+          selectedTenant={selectedTenant}
+          targetDate={excelDownloadDay === "today" ? undefined : excelDownloadDay}
+          onClose={() => {
+            setExcelDownloadDay(null);
             window.location.href = window.location.origin + window.location.pathname;
           }}
         />

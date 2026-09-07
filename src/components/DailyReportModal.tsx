@@ -21,7 +21,7 @@ import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhat
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER, getTenantUsers } from '../utils/appHelpers';
 import { sendSilentWhatsAppMessage } from '../utils/whatsappCloud';
-import { storage } from '../utils/firebase';
+import { storage, ensureFirebaseAuth } from '../utils/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface DailyReportModalProps {
@@ -841,6 +841,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       // 2. Subir a Firebase Storage
       let storageDownloadUrl = "";
       try {
+        await ensureFirebaseAuth();
         const storageRef = ref(storage, `reportes_excel/${cleanCompany}/${filename}`);
         const snapshot = await uploadBytes(storageRef, excelBlob, {
           contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -851,7 +852,16 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
         console.warn("⚠️ No se pudo subir el Excel a Firebase Storage:", storageErr);
       }
 
-      // 3. Envío silencioso por WhatsApp del resumen y enlace oficial
+      // 3. Enlace de descarga garantizado (Storage o Portal Web Cocinet)
+      const tenantId = currentTenant?.id || "tenant-1";
+      const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      const publicBase = isLocal ? "http://localhost:3000" : (typeof window !== "undefined" && window.location.origin ? window.location.origin : "https://cocinet-prueba.web.app");
+      const cleanPath = typeof window !== "undefined" && window.location.pathname && window.location.pathname !== "/" ? window.location.pathname : "";
+      const directWebDownloadUrl = `${publicBase}${cleanPath}?download=excel&tenant=${tenantId}&date=${todayOperatingDay}`;
+
+      const downloadLinkToUse = storageDownloadUrl || directWebDownloadUrl;
+
+      // 4. Envío silencioso por WhatsApp del resumen y enlace oficial
       let excelMsg = `📊 *REPORTE DIARIO EN EXCEL (.XLSX)*\n`;
       excelMsg += `🏢 *${companyName.toUpperCase()}*\n`;
       excelMsg += `📅 *Fecha:* ${friendlyTitleDate}\n`;
@@ -863,11 +873,8 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       }
       excelMsg += `📦 *Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
 
-      if (storageDownloadUrl) {
-        excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${storageDownloadUrl}\n\n`;
-      } else {
-        excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._\n\n`;
-      }
+      excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${downloadLinkToUse}\n\n`;
+      excelMsg += `_Toca el enlace para descargar el archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones)._\n\n`;
       excelMsg += `_Enviado silenciosamente por Cocinet POS._`;
 
       const recipients = getReportRecipients();

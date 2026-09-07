@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, getTenantUsers, SUBCATEGORY_ORDER } from './appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from './whatsappCloud';
-import { storage } from './firebase';
+import { storage, ensureFirebaseAuth } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export function getFriendlyTitleDate(todayOperatingDay: string): string {
@@ -693,6 +693,7 @@ export async function generateAndSendExcelDailyReportToWhatsApp(
 
     let storageDownloadUrl = "";
     try {
+      await ensureFirebaseAuth();
       const storageRef = ref(storage, `reportes_excel/${cleanCompany}/${filename}`);
       const snapshot = await uploadBytes(storageRef, excelBlob, {
         contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -703,7 +704,16 @@ export async function generateAndSendExcelDailyReportToWhatsApp(
       console.warn("No se pudo subir el archivo Excel a Firebase Storage:", sErr);
     }
 
-    // 6. Construir mensaje de WhatsApp con enlace clickeable
+    // 6. Construir enlace de descarga garantizado (Storage o Web POS)
+    const tenantId = tenant?.id || "tenant-1";
+    const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    const publicBase = isLocal ? "http://localhost:3000" : (typeof window !== "undefined" && window.location.origin ? window.location.origin : "https://cocinet-prueba.web.app");
+    const cleanPath = typeof window !== "undefined" && window.location.pathname && window.location.pathname !== "/" ? window.location.pathname : "";
+    const directWebDownloadUrl = `${publicBase}${cleanPath}?download=excel&tenant=${tenantId}&date=${todayOperatingDay}`;
+
+    const downloadLinkToUse = storageDownloadUrl || directWebDownloadUrl;
+
+    // 7. Construir mensaje de WhatsApp con enlace clickeable
     let excelMsg = `📊 *REPORTE DIARIO EN EXCEL (.XLSX)*\n`;
     excelMsg += `🏢 *${companyName.toUpperCase()}*\n`;
     excelMsg += `📅 *Fecha:* ${friendlyTitleDate}\n`;
@@ -715,11 +725,8 @@ export async function generateAndSendExcelDailyReportToWhatsApp(
     }
     excelMsg += `📦 *Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
 
-    if (storageDownloadUrl) {
-      excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${storageDownloadUrl}\n\n`;
-    } else {
-      excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._\n\n`;
-    }
+    excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${downloadLinkToUse}\n\n`;
+    excelMsg += `_Toca el enlace para descargar el archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones)._\n\n`;
     excelMsg += `_Enviado silenciosamente por Cocinet POS._`;
 
     // 7. Enviar a destinatarios

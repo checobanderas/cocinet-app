@@ -8,6 +8,7 @@ import {
   setLogLevel
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAuth, signInAnonymously } from "firebase/auth";
 
 // Silenciar warnings/errores de conexión internos de Firebase en consola
 try {
@@ -97,7 +98,19 @@ try {
 
 export const db = firestoreDb;
 export const storage = getStorage(app);
+export const auth = getAuth(app);
 export const firebaseApp = app;
+
+export async function ensureFirebaseAuth() {
+  try {
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+      console.log("🔥 Autenticación anónima de Firebase activa para Storage/Sync.");
+    }
+  } catch (e) {
+    console.warn("Aviso de autenticación anónima:", e);
+  }
+}
 
 export async function purgeLocalFirestoreCache() {
   if (typeof window === "undefined" || !window.indexedDB) return;
