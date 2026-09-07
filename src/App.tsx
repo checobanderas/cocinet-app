@@ -1,5 +1,4 @@
 import { numeroALetras, formatReceiptItemLines, formatComandaItemLines } from './utils/formatters';
-import { DailyReportModal } from "./components/DailyReportModal";
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
@@ -92,34 +91,17 @@ import { FloorplanView } from './components/views/FloorplanView';
 import { MenuView } from './components/views/MenuView';
 import { CheckoutView } from './components/views/CheckoutView';
 import { TableDetailsView } from './components/views/TableDetailsView';
-import { AdminPanelView } from './components/views/AdminPanelView';
-import { ManageMenuView } from './components/views/ManageMenuView';
-import { ReportsView } from './components/views/ReportsView';
-import { DashboardView } from './components/views/DashboardView';
-import { CorteNuevoView } from './components/views/CorteNuevoView';
-import { CorteTablaView } from './components/views/CorteTablaView';
-import { CorteXView } from './components/views/CorteXView';
-import { CorteExpressView } from './components/views/CorteExpressView';
 import { SidebarView } from './components/views/SidebarView';
 import { SwitchingTenantOverlayView } from './components/views/SwitchingTenantOverlayView';
 import { UserHeaderInfoView } from './components/views/UserHeaderInfoView';
 import { LoginView } from './components/views/LoginView';
-import { CancellationPinPadView } from './components/views/CancellationPinPadView';
-import { ClosedAccountsListView } from './components/views/ClosedAccountsListView';
-import { DeliveryPanelView } from './components/views/DeliveryPanelView';
 import { ReviewItemView } from './components/views/ReviewItemView';
 import { ReviewView } from './components/views/ReviewView';
-import { UsersManagementPanelView } from './components/views/UsersManagementPanelView';
-import { SuppliersView } from './components/views/SuppliersView';
-import { CustomersView } from './components/views/CustomersView';
-import { ExpensesView } from './components/views/ExpensesView';
-import { GestionCuentasView } from './components/views/GestionCuentasView';
-import { CorteTabla2View } from './components/views/CorteTabla2View';
-import { ReporteMovimientosView } from './components/views/ReporteMovimientosView';
 import { MaterialHeaderView } from './components/views/MaterialHeaderView';
 import { PrecuentaItemView } from './components/views/PrecuentaItemView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 
+// Portales externos diferidos
 const DirectCancellationPortalView = React.lazy(() =>
   import('./components/views/DirectCancellationPortalView').then(m => ({ default: m.DirectCancellationPortalView }))
 );
@@ -129,6 +111,27 @@ const ExcelDownloadPortalView = React.lazy(() =>
 const CustomerInvoicePortalView = React.lazy(() =>
   import('./components/views/CustomerInvoicePortalView').then(m => ({ default: m.CustomerInvoicePortalView || m.default }))
 );
+
+// Vistas de administración y reportes diferidas (bajo demanda)
+const AdminPanelView = React.lazy(() => import('./components/views/AdminPanelView').then(m => ({ default: m.AdminPanelView })));
+const ManageMenuView = React.lazy(() => import('./components/views/ManageMenuView').then(m => ({ default: m.ManageMenuView })));
+const ReportsView = React.lazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
+const DashboardView = React.lazy(() => import('./components/views/DashboardView').then(m => ({ default: m.DashboardView })));
+const CorteNuevoView = React.lazy(() => import('./components/views/CorteNuevoView').then(m => ({ default: m.CorteNuevoView })));
+const CorteTablaView = React.lazy(() => import('./components/views/CorteTablaView').then(m => ({ default: m.CorteTablaView })));
+const CorteXView = React.lazy(() => import('./components/views/CorteXView').then(m => ({ default: m.CorteXView })));
+const CorteExpressView = React.lazy(() => import('./components/views/CorteExpressView').then(m => ({ default: m.CorteExpressView })));
+const CorteTabla2View = React.lazy(() => import('./components/views/CorteTabla2View').then(m => ({ default: m.CorteTabla2View })));
+const UsersManagementPanelView = React.lazy(() => import('./components/views/UsersManagementPanelView').then(m => ({ default: m.UsersManagementPanelView })));
+const SuppliersView = React.lazy(() => import('./components/views/SuppliersView').then(m => ({ default: m.SuppliersView })));
+const CustomersView = React.lazy(() => import('./components/views/CustomersView').then(m => ({ default: m.CustomersView })));
+const ExpensesView = React.lazy(() => import('./components/views/ExpensesView').then(m => ({ default: m.ExpensesView })));
+const GestionCuentasView = React.lazy(() => import('./components/views/GestionCuentasView').then(m => ({ default: m.GestionCuentasView })));
+const ReporteMovimientosView = React.lazy(() => import('./components/views/ReporteMovimientosView').then(m => ({ default: m.ReporteMovimientosView })));
+const ClosedAccountsListView = React.lazy(() => import('./components/views/ClosedAccountsListView').then(m => ({ default: m.ClosedAccountsListView })));
+const DeliveryPanelView = React.lazy(() => import('./components/views/DeliveryPanelView').then(m => ({ default: m.DeliveryPanelView })));
+const CancellationPinPadView = React.lazy(() => import('./components/views/CancellationPinPadView').then(m => ({ default: m.CancellationPinPadView })));
+const DailyReportModal = React.lazy(() => import('./components/DailyReportModal').then(m => ({ default: m.DailyReportModal })));
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -13977,25 +13980,27 @@ Instrucciones:
         renderLogin()
       ) : (
         <>
-          {appMode === "floorplan" && renderFloorplan()}
-          {appMode === "menu" && renderMenu()}
-          {appMode === "review" && renderReview()}
-          {appMode === "table-details" && renderTableDetails()}
-          {appMode === "checkout" && renderCheckout()}
-          {appMode === "admin" && renderAdminPanel()}
+          <React.Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-slate-900 text-white"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+            {appMode === "floorplan" && renderFloorplan()}
+            {appMode === "menu" && renderMenu()}
+            {appMode === "review" && renderReview()}
+            {appMode === "table-details" && renderTableDetails()}
+            {appMode === "checkout" && renderCheckout()}
+            {appMode === "admin" && renderAdminPanel()}
 
-          {appMode === "manage-menu" && renderManageMenu()}
-          {appMode === "suppliers" && renderSuppliers()}
-          {appMode === "customers" && renderCustomers()}
-          {appMode === "reports" && renderReports()}
-          {appMode === "reporte-movimientos" && renderReporteMovimientos()}
-          {appMode === "corte-nuevo" && renderCorteNuevo()}
-          {appMode === "corte-express" && renderCorteExpress()}
-          {appMode === "corte-tabla" && renderCorteTabla()}
-          {appMode === "corte-tabla-2" && renderCorteTabla2()}
-          {appMode === "corte-x" && renderCorteX()}
-          {appMode === "expenses" && renderExpenses()}
-          {appMode === "gestion_cuentas" && renderGestionCuentas()}
+            {appMode === "manage-menu" && renderManageMenu()}
+            {appMode === "suppliers" && renderSuppliers()}
+            {appMode === "customers" && renderCustomers()}
+            {appMode === "reports" && renderReports()}
+            {appMode === "reporte-movimientos" && renderReporteMovimientos()}
+            {appMode === "corte-nuevo" && renderCorteNuevo()}
+            {appMode === "corte-express" && renderCorteExpress()}
+            {appMode === "corte-tabla" && renderCorteTabla()}
+            {appMode === "corte-tabla-2" && renderCorteTabla2()}
+            {appMode === "corte-x" && renderCorteX()}
+            {appMode === "expenses" && renderExpenses()}
+            {appMode === "gestion_cuentas" && renderGestionCuentas()}
+          </React.Suspense>
 
           {renderSidebar()}
           <PaymentModal
@@ -14192,14 +14197,16 @@ Instrucciones:
           tempPaymentMethod={tempPaymentMethod}
         />
 
-      <DailyReportModal 
-        isOpen={showDailyReportModal} 
-        onClose={() => setShowDailyReportModal(false)}
-        history={history}
-        targetDate={dailyReportTargetDate}
-        products={products}
-        companyName={selectedTenant?.name || "Cocinet App"}
-      />
+      <React.Suspense fallback={null}>
+        <DailyReportModal 
+          isOpen={showDailyReportModal} 
+          onClose={() => setShowDailyReportModal(false)}
+          history={history}
+          targetDate={dailyReportTargetDate}
+          products={products}
+          companyName={selectedTenant?.name || "Cocinet App"}
+        />
+      </React.Suspense>
 
       <IonAlert
         isOpen={showAttemptsExceededAlert}
