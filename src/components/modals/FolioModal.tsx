@@ -31,12 +31,33 @@ export const FolioModal: React.FC<FolioModalProps> = ({
   setFolioInputValue,
   handleFolioStepSubmit
 }) => {
+  // Auto-enfocar el input cada vez que cambia el paso o se abre el modal
+  React.useEffect(() => {
+    if (showFolioModal) {
+      const timer = setTimeout(() => {
+        if (folioInputRef?.current) {
+          folioInputRef.current.focus();
+          folioInputRef.current.select();
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [showFolioModal, folioStep]);
+
   return (
       <IonModal
         isOpen={showFolioModal}
         onDidDismiss={() => {
           setShowFolioModal(false);
           setFolioModalError(null);
+        }}
+        onIonModalDidPresent={() => {
+          setTimeout(() => {
+            if (folioInputRef?.current) {
+              folioInputRef.current.focus();
+              folioInputRef.current.select();
+            }
+          }, 60);
         }}
         style={{ "--height": "auto", "--max-height": "90vh", "--border-radius": "24px" }}
       >
@@ -96,9 +117,20 @@ export const FolioModal: React.FC<FolioModalProps> = ({
                   if (folioModalError) setFolioModalError(null);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter") {
                     e.preventDefault();
-                    if (!isGeneratingOrder) handleFolioStepSubmit();
+                    e.stopPropagation();
+                    if (e.nativeEvent && typeof (e.nativeEvent as any).stopImmediatePropagation === "function") {
+                      (e.nativeEvent as any).stopImmediatePropagation();
+                    }
+                    if (!isGeneratingOrder) {
+                      handleFolioStepSubmit();
+                    }
+                  } else if (e.key === "Escape" || e.code === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowFolioModal(false);
+                    setFolioModalError(null);
                   }
                 }}
                 placeholder={folioStep === 1 ? "Ingresa folio (ej: 105)" : "Confirma el folio"}

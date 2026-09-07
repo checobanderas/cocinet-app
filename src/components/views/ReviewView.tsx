@@ -87,11 +87,16 @@ export const ReviewView: React.FC<ReviewViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const target = e.target as HTMLElement;
-      const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+      const isInputField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || (target as any).isContentEditable);
+
+      // Si el usuario está escribiendo dentro de un input o hay un modal abierto (como FolioModal), no interferir
+      const isModalOpen = Boolean(document.querySelector("ion-modal.can-go-back, ion-modal.show-modal, [role='dialog'], .ion-page-modal"));
+      if (isInputField || isModalOpen) {
+        return;
+      }
 
       // Atajo Enter / F5: Enviar y Confirmar Pedido
       if (e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "F5" || e.code === "F5") {
-        if (isInputField) target.blur();
         e.preventDefault();
         e.stopPropagation();
         handleConfirmSendOrder();
