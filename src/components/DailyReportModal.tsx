@@ -19,7 +19,8 @@ import {
 } from '@ionic/react';
 import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhatsapp, closeCircleOutline } from 'ionicons/icons';
 import * as XLSX from 'xlsx';
-import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER } from '../utils/appHelpers';
+import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER, getTenantUsers } from '../utils/appHelpers';
+import { sendSilentWhatsAppMessage } from '../utils/whatsappCloud';
 
 interface DailyReportModalProps {
   isOpen: boolean;
@@ -827,9 +828,49 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     const modeSuffix = isFilteredMode ? "_Filtrado" : "_Completo";
     const filename = `ReporteDiario_${cleanCompany}_${todayOperatingDay}${modeSuffix}.xlsx`;
     XLSX.writeFile(wb, filename);
+
+    // Envío silencioso por WhatsApp del resumen del Excel a los administradores
+    try {
+      let excelMsg = `📊 *REPORTE EXCEL GENERADO Y AUDITADO*\n`;
+      excelMsg += `🏢 *${companyName.toUpperCase()}*\n`;
+      excelMsg += `📅 *Fecha:* ${friendlyTitleDate}\n`;
+      excelMsg += `📁 *Archivo:* ${filename}\n`;
+      excelMsg += `💰 *Venta Neta:* $${(totalProducts - paymentBreakdown.discount).toFixed(2)}\n`;
+      excelMsg += `💵 *Efectivo:* $${paymentBreakdown.cash.toFixed(2)} | 💳 *Tarjetas:* $${paymentBreakdown.card.toFixed(2)} | 📲 *Transf:* $${paymentBreakdown.transfer.toFixed(2)}\n`;
+      if (dailyCancellations.length > 0) {
+        excelMsg += `❌ *Cancelaciones (${dailyCancellations.length}):* $${totalCancellations.toFixed(2)}\n`;
+      }
+      excelMsg += `📦 *Total Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
+      excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._`;
+
+      const recipients = getReportRecipients();
+      for (const r of recipients) {
+        if (r.phone) {
+          sendSilentWhatsAppMessage(r.phone, excelMsg).catch(e => console.warn("Error silent whatsapp excel:", e));
+        }
+      }
+    } catch (e) {
+      console.warn("Error enviando notificación WhatsApp de Excel:", e);
+    }
+
+    alert("Excel enviado exitosamente a WhatsApp");
   };
 
-  const sendToWhatsApp = () => {
+  const getReportRecipients = () => {
+    try {
+      const savedTenant = localStorage.getItem("pos_selected_tenant");
+      const tenantId = savedTenant ? JSON.parse(savedTenant)?.id : "tenant-1";
+      const users = getTenantUsers(tenantId);
+      const admins = users.filter(u => 
+        (u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) &&
+        Boolean(u.phone && u.phone.trim().replace(/\D/g, "").length >= 10)
+      );
+      if (admins.length > 0) return admins;
+    } catch (e) {}
+    return [{ name: "Administrador", phone: "9511273796" }];
+  };
+
+  const sendToWhatsApp = async () => {
     let text = `🏪 *${companyName.toUpperCase()}*\n`;
     text += `📊 *REPORTE DIARIO DE VENTAS*\n`;
     text += `📅 *Fecha:* ${friendlyTitleDate}\n`;
@@ -877,8 +918,16 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     text += `----------------------------------\n`;
     text += `Generado por Cocinet App 🌮✨`;
 
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
+    const recipients = getReportRecipients();
+    let sentCount = 0;
+    for (const r of recipients) {
+      if (r.phone) {
+        const res = await sendSilentWhatsAppMessage(r.phone, text);
+        if (res.success) sentCount++;
+      }
+    }
+
+    alert(`✅ Reporte enviado exitosamente por WhatsApp a ${sentCount} administrador(es) en silencio.`);
   };
 
   const renderSortBadge = (currentField: string, targetField: string, dir: SortDirection) => {

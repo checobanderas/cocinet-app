@@ -3,6 +3,8 @@ import { CorteCuentasFolioRecord, saveCorteFolioRecordToFirebase } from '../../u
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { getTenantUsers } from '../../utils/appHelpers';
 
 
 interface CorteTabla2ViewProps {
@@ -654,8 +656,22 @@ export const CorteTabla2View: React.FC<CorteTabla2ViewProps> = ({
       text += `*💰 GRAN TOTAL GLOBAL: $${totalMultiTurnSum.toLocaleString("es-MX", {minimumFractionDigits:2})}*\n`;
       text += `━━━━━━━━━━━━━━━━━━━━\n`;
 
-      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-      window.open(url, "_blank");
+      try {
+        const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
+        const adminRecipients = tenantUsers.filter(u => 
+          (u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) &&
+          Boolean(u.phone && u.phone.trim().replace(/\D/g, "").length >= 10)
+        );
+        const targetList = adminRecipients.length > 0 ? adminRecipients : [{ name: "Admin", phone: "9511273796" }];
+        for (const r of targetList) {
+          if (r.phone) {
+            sendSilentWhatsAppMessage(r.phone, text).catch(e => console.warn("Error silent corte2:", e));
+          }
+        }
+        alert("Reporte multi-turno enviado exitosamente por WhatsApp ✅");
+      } catch (err) {
+        console.warn("Error enviando reporte:", err);
+      }
     };
 
     const handleExportMultiTurnExcel = () => {
