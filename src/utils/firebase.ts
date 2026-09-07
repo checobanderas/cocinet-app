@@ -7,6 +7,7 @@ import {
   CACHE_SIZE_UNLIMITED,
   setLogLevel
 } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Silenciar warnings/errores de conexión internos de Firebase en consola
 try {
@@ -95,6 +96,8 @@ try {
 }
 
 export const db = firestoreDb;
+export const storage = getStorage(app);
+export const firebaseApp = app;
 
 export async function purgeLocalFirestoreCache() {
   if (typeof window === "undefined" || !window.indexedDB) return;

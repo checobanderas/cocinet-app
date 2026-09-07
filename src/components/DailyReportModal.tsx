@@ -21,6 +21,8 @@ import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhat
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER, getTenantUsers } from '../utils/appHelpers';
 import { sendSilentWhatsAppMessage } from '../utils/whatsappCloud';
+import { storage } from '../utils/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface DailyReportModalProps {
   isOpen: boolean;
@@ -593,7 +595,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       .replace(/'/g, "&apos;");
   };
 
-  const exportToExcel = (mode: 'view' | 'full' = 'view') => {
+  const exportToExcel = async (mode: 'view' | 'full' = 'view') => {
     const cleanCompany = (companyName || "Cocinet")
       .replace(/[^a-zA-Z0-9\s_-]/g, "")
       .trim()
@@ -827,11 +829,30 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     // Trigger download of real .xlsx file
     const modeSuffix = isFilteredMode ? "_Filtrado" : "_Completo";
     const filename = `ReporteDiario_${cleanCompany}_${todayOperatingDay}${modeSuffix}.xlsx`;
-    XLSX.writeFile(wb, filename);
 
-    // Envío silencioso por WhatsApp del resumen del Excel a los administradores
+    // 1. Generar binario para Firebase Storage y descarga local
     try {
-      let excelMsg = `📊 *REPORTE EXCEL GENERADO Y AUDITADO*\n`;
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const excelBlob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      // Descarga local
+      XLSX.writeFile(wb, filename);
+
+      // 2. Subir a Firebase Storage
+      let storageDownloadUrl = "";
+      try {
+        const storageRef = ref(storage, `reportes_excel/${cleanCompany}/${filename}`);
+        const snapshot = await uploadBytes(storageRef, excelBlob, {
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        storageDownloadUrl = await getDownloadURL(snapshot.ref);
+        console.log("✅ Excel subido a Firebase Storage:", storageDownloadUrl);
+      } catch (storageErr) {
+        console.warn("⚠️ No se pudo subir el Excel a Firebase Storage:", storageErr);
+      }
+
+      // 3. Envío silencioso por WhatsApp del resumen y enlace oficial
+      let excelMsg = `📊 *REPORTE DIARIO EN EXCEL (.XLSX)*\n`;
       excelMsg += `🏢 *${companyName.toUpperCase()}*\n`;
       excelMsg += `📅 *Fecha:* ${friendlyTitleDate}\n`;
       excelMsg += `📁 *Archivo:* ${filename}\n`;
@@ -840,94 +861,128 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       if (dailyCancellations.length > 0) {
         excelMsg += `❌ *Cancelaciones (${dailyCancellations.length}):* $${totalCancellations.toFixed(2)}\n`;
       }
-      excelMsg += `📦 *Total Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
-      excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._`;
+      excelMsg += `📦 *Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
+
+      if (storageDownloadUrl) {
+        excelMsg += `📥 *Descargar Excel Oficial desde Firebase Storage:*\n${storageDownloadUrl}\n\n`;
+      } else {
+        excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._\n\n`;
+      }
+      excelMsg += `_Enviado silenciosamente por Cocinet POS._`;
 
       const recipients = getReportRecipients();
       for (const r of recipients) {
         if (r.phone) {
-          sendSilentWhatsAppMessage(r.phone, excelMsg).catch(e => console.warn("Error silent whatsapp excel:", e));
+          sendSilentWhatsAppMessage(r.phone, excelMsg).catch((e) =>
+            console.warn("Error silent whatsapp excel:", e)
+          );
         }
       }
-    } catch (e) {
-      console.warn("Error enviando notificación WhatsApp de Excel:", e);
+    } catch (e: any) {
+      console.warn("Error procesando exportación de Excel:", e);
     }
 
     alert("Excel enviado exitosamente a WhatsApp");
   };
 
   const getReportRecipients = () => {
+    const phonesSet = new Set<string>();
+    const recipients: Array<{ name: string; phone: string }> = [];
+
+    const addRecipient = (name: string, rawPhone?: string) => {
+      if (!rawPhone) return;
+      const clean = rawPhone.replace(/\D/g, "");
+      if (clean.length >= 10 && !phonesSet.has(clean)) {
+        phonesSet.add(clean);
+        recipients.push({ name, phone: clean });
+      }
+    };
+
     try {
       const savedTenant = localStorage.getItem("pos_selected_tenant");
       const tenantId = savedTenant ? JSON.parse(savedTenant)?.id : "tenant-1";
       const users = getTenantUsers(tenantId);
-      const admins = users.filter(u => 
-        (u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) &&
-        Boolean(u.phone && u.phone.trim().replace(/\D/g, "").length >= 10)
-      );
-      if (admins.length > 0) return admins;
+      users.forEach((u) => {
+        if (
+          (u.isReportRecipient ||
+            u.id.endsWith("-admin") ||
+            u.id.endsWith("-manager") ||
+            u.id.endsWith("-sistemas") ||
+            u.role === "admin" ||
+            u.role === "owner") &&
+          u.phone
+        ) {
+          addRecipient(u.name, u.phone);
+        }
+      });
     } catch (e) {}
-    return [{ name: "Administrador", phone: "9511273796" }];
+
+    if (recipients.length === 0) {
+      addRecipient("Administrador", "9511273796");
+    }
+    return recipients;
   };
 
   const sendToWhatsApp = async () => {
-    let text = `🏪 *${companyName.toUpperCase()}*\n`;
-    text += `📊 *REPORTE DIARIO DE VENTAS*\n`;
-    text += `📅 *Fecha:* ${friendlyTitleDate}\n`;
-    text += `----------------------------------\n\n`;
+    try {
+      const avgTicket = dailyHistory.length > 0 ? (totalProducts - paymentBreakdown.discount) / dailyHistory.length : 0;
+      const totalPieces = productSummary.reduce((sum, p) => sum + (p.quantity || 0), 0);
 
-    text += `💰 *RESUMEN DE CUENTAS & COMANDAS (${dailyHistory.length}):*\n`;
-    dailyHistory.forEach((h, idx) => {
-      const consecutive = dailyHistory.length - idx;
-      const foliosInt = formatAccountComandaFolios(h);
-      text += `• #${consecutive} | Mesa ${h.tableLabel || "N/A"} | Folio Int: *${foliosInt}* | Total: *$${(h.total || 0).toFixed(2)}*\n`;
-    });
-    text += `\n`;
+      let text = `📊 *REPORTE DIARIO DE OPERACIONES*\n`;
+      text += `🏢 *${companyName.toUpperCase()}*\n`;
+      text += `📅 *Fecha:* ${friendlyTitleDate}\n`;
+      text += `🕒 *Emisión:* ${new Date().toLocaleTimeString('es-MX')}\n`;
+      text += `----------------------------------\n\n`;
 
-    text += `💵 *MÉTODOS DE PAGO:*\n`;
-    text += `• Efec: *$${paymentBreakdown.cash.toFixed(2)}*\n`;
-    text += `• Tarj: *$${paymentBreakdown.card.toFixed(2)}*\n`;
-    text += `• Transf: *$${paymentBreakdown.transfer.toFixed(2)}*\n`;
-    text += `• LUPAY: *$${paymentBreakdown.lupay.toFixed(2)}*\n`;
-    text += `• Cort/Emp: *$${paymentBreakdown.cortesia.toFixed(2)}*\n`;
-    text += `• Descuentos: *-$${paymentBreakdown.discount.toFixed(2)}*\n\n`;
+      text += `💰 *RESUMEN DE CAJA:*\n`;
+      text += `• Total Cuentas Cobradas: *${dailyHistory.length}*\n`;
+      text += `• Venta Neta: *$${(totalProducts - paymentBreakdown.discount).toFixed(2)}*\n`;
+      text += `• Ticket Promedio: *$${avgTicket.toFixed(2)}*\n`;
+      text += `• Piezas Vendidas: *${totalPieces}*\n\n`;
 
-    if (dailyCancellations.length > 0) {
-      text += `❌ *CANCELACIONES:*\n`;
-      text += `• Total Registros: *${dailyCancellations.length}*\n`;
-      text += `• Total Cancelado: *$${totalCancellations.toFixed(2)}*\n\n`;
-    }
+      text += `💳 *DESGLOSE POR FORMA DE PAGO:*\n`;
+      text += `• 💵 Efectivo: *$${paymentBreakdown.cash.toFixed(2)}*\n`;
+      text += `• 💳 Tarjeta: *$${paymentBreakdown.card.toFixed(2)}*\n`;
+      text += `• 📲 Transferencia: *$${paymentBreakdown.transfer.toFixed(2)}*\n`;
+      text += `• ⚡ LUPAY: *$${paymentBreakdown.lupay.toFixed(2)}*\n`;
+      text += `• 💜 Cortesía / Consumo: *$${paymentBreakdown.cortesia.toFixed(2)}*\n`;
+      if (paymentBreakdown.discount > 0) {
+        text += `• 🏷️ Descuentos Aplicados: *-$${paymentBreakdown.discount.toFixed(2)}*\n`;
+      }
+      text += `\n`;
 
-    text += `🍔 *PRODUCTOS VENDIDOS:*\n`;
-    groupedProducts.forEach(group => {
-      text += `\n*${group.groupName}*\n`;
-      group.items.forEach(p => {
-        text += `• ${p.quantity} x *${p.name}* → *$${p.total.toFixed(2)}*\n`;
+      if (dailyCancellations.length > 0) {
+        text += `❌ *CANCELACIONES (${dailyCancellations.length}):*\n`;
+        text += `• Total Cancelado: *$${totalCancellations.toFixed(2)}*\n\n`;
+      }
+
+      text += `🌮 *TOP PRODUCTOS VENDIDOS:*\n`;
+      let count = 0;
+      groupedProducts.forEach(group => {
+        if (count < 12) {
+          text += `*${group.groupName}*\n`;
+          group.items.forEach(p => {
+            if (count < 12) {
+              text += `• ${p.quantity}x ${p.name} → $${p.total.toFixed(2)}\n`;
+              count++;
+            }
+          });
+        }
       });
-    });
-    text += `\n`;
+      text += `\n----------------------------------\n`;
+      text += `Generado por Cocinet POS ✨`;
 
-    text += `📈 *TOTALES FINALES:*\n`;
-    text += `• Total Cuentas: *$${totalAccounts.toFixed(2)}*\n`;
-    text += `• Total Productos: *$${totalProducts.toFixed(2)}*\n`;
-    text += `• Total Cancelaciones: *$${totalCancellations.toFixed(2)}*\n`;
-    if (paymentBreakdown.discount > 0) {
-      text += `• (-) Descuentos: *-$${paymentBreakdown.discount.toFixed(2)}*\n`;
-      text += `• Total Prod. (Ajustado): *$${(totalProducts - paymentBreakdown.discount).toFixed(2)}*\n`;
-    }
-    text += `----------------------------------\n`;
-    text += `Generado por Cocinet App 🌮✨`;
-
-    const recipients = getReportRecipients();
-    let sentCount = 0;
-    for (const r of recipients) {
-      if (r.phone) {
+      const recipients = getReportRecipients();
+      let sentCount = 0;
+      for (const r of recipients) {
         const res = await sendSilentWhatsAppMessage(r.phone, text);
         if (res.success) sentCount++;
       }
-    }
 
-    alert(`✅ Reporte enviado exitosamente por WhatsApp a ${sentCount} administrador(es) en silencio.`);
+      alert(`✅ Reporte diario enviado exitosamente por WhatsApp a ${sentCount} administrador(es) en silencio.`);
+    } catch (err: any) {
+      alert(`⚠️ Error enviando por WhatsApp: ${err.message || String(err)}`);
+    }
   };
 
   const renderSortBadge = (currentField: string, targetField: string, dir: SortDirection) => {
