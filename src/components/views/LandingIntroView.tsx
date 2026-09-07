@@ -10,10 +10,57 @@ interface LandingIntroViewProps {
 export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
   onEnterLogin,
   resolvedTenantName,
-  neutralPlatformLogo = "/logoroy.png",
+  neutralPlatformLogo = "/cocinet-logo.png",
 }) => {
   const phoneNumber = "9511273796";
-  const whatsappUrl = `https://wa.me/529511273796?text=Hola,%20me%20gustar%C3%ADa%20solicitar%20una%20cotizaci%C3%B3n%20para%20el%20sistema%20COCINET%20POS%20(Venta%20o%20Renta).`;
+  const [showQuoteModal, setShowQuoteModal] = React.useState(false);
+  const [businessName, setBusinessName] = React.useState("");
+  const [locationCity, setLocationCity] = React.useState("");
+  const [acquisitionType, setAcquisitionType] = React.useState("Renta Mensual");
+  const [tableCount, setTableCount] = React.useState("11 a 25 Mesas");
+  const [selectedAreas, setSelectedAreas] = React.useState<string[]>([
+    "Cocina Caliente",
+    "Caja Principal"
+  ]);
+  const [waiterDevices, setWaiterDevices] = React.useState("3 a 5 Celulares");
+  const [selectedModules, setSelectedModules] = React.useState<string[]>([
+    "Facturación CFDI 4.0",
+    "Inventarios con Receta IA"
+  ]);
+  const [trainingCount, setTrainingCount] = React.useState("4 a 10 Personas");
+  const [installationType, setInstallationType] = React.useState("En Sitio (Red + Impresoras)");
+
+  const handleToggleArea = (area: string) => {
+    setSelectedAreas((prev) =>
+      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
+    );
+  };
+
+  const handleToggleModule = (mod: string) => {
+    setSelectedModules((prev) =>
+      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
+    );
+  };
+
+  const getFormattedWhatsAppUrl = () => {
+    const text = 
+`¡Hola! Me gustaría cotizar el sistema *COCINET POS*:
+
+🏢 *Negocio:* ${businessName.trim() || "Restaurante/Taquería"} ${locationCity.trim() ? `(${locationCity.trim()})` : ""}
+💎 *Modalidad:* ${acquisitionType}
+🪑 *Capacidad:* ${tableCount}
+🍳 *Áreas:* ${selectedAreas.length > 0 ? selectedAreas.join(", ") : "Caja general"}
+📱 *Comanderos Móviles:* ${waiterDevices}
+✨ *Módulos:* ${selectedModules.length > 0 ? selectedModules.join(", ") : "Básicos"}
+🧑‍🏫 *Capacitación:* ${trainingCount}
+🛠️ *Instalación:* ${installationType}
+
+¿Podrían compartirme presupuesto detallado y disponibilidad? ¡Muchas gracias!`;
+
+    return `https://wa.me/529511273796?text=${encodeURIComponent(text)}`;
+  };
+
+  const quickWhatsappUrl = `https://wa.me/529511273796?text=Hola,%20me%20gustar%C3%ADa%20solicitar%20una%20cotizaci%C3%B3n%20para%20el%20sistema%20COCINET%20POS.`;
   const callUrl = `tel:9511273796`;
 
   return (
@@ -51,15 +98,14 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-black transition-all hover:scale-105 active:scale-95 no-underline shadow-xs"
+          <button
+            type="button"
+            onClick={() => setShowQuoteModal(true)}
+            className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-black transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
           >
             <span>💬 Cotizar WhatsApp</span>
             <span className="text-[11px] font-mono text-emerald-700 font-bold">951-127-3796</span>
-          </a>
+          </button>
 
           <button
             type="button"
@@ -101,15 +147,14 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
             <span>Ingresar al Sistema POS 🚀</span>
           </button>
 
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 font-black text-sm sm:text-base border-2 border-amber-300 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2.5 no-underline shadow-md shadow-amber-900/5"
+          <button
+            type="button"
+            onClick={() => setShowQuoteModal(true)}
+            className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 font-black text-sm sm:text-base border-2 border-amber-300 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer shadow-md shadow-amber-900/5"
           >
             <span className="text-emerald-500 text-xl">💬</span>
             <span>Solicitar Cotización: <b>951 127 3796</b></span>
-          </a>
+          </button>
         </div>
 
         {/* 🎬 VIDEO SHOWCASE HERO (Ambiente Alegre de Servicio y Cocina en Acción) */}
@@ -294,87 +339,95 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
             Elige la Modalidad que Mejor se Adapte a tu Negocio
           </h2>
           <p className="text-sm text-slate-600 max-w-xl mx-auto font-medium">
-            Sin letras chiquitas. Obtén una cotización personalizada de acuerdo a tu número de cajas, impresoras y sucursales.
+            Sin letras chiquitas. Obtén una cotización personalizada de acuerdo a tu número de cajas, impresoras, meseros y sucursales.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
           {/* Opción 1: Renta Mensual */}
-          <div className="bg-white/95 backdrop-blur-md border-2 border-amber-400/80 p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
-            <div className="space-y-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300">
-                Modalidad Flexible
-              </span>
-              <h3 className="text-2xl font-black text-slate-900 m-0">Renta Mensual Todo Incluido</h3>
-              <p className="text-xs text-slate-600 font-medium">
-                Comienza sin grandes inversiones iniciales. Ideal para negocios que buscan flexibilidad y respaldo continuo.
-              </p>
+          <div className="bg-white/95 backdrop-blur-md border-2 border-amber-400/80 p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300">
+                  Modalidad Flexible
+                </span>
+                <h3 className="text-2xl font-black text-slate-900 m-0">Renta Mensual Todo Incluido</h3>
+                <p className="text-xs text-slate-600 font-medium">
+                  Comienza sin grandes inversiones iniciales. Ideal para negocios que buscan flexibilidad y respaldo continuo.
+                </p>
+              </div>
+
+              <ul className="space-y-2.5 text-xs text-slate-700 font-bold list-none p-0 m-0">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Actualizaciones y mejoras continuas sin costo adicional
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Soporte técnico prioritario por WhatsApp y llamada
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Respaldo y sincronización en la nube incluidos
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Capacitación de meseros, cajeros y administradores
+                </li>
+              </ul>
             </div>
 
-            <ul className="space-y-2.5 text-xs text-slate-700 font-bold list-none p-0 m-0">
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Actualizaciones y mejoras continuas sin costo adicional
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Soporte técnico prioritario por WhatsApp y llamada
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Respaldo y sincronización en la nube incluidos
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Capacitación de meseros, cajeros y administradores
-              </li>
-            </ul>
-
-            <a
-              href={`https://wa.me/529511273796?text=Hola,%20me%20interesa%20conocer%20los%20planes%20de%20RENTA%20MENSUAL%20del%20sistema%20Cocinet%20POS.`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs uppercase tracking-wider text-center block no-underline shadow-lg shadow-orange-500/20 transition-all hover:scale-102 active:scale-98"
+            <button
+              type="button"
+              onClick={() => {
+                setAcquisitionType("Renta Mensual Todo Incluido");
+                setShowQuoteModal(true);
+              }}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs uppercase tracking-wider text-center block shadow-lg shadow-orange-500/20 transition-all hover:scale-102 active:scale-98 border-none cursor-pointer"
             >
-              Cotizar Plan de Renta 💬
-            </a>
+              Cotizar Plan de Renta (WhatsApp) 💬
+            </button>
           </div>
 
           {/* Opción 2: Venta Definitiva */}
-          <div className="bg-white/95 backdrop-blur-md border-2 border-indigo-400/80 p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-4 right-4 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
-              Más Popular
+          <div className="bg-white/95 backdrop-blur-md border-2 border-indigo-400/80 p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="absolute top-4 right-4 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
+                Más Popular
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-200">
+                  Licencia Vitalicia
+                </span>
+                <h3 className="text-2xl font-black text-slate-900 m-0">Venta de Licencia Definitiva</h3>
+                <p className="text-xs text-slate-600 font-medium">
+                  Sé dueño absoluto de tu sistema POS. Un solo pago, sin mensualidades forzosas para operar tu restaurante.
+                </p>
+              </div>
+
+              <ul className="space-y-2.5 text-xs text-slate-700 font-bold list-none p-0 m-0">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Licencia permanente sin vencimiento
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Instalación y puesta a punto en tus equipos
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Configuración completa de impresoras térmicas y red
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-600 font-black">✓</span> Garantía directa y asesoría comercial personalizada
+                </li>
+              </ul>
             </div>
 
-            <div className="space-y-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-200">
-                Licencia Vitalicia
-              </span>
-              <h3 className="text-2xl font-black text-slate-900 m-0">Venta de Licencia Definitiva</h3>
-              <p className="text-xs text-slate-600 font-medium">
-                Sé dueño absoluto de tu sistema POS. Un solo pago, sin mensualidades forzosas para operar tu restaurante.
-              </p>
-            </div>
-
-            <ul className="space-y-2.5 text-xs text-slate-700 font-bold list-none p-0 m-0">
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Licencia permanente sin vencimiento
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Instalación y puesta a punto en tus equipos
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Configuración completa de impresoras térmicas y red
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-emerald-600 font-black">✓</span> Garantía directa y asesoría comercial personalizada
-              </li>
-            </ul>
-
-            <a
-              href={`https://wa.me/529511273796?text=Hola,%20me%20interesa%20conocer%20la%20VENTA%20DE%20LICENCIA%20DEFINITIVA%20del%20sistema%20Cocinet%20POS.`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider text-center block no-underline shadow-lg shadow-indigo-500/20 transition-all hover:scale-102 active:scale-98"
+            <button
+              type="button"
+              onClick={() => {
+                setAcquisitionType("Venta de Licencia Definitiva");
+                setShowQuoteModal(true);
+              }}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider text-center block shadow-lg shadow-indigo-500/20 transition-all hover:scale-102 active:scale-98 border-none cursor-pointer"
             >
-              Cotizar Compra de Licencia 💬
-            </a>
+              Cotizar Compra de Licencia (WhatsApp) 💬
+            </button>
           </div>
         </div>
       </section>
@@ -391,7 +444,7 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
               ¿Listo para transformar la operación de tu restaurante?
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-              Contáctanos directamente hoy mismo para una demostración en vivo o una cotización adaptada a tu negocio.
+              Completa el cotizador inteligente para enviarte un presupuesto exacto y adaptado a tu número de áreas, comanderos y sucursales.
             </p>
           </div>
 
@@ -403,14 +456,13 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
               <span>📞 Llamar: 951 127 3796</span>
             </a>
 
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 no-underline shadow-lg shadow-emerald-600/20"
+            <button
+              type="button"
+              onClick={() => setShowQuoteModal(true)}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 border-none cursor-pointer shadow-lg shadow-emerald-600/20"
             >
-              <span>💬 Enviar WhatsApp Directo</span>
-            </a>
+              <span>📊 Abrir Cotizador WhatsApp 💬</span>
+            </button>
 
             <button
               type="button"
@@ -422,7 +474,7 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
           </div>
 
           <p className="text-[11px] text-slate-500 font-bold pt-2 m-0">
-            📍 Atención directa en México • Servicio y soporte técnico garantizado
+            📍 Atención directa en México • Servicio, capacitación y soporte técnico garantizado
           </p>
         </div>
       </section>
@@ -438,19 +490,265 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
             Acceso a Clientes / Iniciar Sesión 🔑
           </button>
           <span>•</span>
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-slate-600 hover:text-emerald-700 text-xs no-underline font-bold transition-colors"
+          <button
+            type="button"
+            onClick={() => setShowQuoteModal(true)}
+            className="text-emerald-700 hover:text-emerald-800 font-bold text-xs bg-transparent border-none cursor-pointer transition-colors"
           >
-            Soporte y Cotizaciones (951-127-3796)
-          </a>
+            Cotizador Inteligente (951-127-3796)
+          </button>
         </div>
         <p className="text-[11px] text-slate-500 m-0">
           © {new Date().getFullYear()} COCINET PRO POS • Todos los derechos reservados.
         </p>
       </footer>
+
+      {/* ─── 📊 MODAL INTERACTIVO DE COTIZACIÓN WHATSAPP ─────────────────── */}
+      {showQuoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-amber-300 max-w-2xl w-full p-6 sm:p-8 space-y-6 max-h-[92vh] overflow-y-auto text-left relative">
+            {/* Header del Modal */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="space-y-1">
+                <span className="text-[11px] font-black uppercase tracking-wider text-orange-700 bg-orange-100 px-3 py-0.5 rounded-full border border-orange-200 inline-block">
+                  Cotización Rápida
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 m-0 flex items-center gap-2">
+                  📊 Cotizador Inteligente COCINET POS
+                </h3>
+                <p className="text-xs text-slate-500 font-medium m-0">
+                  Selecciona las características de tu restaurante para generar una cotización precisa por WhatsApp.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuoteModal(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 font-black text-lg flex items-center justify-center border-none cursor-pointer transition-all shrink-0 ml-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Paso 1: Datos del Negocio y Modalidad */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-amber-500 pl-2 m-0">
+                1. Datos de tu Restaurante y Modalidad
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Nombre del Restaurante / Negocio:</label>
+                  <input
+                    type="text"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    placeholder="Ej. Tacos Roy / Mariscos El Puerto"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Ciudad / Estado (México):</label>
+                  <input
+                    type="text"
+                    value={locationCity}
+                    onChange={(e) => setLocationCity(e.target.value)}
+                    placeholder="Ej. Oaxaca, Oax. / CDMX / Puebla"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Esquema que te interesa:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { key: "Renta Mensual Todo Incluido", label: "💳 Renta Mensual" },
+                    { key: "Venta de Licencia Definitiva", label: "🏆 Compra Definitiva" },
+                    { key: "Ambas / Deseo Asesoría", label: "🤝 Deseo Asesoría" },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setAcquisitionType(item.key)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer text-center ${
+                        acquisitionType === item.key
+                          ? "bg-amber-500 text-slate-950 border-amber-600 shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Paso 2: Capacidad y Áreas de Impresión */}
+            <div className="space-y-4 pt-2 border-t border-slate-100">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-orange-500 pl-2 m-0">
+                2. Capacidad, Mesas y Áreas a Atender
+              </h4>
+              
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Número de Mesas / Comensales:</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {["1 a 10 Mesas", "11 a 25 Mesas", "26 a 50+ Mesas", "Solo Para Llevar / Mostrador"].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setTableCount(opt)}
+                      className={`py-2 px-2.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
+                        tableCount === opt
+                          ? "bg-orange-500 text-white border-orange-600 shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Áreas de Producción / Impresoras Requeridas:</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    "🍳 Cocina Caliente",
+                    "🌮 Trompo / Taquería / Parrilla",
+                    "🍹 Barra / Bebidas",
+                    "💵 Caja Principal",
+                    "🛵 Despacho Domicilio",
+                  ].map((area) => {
+                    const isChecked = selectedAreas.includes(area);
+                    return (
+                      <button
+                        key={area}
+                        type="button"
+                        onClick={() => handleToggleArea(area)}
+                        className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
+                          isChecked
+                            ? "bg-amber-50 border-amber-400 text-amber-900 shadow-2xs"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-amber-500 text-slate-950 border-amber-600" : "bg-white border-slate-300"}`}>
+                          {isChecked ? "✓" : ""}
+                        </span>
+                        <span>{area}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Dispositivos para Meseros (Comanderos Móviles):</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {["1 a 2 Celulares", "3 a 5 Celulares", "6 a 10 Celulares", "Ninguno (Solo Caja)"].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setWaiterDevices(opt)}
+                      className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
+                        waiterDevices === opt
+                          ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Paso 3: Módulos y Servicios Profesionales */}
+            <div className="space-y-4 pt-2 border-t border-slate-100">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-emerald-500 pl-2 m-0">
+                3. Módulos, Capacitación e Instalación
+              </h4>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Módulos Especiales:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    "🧾 Facturación CFDI 4.0 con QR",
+                    "📦 Inventarios con Receta IA y Costeo",
+                    "🛵 Módulo de Servicio a Domicilio / Reparto",
+                    "🏢 Multi-Sucursal en Tiempo Real",
+                  ].map((mod) => {
+                    const isChecked = selectedModules.includes(mod);
+                    return (
+                      <button
+                        key={mod}
+                        type="button"
+                        onClick={() => handleToggleModule(mod)}
+                        className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
+                          isChecked
+                            ? "bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-emerald-600 text-white border-emerald-700" : "bg-white border-slate-300"}`}>
+                          {isChecked ? "✓" : ""}
+                        </span>
+                        <span>{mod}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">🧑‍🏫 Capacitación de Personal:</label>
+                  <select
+                    value={trainingCount}
+                    onChange={(e) => setTrainingCount(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                  >
+                    <option value="Básica (1 a 3 Personas)">Básica (1 a 3 Personas)</option>
+                    <option value="4 a 10 Personas (Cajeros y Meseros)">4 a 10 Personas (Cajeros y Meseros)</option>
+                    <option value="Intensiva Multi-Turno (10+ Personas)">Intensiva Multi-Turno (10+ Personas)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">🛠️ Instalación y Configuración:</label>
+                  <select
+                    value={installationType}
+                    onChange={(e) => setInstallationType(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                  >
+                    <option value="En Sitio (Red + Impresoras Térmicas)">En Sitio (Red + Impresoras Térmicas)</option>
+                    <option value="Configuración Remota Guiada">Configuración Remota Guiada</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer de Acciones del Modal */}
+            <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => setShowQuoteModal(false)}
+                className="w-full sm:w-1/3 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all border-none cursor-pointer"
+              >
+                Cerrar
+              </button>
+
+              <a
+                href={getFormattedWhatsAppUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowQuoteModal(false)}
+                className="w-full sm:w-2/3 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider text-center flex items-center justify-center gap-2 no-underline shadow-lg shadow-emerald-600/30 transition-all hover:scale-102 active:scale-98"
+              >
+                <span>📲 Enviar Cotización por WhatsApp (951-127-3796)</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

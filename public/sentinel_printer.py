@@ -404,7 +404,7 @@ def parse_escpos(raw_bytes: bytes) -> list:
                     if i + 2 < n:
                         mode = raw_bytes[i + 2]
                         new_bold = bool(mode & 8)
-                        new_size = 'big' if (mode & 48) else 'normal'
+                        new_size = 'big' if (mode & 48 or mode & 16 or mode & 32) else 'normal'
                         if new_bold != bold or new_size != size:
                             flush_current()
                             bold = new_bold
@@ -449,7 +449,18 @@ def parse_escpos(raw_bytes: bytes) -> list:
                     else:
                         i += 3
                         continue
-                elif cmd in (0x21, 0x42, 0x6b, 0x77, 0x68):
+                elif cmd == 0x21: # GS ! n -> Select character size
+                    if i + 2 < n:
+                        size_byte = raw_bytes[i + 2]
+                        w_mult = (size_byte >> 4) & 0x07
+                        h_mult = size_byte & 0x07
+                        new_size = 'big' if (w_mult > 0 or h_mult > 0) else 'normal'
+                        if new_size != size:
+                            flush_current()
+                            size = new_size
+                        i += 3
+                        continue
+                elif cmd in (0x42, 0x6b, 0x77, 0x68):
                     i += 3
                     continue
             i += 2

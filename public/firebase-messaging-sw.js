@@ -28,12 +28,22 @@ messaging.onBackgroundMessage(function(payload) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
+  const urlToOpen = event.notification.data?.url || '/';
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      if (clientList.length > 0) {
-        return clientList[0].focus();
+      for (let i = 0; i < clientList.length; i++) {
+        let client = clientList[i];
+        if ('focus' in client) {
+          if (client.url === urlToOpen || (urlToOpen !== '/' && client.url.includes(urlToOpen))) {
+            return client.focus();
+          }
+        }
       }
-      return clients.openWindow('/');
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
     })
   );
 });
+

@@ -1,5 +1,5 @@
 import { Comanda, Destination, TableData, ClosedAccount, getFormattedProductName, getProductDestination } from '../utils/appHelpers';
-import { formatComandaItemLines } from '../utils/formatters';
+import { formatComandaItemLines, formatComandaItemStructured } from '../utils/formatters';
 import { createTransport, PrinterArea, EscPosDriver, PosPrinterJob } from '../utils/printer';
 import { addPedidoToPrinter, getMexicoISOString } from '../utils/firestore';
 
@@ -122,18 +122,26 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
           ? "BARRA"
           : "GENERAL";
 
-    // Encabezado compacto y optimizado para ahorro de papel
+    // Encabezado destacado y de alta visibilidad para cocina / barra
     job.center();
-    job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
+    job.bold(true);
     job.printLine("================================");
-    job.printLine(`*** ${destName} - MESA: ${tableLabel} ***`);
-    job.bold(false);
+    
+    // Título de Área y Mesa con fuente grande y doble tamaño
+    job.doubleSize(true);
+    job.printLine(`${destName}`);
+    job.printLine(`MESA: ${tableLabel}`);
+    job.normalSize();
+    job.bold(true);
+    job.printLine("================================");
+
     job.printLine(
       `Cmd #${comanda.folioInterno || comanda.folio} | Hora: ${new Date(comanda.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     );
     if (comanda.createdBy?.name) {
       job.printLine(`MESERO: ${comanda.createdBy.name.toUpperCase()}`);
     }
+    job.bold(false);
     job.printLine("================================");
 
     const isDelivery = selectedTable?.zone === "Servicio a Domicilio" || (selectedTable as any)?.deliveryClientName || selectedDeliveryClient?.name;
@@ -144,7 +152,8 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
       const dNotes = deliveryNotes || (selectedTable as any)?.deliveryNotes || "";
       
       job.left();
-      if (dClient) job.bold(true).printLine(`CTE: ${dClient.toUpperCase()}`).bold(false);
+      job.bold(true);
+      if (dClient) job.printLine(`CTE: ${dClient.toUpperCase()}`);
       if (dPhone) job.printLine(`TEL: ${dPhone}`);
       if (dAddr) {
         let cleanAddr = dAddr;
@@ -161,7 +170,8 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         job.printLine(`DIR: ${cleanAddr.toUpperCase()}`);
         if (refText) job.printLine(`REF: ${refText.toUpperCase()}`);
       }
-      if (dNotes) job.bold(true).printLine(`NOTAS: ${dNotes.toUpperCase()}`).bold(false);
+      if (dNotes) job.printLine(`NOTAS: ${dNotes.toUpperCase()}`);
+      job.bold(false);
       job.printLine("--------------------------------");
     }
 
@@ -182,8 +192,10 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         if (hasMultiplePlates) {
           job
             .center()
+            .doubleHeight(true)
             .bold(true)
             .printLine(`-- COMENSAL ${plateNum} --`)
+            .normalSize()
             .bold(false)
             .left();
         }
@@ -191,14 +203,24 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         filteredItems
           .filter((i) => (i.plate || 1) === plateNum)
           .forEach((item) => {
-            const lines = formatComandaItemLines(
+            const { productLines, noteLines } = formatComandaItemStructured(
               item.quantity,
               getFormattedProductName(item.product),
               item.notes,
               32
             );
-            job.bold(true);
-            lines.forEach((l) => job.printLine(l));
+
+            // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS para máxima visibilidad en comanda
+            job.doubleHeight(true).bold(true);
+            productLines.forEach((l) => job.printLine(l));
+            job.normalSize();
+
+            if (noteLines.length > 0) {
+              job.bold(true);
+              noteLines.forEach((nl) => job.printLine(nl));
+              job.bold(false);
+            }
+
             job.bold(false);
             job.printLine("--------------------------------");
           });
@@ -226,30 +248,50 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
 
       Object.values(grouped).forEach((item) => {
         const notesStr = Array.from(new Set(item.notes)).join(", ");
-        const lines = formatComandaItemLines(item.quantity, item.name, notesStr, 32);
-        job.bold(true);
-        lines.forEach((l) => job.printLine(l));
+        const { productLines, noteLines } = formatComandaItemStructured(item.quantity, item.name, notesStr, 32);
+
+        // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS
+        job.doubleHeight(true).bold(true);
+        productLines.forEach((l) => job.printLine(l));
+        job.normalSize();
+
+        if (noteLines.length > 0) {
+          job.bold(true);
+          noteLines.forEach((nl) => job.printLine(nl));
+          job.bold(false);
+        }
+
         job.bold(false);
         job.printLine("--------------------------------");
       });
     } else {
       // Fallback/General
       filteredItems.forEach((item) => {
-        const lines = formatComandaItemLines(
+        const { productLines, noteLines } = formatComandaItemStructured(
           item.quantity,
           getFormattedProductName(item.product),
           item.notes,
           32
         );
-        job.bold(true);
-        lines.forEach((l) => job.printLine(l));
+
+        // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS
+        job.doubleHeight(true).bold(true);
+        productLines.forEach((l) => job.printLine(l));
+        job.normalSize();
+
+        if (noteLines.length > 0) {
+          job.bold(true);
+          noteLines.forEach((nl) => job.printLine(nl));
+          job.bold(false);
+        }
+
         job.bold(false);
         job.printLine("--------------------------------");
       });
     }
 
     if (comanda.generalNotes && comanda.generalNotes.trim()) {
-      job.bold(true).printLine(`OBS: ${comanda.generalNotes.toUpperCase()}`).bold(false);
+      job.doubleHeight(true).bold(true).printLine(`OBS: ${comanda.generalNotes.toUpperCase()}`).normalSize().bold(false);
       job.printLine("--------------------------------");
     }
 

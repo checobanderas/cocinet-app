@@ -320,7 +320,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   // 🏢 Resolver Tenant activo e identidad de marca (Logo / Avatar / Nombre)
   const lockedTerminalId = typeof window !== "undefined" ? getLockedTerminalTenantId() : null;
-  const effectiveTenant = selectedTenant || (lockedTerminalId ? COMPANY_CATALOG?.find((c: any) => c.id === lockedTerminalId) : null);
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const hasDirectTenantParam = Boolean(urlParams?.get("tenant") || urlParams?.get("token"));
+  
+  // En la web pública / comercial, no asociar ningún tenant previo en la pantalla de bloqueo inicial
+  const effectiveTenant = (isOwnerUnlocked || restrictedOwnerKey || hasDirectTenantParam)
+    ? (selectedTenant || (lockedTerminalId ? COMPANY_CATALOG?.find((c: any) => c.id === lockedTerminalId) : null))
+    : null;
 
   const effectiveOwnerObj = effectiveTenant?.ownerKey
     ? (Array.isArray(customOwners) ? customOwners.find((o: any) => o.key === effectiveTenant.ownerKey) : null)
@@ -330,12 +336,62 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const resolvedTenantName = effectiveTenant ? (effectiveTenant.name || effectiveTenant.sucursalDefault || "COCINET") : "COCINET Pro";
   const resolvedTenantAvatar = effectiveTenant?.avatar || "🍽️";
   const resolvedAccentColor = effectiveTenant?.accentColor || "#2563eb";
-  const neutralPlatformLogo = "https://img.icons8.com/fluency/256/restaurant.png";
+  const neutralPlatformLogo = "/cocinet-logo.png";
+
+  // ⌨️ Vinculación de teclado físico para ingreso rápido de PIN y Enter
+  React.useEffect(() => {
+    if (!showPinPanel || isOwnerUnlocked || restrictedOwnerKey) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Si el foco está en un campo de texto modal activo o editable, ignorar
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        setOwnerPasswordInput((prev) => {
+          if (prev.length < 4) {
+            const newVal = prev + e.key;
+            if (newVal.length === 4) {
+              handleOwnerPinSubmit(newVal);
+            }
+            return newVal;
+          }
+          return prev;
+        });
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        setOwnerPasswordInput((prev) => prev.slice(0, -1));
+      } else if (e.key === 'Delete' || e.key === 'Escape' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setOwnerPasswordInput('');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setOwnerPasswordInput((curr) => {
+          if (curr.length > 0) {
+            handleOwnerPinSubmit(curr);
+          }
+          return curr;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, handleOwnerPinSubmit, setOwnerPasswordInput]);
 
   if (showLandingIntro && !showPinPanel) {
     return (
       <LandingIntroView
-        onEnterLogin={() => setShowLandingIntro(false)}
+        onEnterLogin={() => {
+          setSelectedTenant(null);
+          setShowLandingIntro(false);
+        }}
         resolvedTenantName={resolvedTenantName}
         neutralPlatformLogo={neutralPlatformLogo}
       />
@@ -598,45 +654,61 @@ return (
                   }}
                 />
 
-                {/* 🎨 EMBLEMA / LOGO SUPERIOR DEL SISTEMA O DE LA SUCURSAL */}
-                <div className="relative z-10 mb-2 flex flex-col items-center justify-center">
-                  {resolvedTenantLogo ? (
-                    <img
-                      src={resolvedTenantLogo}
-                      alt={resolvedTenantName}
-                      className="h-20 sm:h-24 max-h-[22vh] w-auto object-contain drop-shadow-md transition-transform hover:scale-105"
-                      style={{ filter: "drop-shadow(0px 4px 10px rgba(45, 36, 28, 0.18))" }}
-                    />
-                  ) : effectiveTenant ? (
-                    <div className="flex flex-col items-center justify-center gap-1.5 p-2.5 px-5 rounded-2xl bg-white/80 backdrop-blur-xs border border-amber-900/15 shadow-xs">
-                      <div 
-                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl sm:text-4xl shadow-inner"
-                        style={{ backgroundColor: `${resolvedAccentColor}18`, border: `2px solid ${resolvedAccentColor}50` }}
-                      >
-                        <span>{resolvedTenantAvatar}</span>
+                {/* 🛡️ EMBLEMA / ESCUDO OVALADO TIPO WIDGET (LOGOTIPO CON BORDES CURVOS Y SUAVES) */}
+                <div className="relative z-10 mb-3 flex flex-col items-center justify-center">
+                  <div className="relative flex flex-col items-center justify-center p-3.5 px-6 sm:px-8 rounded-[2.2rem] bg-gradient-to-b from-white/95 via-amber-50/90 to-[#fdfbf7] border-2 border-amber-900/20 shadow-xl shadow-amber-950/10 backdrop-blur-md transition-all hover:scale-105 hover:shadow-2xl hover:shadow-amber-950/15 group">
+                    {/* Brillo sutil decorativo en la parte superior del widget */}
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-amber-400/50 to-transparent rounded-full pointer-events-none" />
+
+                    {resolvedTenantLogo ? (
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div className="relative overflow-hidden rounded-2xl p-1 bg-white/80 shadow-inner flex items-center justify-center border border-amber-900/10">
+                          <img
+                            src={resolvedTenantLogo}
+                            alt={resolvedTenantName}
+                            className="h-16 sm:h-20 max-h-[18vh] w-auto max-w-[200px] object-contain rounded-xl drop-shadow-sm transition-transform group-hover:scale-105"
+                          />
+                        </div>
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800 text-center max-w-[260px] leading-tight mt-1">
+                          {resolvedTenantName}
+                        </span>
                       </div>
-                      <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800 text-center max-w-[280px] leading-tight">
-                        {resolvedTenantName}
+                    ) : effectiveTenant ? (
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div 
+                          className="w-14 h-14 sm:w-16 sm:h-16 rounded-[1.4rem] flex items-center justify-center text-3xl sm:text-4xl shadow-inner transition-transform group-hover:scale-105"
+                          style={{ backgroundColor: `${resolvedAccentColor}18`, border: `2px solid ${resolvedAccentColor}50` }}
+                        >
+                          <span>{resolvedTenantAvatar}</span>
+                        </div>
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800 text-center max-w-[260px] leading-tight mt-0.5">
+                          {resolvedTenantName}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <div className="relative overflow-hidden rounded-2xl p-1.5 bg-white/80 shadow-inner flex items-center justify-center border border-amber-900/10">
+                          <img
+                            src={neutralPlatformLogo}
+                            alt="COCINET Pro"
+                            className="h-16 sm:h-20 max-h-[18vh] w-auto max-w-[190px] object-contain rounded-xl drop-shadow-sm transition-transform group-hover:scale-105"
+                          />
+                        </div>
+                        <span className="text-sm sm:text-base font-black tracking-wider text-slate-900 uppercase mt-0.5">
+                          COCINET <span className="bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent font-extrabold">PRO</span>
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span
+                        className="px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest text-[#2d241c]/75 bg-[#2d241c]/5 border border-[#2d241c]/10 shadow-2xs"
+                        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                      >
+                        PUNTO DE VENTA • SEP 2026
                       </span>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center gap-1">
-                      <img
-                        src={neutralPlatformLogo}
-                        alt="COCINET Pro"
-                        className="h-16 sm:h-20 max-h-[18vh] w-auto object-contain drop-shadow-md"
-                      />
-                      <span className="text-sm sm:text-base font-black tracking-wider text-slate-900 uppercase">
-                        COCINET <span className="text-blue-600 font-extrabold">PRO</span>
-                      </span>
-                    </div>
-                  )}
-                  <span
-                    className="mt-2 px-3.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-widest text-[#2d241c]/75 bg-[#2d241c]/5 border border-[#2d241c]/10 shadow-2xs"
-                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  >
-                    SEP 2026
-                  </span>
+                  </div>
                 </div>
 
                 {/* 🔒 GRAN CANDADO PULSANTE EN EL CENTRO */}
@@ -995,7 +1067,10 @@ return (
                       </button>
                     </div>
 
-                    <div className="pt-2 text-center">
+                    <div className="pt-2 text-center space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 border border-slate-200/80 rounded-full text-[11px] font-bold text-slate-600 shadow-2xs">
+                        <span>⌨️</span> <span>Puedes teclear tu PIN directamente o presionar <strong className="font-mono text-slate-800">Enter</strong></span>
+                      </div>
                       <p className="text-[11px] text-slate-400 font-semibold m-0">
                         🛡️ Terminal aislada y segura • Cocinet POS
                       </p>

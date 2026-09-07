@@ -132,49 +132,50 @@ export const formatReceiptItemLines = (
   return lines;
 };
 
-export const formatComandaItemLines = (
+export const formatComandaItemStructured = (
   quantity: number | string,
   rawName: string,
   notes?: string,
   totalWidth: number = 32
-): string[] => {
+): { productLines: string[]; noteLines: string[]; allLines: string[] } => {
   const cleanName = String(rawName || "").trim().toUpperCase();
   const qtyStr = `[ ${quantity} ] `;
   const indent = "      "; // 6 espacios de sangría alineado con el texto
-  const lines: string[] = [];
+  const productLines: string[] = [];
+  const noteLines: string[] = [];
 
   const fullSingle = `${qtyStr}${cleanName}`;
   if (fullSingle.length <= totalWidth) {
-    lines.push(fullSingle);
+    productLines.push(fullSingle);
   } else {
     const words = cleanName.split(/\s+/).filter(Boolean);
     let currentLine = qtyStr;
 
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
-      const isFirst = currentLine.length === (lines.length === 0 ? qtyStr.length : indent.length);
+      const isFirst = currentLine.length === (productLines.length === 0 ? qtyStr.length : indent.length);
       const testLine = isFirst ? `${currentLine}${word}` : `${currentLine} ${word}`;
 
       if (testLine.length <= totalWidth) {
         currentLine = testLine;
       } else {
         if (currentLine.trim().length > 0 && currentLine !== qtyStr) {
-          lines.push(currentLine);
+          productLines.push(currentLine);
           currentLine = `${indent}${word}`;
         } else {
           const avail = totalWidth - currentLine.length;
           if (avail > 3) {
-            lines.push(`${currentLine}${word.substring(0, avail)}`);
+            productLines.push(`${currentLine}${word.substring(0, avail)}`);
             currentLine = `${indent}${word.substring(avail)}`;
           } else {
-            lines.push(currentLine);
+            productLines.push(currentLine);
             currentLine = `${indent}${word}`;
           }
         }
       }
     }
     if (currentLine.trim().length > 0) {
-      lines.push(currentLine);
+      productLines.push(currentLine);
     }
   }
 
@@ -189,17 +190,31 @@ export const formatComandaItemLines = (
       if (testLine.length <= totalWidth) {
         currentNoteLine = testLine;
       } else {
-        lines.push(currentNoteLine);
+        noteLines.push(currentNoteLine);
         currentNoteLine = `   ${word}`;
       }
     }
     if (currentNoteLine.trim().length > 0) {
-      lines.push(currentNoteLine);
+      noteLines.push(currentNoteLine);
     }
   }
 
-  return lines;
+  return {
+    productLines,
+    noteLines,
+    allLines: [...productLines, ...noteLines]
+  };
 };
+
+export const formatComandaItemLines = (
+  quantity: number | string,
+  rawName: string,
+  notes?: string,
+  totalWidth: number = 32
+): string[] => {
+  return formatComandaItemStructured(quantity, rawName, notes, totalWidth).allLines;
+};
+
 
 
 

@@ -759,6 +759,30 @@ export class EscPosDriver {
     return this.encodeByte(27) + "!" + this.encodeByte(mode);
   }
 
+  /**
+   * Configura el multiplicador de tamaño de caracteres vía GS ! n (ESC/POS estándar)
+   * @param widthMultiplier  Multiplicador de ancho (1 a 8)
+   * @param heightMultiplier Multiplicador de alto (1 a 8)
+   */
+  setFontSize(widthMultiplier: number = 1, heightMultiplier: number = 1) {
+    const w = Math.min(Math.max(Math.floor(widthMultiplier), 1), 8) - 1;
+    const h = Math.min(Math.max(Math.floor(heightMultiplier), 1), 8) - 1;
+    const n = (w << 4) | h;
+    return this.encodeByte(29) + "!" + this.encodeByte(n);
+  }
+
+  setDoubleHeight(on: boolean = true) {
+    return this.setFontSize(1, on ? 2 : 1);
+  }
+
+  setDoubleWidth(on: boolean = true) {
+    return this.setFontSize(on ? 2 : 1, 1);
+  }
+
+  setDoubleSize(on: boolean = true) {
+    return this.setFontSize(on ? 2 : 1, on ? 2 : 1);
+  }
+
   emphasis(mode: boolean | number) {
     return this.encodeByte(27) + "E" + (mode ? "1" : "0");
   }
@@ -825,12 +849,17 @@ export class PosPrinterJob {
   FONT_SIZE_MEDIUM2 = 15;
   FONT_SIZE_MEDIUM3 = 49;
   FONT_SIZE_BIG = 48;
+  FONT_SIZE_BIG_BOLD = 56;
+  FONT_SIZE_DOUBLE_HEIGHT = 16;
+  FONT_SIZE_DOUBLE_HEIGHT_BOLD = 24;
+  FONT_SIZE_DOUBLE_WIDTH = 32;
+  FONT_SIZE_DOUBLE_WIDTH_BOLD = 40;
 
   FONT_A = 0;
   FONT_B = 1;
   FONT_EMPHASIZED = 8;
-  FONT_DOUBLE_HEIGHT = 16;
-  FONT_DOUBLE_WIDTH = 32;
+  FONT_DOUBLE_HEIGHT_FLAG = 16;
+  FONT_DOUBLE_WIDTH_FLAG = 32;
   FONT_ITALIC = 64;
   FONT_UNDERLINE = 128;
 
@@ -894,6 +923,47 @@ export class PosPrinterJob {
 
   setPrintMode(mode: number) {
     this.buffer.push(this.driver.setPrintMode(mode));
+    return this;
+  }
+
+  /**
+   * Ajusta el tamaño de fuente (multiplicador de ancho y alto de 1 a 8)
+   */
+  setFontSize(widthMultiplier: number = 1, heightMultiplier: number = 1) {
+    this.buffer.push(this.driver.setFontSize(widthMultiplier, heightMultiplier));
+    return this;
+  }
+
+  /**
+   * Activa o desactiva la fuente de doble altura
+   */
+  doubleHeight(on: boolean = true) {
+    this.buffer.push(this.driver.setDoubleHeight(on));
+    return this;
+  }
+
+  /**
+   * Activa o desactiva la fuente de doble anchura
+   */
+  doubleWidth(on: boolean = true) {
+    this.buffer.push(this.driver.setDoubleWidth(on));
+    return this;
+  }
+
+  /**
+   * Activa o desactiva la fuente de doble tamaño (ancho y alto x2)
+   */
+  doubleSize(on: boolean = true) {
+    this.buffer.push(this.driver.setDoubleSize(on));
+    return this;
+  }
+
+  /**
+   * Restablece el tamaño de fuente a tamaño estándar/normal
+   */
+  normalSize() {
+    this.buffer.push(this.driver.setFontSize(1, 1));
+    this.buffer.push(this.driver.setPrintMode(0));
     return this;
   }
 

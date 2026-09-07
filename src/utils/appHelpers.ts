@@ -570,3 +570,23 @@ export function setPreferredTablesMode(mode: "floorplan" | "gestion_cuentas"): v
   } catch (e) {}
 }
 
+export function getSimplifiedDeviceInfo(): string {
+  if (typeof navigator === "undefined") return "Dispositivo Web";
+  const ua = navigator.userAgent;
+  let os = "Dispositivo";
+  if (ua.includes("iPhone")) os = "iPhone (iOS)";
+  else if (ua.includes("iPad")) os = "iPad (iPadOS)";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("Windows")) os = "Windows PC";
+  else if (ua.includes("Mac OS")) os = "Mac";
+  else if (ua.includes("Linux")) os = "Linux";
+
+  let browser = "Navegador";
+  if (ua.includes("Chrome") && !ua.includes("Edg")) browser = "Chrome";
+  else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+  else if (ua.includes("Edg")) browser = "Edge";
+  else if (ua.includes("Firefox")) browser = "Firefox";
+
+  return `${browser} en ${os}`;
+}
+

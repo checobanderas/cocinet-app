@@ -56,8 +56,14 @@ export async function requestFCMToken(): Promise<string | null> {
   }
 }
 
-/** Dispara una notificación Push local/nativa en el dispositivo */
-export function triggerDeviceNotification(title: string, body: string, icon = "/logo.png") {
+/** Dispara una notificación Push local/nativa en el dispositivo con soporte para URL directa */
+export function triggerDeviceNotification(
+  title: string,
+  body: string,
+  icon = "/logo.png",
+  url?: string,
+  tag = "cocinet-push"
+) {
   if (typeof window !== "undefined" && "Notification" in window) {
     if (Notification.permission === "granted") {
       try {
@@ -68,16 +74,26 @@ export function triggerDeviceNotification(title: string, body: string, icon = "/
               icon,
               badge: icon,
               vibrate: [200, 100, 200, 100, 200],
-              tag: "cocinet-push",
+              tag,
+              data: { url: url || window.location.href },
             });
           });
         } else {
-          new Notification(title, {
+          const notif = new Notification(title, {
             body,
             icon,
             badge: icon,
             vibrate: [200, 100, 200] as any,
+            data: { url: url || window.location.href },
           });
+          if (url) {
+            notif.onclick = () => {
+              window.focus();
+              if (window.location.href !== url) {
+                window.location.href = url;
+              }
+            };
+          }
         }
       } catch (e) {
         console.warn("Notification error:", e);
@@ -85,9 +101,77 @@ export function triggerDeviceNotification(title: string, body: string, icon = "/
     } else if (Notification.permission !== "denied") {
       Notification.requestPermission().then((perm) => {
         if (perm === "granted") {
-          new Notification(title, { body, icon });
+          const notif = new Notification(title, { body, icon });
+          if (url) {
+            notif.onclick = () => {
+              window.focus();
+              window.location.href = url;
+            };
+          }
         }
       });
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📡 REGISTRO Y AUDITORÍA DE ENVÍOS (LOGS DE NOTIFICACIONES Y WHATSAPP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface NotificationDeliveryLog {
+  id: string;
+  timestamp: string;
+  cancellationFolio?: string;
+  tenantId: string;
+  branchName: string;
+  recipientName: string;
+  recipientRole: string;
+  recipientPhone?: string;
+  channel: "whatsapp" | "fcm_push" | "local_push" | "escalation";
+  status: "success" | "failed" | "skipped";
+  detail: string;
+  targetUrl?: string;
+}
+
+const NOTIFICATION_LOGS_KEY = "cocinet_notification_delivery_logs";
+
+export function addNotificationDeliveryLog(log: Omit<NotificationDeliveryLog, "id" | "timestamp">): NotificationDeliveryLog {
+  const newEntry: NotificationDeliveryLog = {
+    id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    timestamp: new Date().toISOString(),
+    ...log,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      const existingStr = localStorage.getItem(NOTIFICATION_LOGS_KEY);
+      const list: NotificationDeliveryLog[] = existingStr ? JSON.parse(existingStr) : [];
+      // Keep last 150 entries
+      const updated = [newEntry, ...list].slice(0, 150);
+      localStorage.setItem(NOTIFICATION_LOGS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Error guardando log de notificación:", e);
+    }
+  }
+
+  return newEntry;
+}
+
+export function getNotificationDeliveryLogs(): NotificationDeliveryLog[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const existingStr = localStorage.getItem(NOTIFICATION_LOGS_KEY);
+    return existingStr ? JSON.parse(existingStr) : [];
+  } catch (e) {
+    console.warn("Error leyendo logs de notificación:", e);
+    return [];
+  }
+}
+
+export function clearNotificationDeliveryLogs(): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(NOTIFICATION_LOGS_KEY);
+    } catch (e) {}
   }
 }

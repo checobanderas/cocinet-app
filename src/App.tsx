@@ -35,11 +35,17 @@ import {
   getProductSortScore,
   getCompanyCatalog,
   getPreferredTablesMode,
-  setPreferredTablesMode
+  setPreferredTablesMode,
+  getSimplifiedDeviceInfo
 } from "./utils/appHelpers";
 
 import { sendSilentWhatsAppMessage } from "./utils/whatsappCloud";
-import { triggerDeviceNotification } from "./utils/fcm";
+import { 
+  triggerDeviceNotification, 
+  addNotificationDeliveryLog, 
+  getNotificationDeliveryLogs, 
+  NotificationDeliveryLog 
+} from "./utils/fcm";
 
 import { OwnerCrudModal } from './components/modals/OwnerCrudModal';
 import { TenantCrudModal } from './components/modals/TenantCrudModal';
@@ -324,6 +330,7 @@ import {
   addNotificationToFirebase,
   subscribeToNotifications,
   updateNotificationInFirebase,
+  recordCancellationTimelineEvent,
   saveCompaniesConfigToFirebase,
   subscribeToCompaniesConfigFromFirebase,
   exportTenantDataJson,
@@ -2130,12 +2137,12 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [tables, history, products, selectedTenant?.id]);
 
-  // Solicitar permiso de notificaciones al inicio 🔔
+  // Solicitar permiso de notificaciones al inicio SOLO cuando el usuario ya ha iniciado sesión 🔔
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
+    if (currentUser && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
-  }, []);
+  }, [currentUser]);
 
   const [configActiveTab, setConfigActiveTab] = useState<
     "system" | "corte" | "inventory" | "database" | "users"
@@ -5804,29 +5811,118 @@ export default function App() {
     try {
       const origin = window.location.origin;
       const pathname = window.location.pathname;
-      const link = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
-      
-      // Mensaje ultra-corto (< 120 chars) para evitar cortes en WhatsApp / Push móvil
-      const shortMsg = `🚨 CANCELACIÓN PENDIENTE\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${link}`;
 
       const tenantUsers = getTenantUsers(tenantId);
-      const adminRecipients = tenantUsers.filter((u) => 
+      let adminRecipients = tenantUsers.filter((u) => 
         u.role === "admin" || 
         u.id.endsWith("-admin") || 
+        u.id.endsWith("-manager") ||
         u.id.endsWith("-sistemas") || 
         u.isReportRecipient || 
         u.role === "owner"
       );
 
+      // Si no hay administradores específicos con teléfono en el tenant, buscar en el catálogo
+      const matchedCompany = COMPANY_CATALOG.find((c) => c.id === tenantId);
+      
+      // Construir lista unificada de destinatarios con roles y teléfonos
+      const targets: Array<{ name: string; role: string; phone?: string; tokenParam: string }> = [];
+
       adminRecipients.forEach((admin) => {
-        if (admin.phone) {
-          sendSilentWhatsAppMessage(admin.phone, shortMsg).catch((e) =>
-            console.warn("Error enviando WhatsApp silencioso de cancelación:", e)
-          );
-        }
+        let tokenParam = "propietario";
+        if (admin.id.endsWith("-sistemas")) tokenParam = "sistemas";
+        else if (admin.id.endsWith("-manager")) tokenParam = "gerente";
+        
+        targets.push({
+          name: admin.name,
+          role: admin.role || "admin",
+          phone: admin.phone || (admin.id.endsWith("-sistemas") ? "9511273796" : undefined),
+          tokenParam,
+        });
       });
 
-      triggerDeviceNotification(`🚨 Solicitud #${cancellationFolio}`, `Sucursal: ${branchName}`);
+      // Siempre asegurar que Sistemas / Soporte Central esté en la lista para monitoreo técnico
+      if (!targets.some((t) => t.phone === "9511273796" || t.tokenParam === "sistemas")) {
+        targets.push({
+          name: "Sistemas Cocinet 🛠️",
+          role: "sistemas",
+          phone: "9511273796",
+          tokenParam: "sistemas",
+        });
+      }
+
+      // Disparar envíos y registrar logs de auditoría
+      for (const target of targets) {
+        const directLink = `${origin}${pathname}?tenant=${tenantId}&token=${target.tokenParam}&req=${cancellationFolio}`;
+        const shortMsg = `🚨 CANCELACIÓN PENDIENTE\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${directLink}`;
+
+        if (target.phone) {
+          sendSilentWhatsAppMessage(target.phone, shortMsg)
+            .then((res) => {
+              addNotificationDeliveryLog({
+                cancellationFolio,
+                tenantId,
+                branchName,
+                recipientName: target.name,
+                recipientRole: target.role,
+                recipientPhone: target.phone,
+                channel: "whatsapp",
+                status: res.success ? "success" : "failed",
+                detail: res.success ? `WhatsApp entregado (ID: ${res.messageId || 'OK'})` : `Error API: ${res.error || 'Fallo desconocido'}`,
+                targetUrl: directLink,
+              });
+            })
+            .catch((err) => {
+              addNotificationDeliveryLog({
+                cancellationFolio,
+                tenantId,
+                branchName,
+                recipientName: target.name,
+                recipientRole: target.role,
+                recipientPhone: target.phone,
+                channel: "whatsapp",
+                status: "failed",
+                detail: `Excepción red: ${err.message || String(err)}`,
+                targetUrl: directLink,
+              });
+            });
+        } else {
+          addNotificationDeliveryLog({
+            cancellationFolio,
+            tenantId,
+            branchName,
+            recipientName: target.name,
+            recipientRole: target.role,
+            recipientPhone: undefined,
+            channel: "whatsapp",
+            status: "skipped",
+            detail: "Omitido: Usuario sin número de WhatsApp asignado en Catálogo",
+            targetUrl: directLink,
+          });
+        }
+      }
+
+      // Notificación Push para el dispositivo con URL directa
+      const mainLink = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
+      triggerDeviceNotification(
+        `🚨 Solicitud #${cancellationFolio}`,
+        `Sucursal: ${branchName} (Toca para autorizar)`,
+        "/logo.png",
+        mainLink,
+        `cancel-${cancellationFolio}`
+      );
+
+      addNotificationDeliveryLog({
+        cancellationFolio,
+        tenantId,
+        branchName,
+        recipientName: "Dispositivos Conectados (Push)",
+        recipientRole: "broadcast",
+        channel: "local_push",
+        status: "success",
+        detail: "Alerta Push / Cloud Messaging activada con enlace directo",
+        targetUrl: mainLink,
+      });
     } catch (err) {
       console.error("Error en notifyAdminsAboutCancellation:", err);
     }
@@ -5848,24 +5944,131 @@ export default function App() {
       const adminRecipients = tenantUsers.filter((u) => 
         u.role === "admin" || 
         u.id.endsWith("-admin") || 
+        u.id.endsWith("-manager") ||
         u.id.endsWith("-sistemas") || 
         u.isReportRecipient || 
         u.role === "owner"
       );
 
       adminRecipients.forEach((admin) => {
-        if (admin.phone) {
-          sendSilentWhatsAppMessage(admin.phone, shortMsg).catch((e) =>
-            console.warn("Error enviando resolución WhatsApp a admin:", e)
-          );
+        const phone = admin.phone || (admin.id.endsWith("-sistemas") ? "9511273796" : undefined);
+        if (phone) {
+          sendSilentWhatsAppMessage(phone, shortMsg)
+            .then((res) => {
+              addNotificationDeliveryLog({
+                cancellationFolio,
+                tenantId,
+                branchName,
+                recipientName: admin.name,
+                recipientRole: admin.role || "admin",
+                recipientPhone: phone,
+                channel: "whatsapp",
+                status: res.success ? "success" : "failed",
+                detail: res.success ? `Resolución enviada (ID: ${res.messageId || 'OK'})` : `Error: ${res.error || 'Fallo'}`,
+              });
+            })
+            .catch((e) =>
+              console.warn("Error enviando resolución WhatsApp a admin:", e)
+            );
         }
       });
 
-      triggerDeviceNotification(`${statusEmoji} Cancelación #${cancellationFolio} ${statusText}`, `Autorizó: ${adminName}`);
+      triggerDeviceNotification(
+        `${statusEmoji} Cancelación #${cancellationFolio} ${statusText}`,
+        `Autorizó: ${adminName}`
+      );
     } catch (err) {
       console.error("Error en notifyAdminsCancellationResolved:", err);
     }
   };
+
+  // ⏳ MONITOR DE ESCALAMIENTO AUTOMÁTICO A SISTEMAS (3 A 5 MINUTOS SIN RESPUESTA)
+  useEffect(() => {
+    const checkEscalations = async () => {
+      const now = Date.now();
+      const ESCALATION_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutos (configurable hasta 5 min)
+      const origin = window.location.origin;
+      const pathname = window.location.pathname;
+
+      for (const notif of notificationsList) {
+        if (
+          (notif.isCancellationRequest || notif.isClosedAccountCancellationRequest) &&
+          notif.status !== "approved" &&
+          notif.status !== "rejected" &&
+          !notif.escalatedToSystems &&
+          notif.createdAt
+        ) {
+          const createdTime = new Date(notif.createdAt).getTime();
+          if (!isNaN(createdTime) && (now - createdTime) >= ESCALATION_THRESHOLD_MS) {
+            console.log("⏳ Escalando cancelación #", notif.cancellationFolio, "al Área de Sistemas (+3-5 min sin respuesta local)");
+
+            const escalatedAt = new Date().toISOString();
+            notif.escalatedToSystems = true;
+            notif.escalatedAt = escalatedAt;
+
+            // 1. Actualizar documento en Firebase
+            updateNotificationInFirebase(notif.id, {
+              escalatedToSystems: true,
+              escalatedAt: escalatedAt,
+            }).catch((e) => console.warn("Error updating escalation in Firebase:", e));
+
+            // 2. Actualizar estado local
+            setNotificationsList((prev) =>
+              prev.map((n) =>
+                n.id === notif.id ? { ...n, escalatedToSystems: true, escalatedAt: escalatedAt } : n
+              )
+            );
+
+            // 3. Enviar Alerta WhatsApp Urgente a Sistemas (951-127-3796)
+            const branch = notif.branchName || selectedTenant?.name || "Cocinet";
+            const targetTenantId = notif.tenantId || selectedTenant?.id || "tenant-1";
+            const directLink = `${origin}${pathname}?tenant=${targetTenantId}&token=sistemas&req=${notif.cancellationFolio}`;
+            const escalationMsg = `⏳ ALERTA DE ESCALAMIENTO (+5 MIN SIN RESPUESTA)\n🚨 Folio: #${notif.cancellationFolio}\n📍 Sucursal: ${branch}\n👤 Solicitó: ${notif.waiterName || 'Mesero/Cajero'}\n⚠️ Ningún administrador local atendió la solicitud.\n🔗 Atender como Sistemas (Bypass 4020):\n${directLink}`;
+
+            sendSilentWhatsAppMessage("9511273796", escalationMsg)
+              .then((res) => {
+                addNotificationDeliveryLog({
+                  cancellationFolio: notif.cancellationFolio,
+                  tenantId: targetTenantId,
+                  branchName: branch,
+                  recipientName: "Área de Sistemas (Soporte)",
+                  recipientRole: "sistemas",
+                  recipientPhone: "9511273796",
+                  channel: "escalation",
+                  status: res.success ? "success" : "failed",
+                  detail: res.success ? `WhatsApp de escalamiento enviado (ID: ${res.messageId || 'OK'})` : `Error: ${res.error || 'Fallo'}`,
+                  targetUrl: directLink,
+                });
+              })
+              .catch((err) => {
+                addNotificationDeliveryLog({
+                  cancellationFolio: notif.cancellationFolio,
+                  tenantId: targetTenantId,
+                  branchName: branch,
+                  recipientName: "Área de Sistemas (Soporte)",
+                  recipientRole: "sistemas",
+                  recipientPhone: "9511273796",
+                  channel: "escalation",
+                  status: "failed",
+                  detail: `Excepción red: ${err.message || String(err)}`,
+                  targetUrl: directLink,
+                });
+              });
+
+            triggerDeviceNotification(
+              `⏳ Solicitud Escalada a Sistemas: #${notif.cancellationFolio}`,
+              `Sucursal: ${branch} (+5 min sin respuesta local)`,
+              "/logo.png",
+              directLink
+            );
+          }
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkEscalations, 20000);
+    return () => clearInterval(intervalId);
+  }, [notificationsList, selectedTenant]);
 
   const triggerAppNotification = (
     title: string,
@@ -12856,12 +13059,30 @@ Instrucciones:
     pin: string,
     notifId: string
   ): Promise<any> => {
+    const notif = notificationsList.find(n => n.id === notifId);
     const admin = validateAdminPin(pin);
     if (!admin) {
+      recordCancellationTimelineEvent(notifId, {
+        stage: "pin_failed",
+        title: "PIN Incorrecto ❌",
+        description: `Se introdujo un PIN no autorizado (${pin.length} dígitos) desde ${getSimplifiedDeviceInfo()}.`,
+        actor: currentUser?.name || "Usuario",
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "warning",
+      });
+      addNotificationDeliveryLog({
+        cancellationFolio: notif?.cancellationFolio,
+        tenantId: notif?.tenantId || selectedTenant?.id || "tenant-1",
+        branchName: notif?.branchName || selectedTenant?.name || "Cocinet",
+        recipientName: currentUser?.name || "Usuario",
+        recipientRole: "intento_pin",
+        channel: "local_push",
+        status: "failed",
+        detail: `Intento de autorización con PIN erróneo en ${getSimplifiedDeviceInfo()}`,
+      });
       return null;
     }
 
-    const notif = notificationsList.find(n => n.id === notifId);
     if (notif?.status === "approved" || notif?.status === "rejected") {
       return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
     }
@@ -12880,6 +13101,15 @@ Instrucciones:
         status: "approved", 
         authorizedBy: admin.name,
         authorizedAt: new Date().toISOString()
+      });
+
+      recordCancellationTimelineEvent(notifId, {
+        stage: "resolved",
+        title: "Cancelación Autorizada ✅",
+        description: `Autorizada exitosamente por ${admin.name} (${admin.role}) en ${getSimplifiedDeviceInfo()}.`,
+        actor: admin.name,
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "ok",
       });
 
       // Update local state of notifications to reflect the approval
@@ -12932,9 +13162,18 @@ Instrucciones:
 
       // Persist the rejection in Firebase so other devices see it
       await updateNotificationInFirebase(notifId, { 
-        status: "rejected",
+        status: "rejected", 
         authorizedBy: adminName,
         authorizedAt: new Date().toISOString()
+      });
+
+      recordCancellationTimelineEvent(notifId, {
+        stage: "resolved",
+        title: "Cancelación Rechazada ✕",
+        description: `Rechazada por ${adminName} en ${getSimplifiedDeviceInfo()}. Los productos vuelven a estar activos.`,
+        actor: adminName,
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "error",
       });
 
       // Update local state of notifications to reflect the rejection
@@ -12965,12 +13204,30 @@ Instrucciones:
     pin: string,
     notifId: string
   ): Promise<any> => {
+    const notif = notificationsList.find(n => n.id === notifId);
     const admin = validateAdminPin(pin);
     if (!admin) {
+      recordCancellationTimelineEvent(notifId, {
+        stage: "pin_failed",
+        title: "PIN Incorrecto ❌",
+        description: `Se introdujo un PIN no autorizado (${pin.length} dígitos) para cancelar cuenta cerrada desde ${getSimplifiedDeviceInfo()}.`,
+        actor: currentUser?.name || "Usuario",
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "warning",
+      });
+      addNotificationDeliveryLog({
+        cancellationFolio: notif?.cancellationFolio,
+        tenantId: notif?.tenantId || selectedTenant?.id || "tenant-1",
+        branchName: notif?.branchName || selectedTenant?.name || "Cocinet",
+        recipientName: currentUser?.name || "Usuario",
+        recipientRole: "intento_pin",
+        channel: "local_push",
+        status: "failed",
+        detail: `Intento fallido de cancelar cuenta cerrada con PIN erróneo`,
+      });
       return null;
     }
 
-    const notif = notificationsList.find(n => n.id === notifId);
     if (notif?.status === "approved" || notif?.status === "rejected") {
       return { alreadyProcessed: true, authorizedBy: notif.authorizedBy || "otro administrador" };
     }
@@ -12985,6 +13242,15 @@ Instrucciones:
         status: "approved", 
         authorizedBy: admin.name,
         authorizedAt: new Date().toISOString()
+      });
+
+      recordCancellationTimelineEvent(notifId, {
+        stage: "resolved",
+        title: "Cuenta Cerrada Cancelada ✅",
+        description: `Cancelación de cuenta total autorizada por ${admin.name} en ${getSimplifiedDeviceInfo()}.`,
+        actor: admin.name,
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "ok",
       });
 
       // Update local state of notifications to reflect the approval
@@ -13027,9 +13293,18 @@ Instrucciones:
 
       // Persist the rejection in Firebase so other devices see it
       await updateNotificationInFirebase(notifId, { 
-        status: "rejected",
+        status: "rejected", 
         authorizedBy: adminName,
         authorizedAt: new Date().toISOString()
+      });
+
+      recordCancellationTimelineEvent(notifId, {
+        stage: "resolved",
+        title: "Cancelación de Cuenta Rechazada ✕",
+        description: `Rechazada por ${adminName} en ${getSimplifiedDeviceInfo()}. La cuenta permanece pagada.`,
+        actor: adminName,
+        deviceInfo: getSimplifiedDeviceInfo(),
+        status: "error",
       });
 
       // Update local state of notifications to reflect the rejection
@@ -13088,7 +13363,7 @@ Instrucciones:
 
   return (
     <IonApp>
-      <InstallPWA />
+      {currentUser && <InstallPWA />}
       <NotificationsModal 
         isOpen={showNotificationModal}
         onClose={() => {

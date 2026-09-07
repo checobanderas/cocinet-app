@@ -10,8 +10,16 @@ import {
   IonList,
   IonIcon,
 } from "@ionic/react";
-import { notificationsOutline, checkmarkOutline } from "ionicons/icons";
+import { notificationsOutline, checkmarkOutline, documentTextOutline, refreshOutline, trashOutline } from "ionicons/icons";
 import { getOperatingDay } from "../utils/appHelpers";
+import { 
+  getNotificationDeliveryLogs, 
+  addNotificationDeliveryLog,
+  clearNotificationDeliveryLogs, 
+  triggerDeviceNotification,
+  NotificationDeliveryLog 
+} from "../utils/fcm";
+import { sendSilentWhatsAppMessage } from "../utils/whatsappCloud";
 
 interface NotificationItem {
   id: string;
@@ -35,7 +43,10 @@ interface NotificationItem {
   authorizedBy?: string;
   createdAt?: string;
   cancellationFolio?: string;
-  pedidoData?: any; 
+  pedidoData?: any;
+  escalatedToSystems?: boolean;
+  escalatedAt?: string;
+  deliveryLogs?: any[];
 }
 
 interface NotificationsModalProps {
@@ -260,14 +271,35 @@ function NotificationCard({
         {notif.body}
       </p>
 
-      {/* Rich cancellation metadata and action buttons */}
+        {/* Rich cancellation metadata and action buttons */}
       {isAnyCancellationRequest && (
         <div className="mt-3 p-3.5 bg-rose-50/70 border border-rose-100 rounded-xl space-y-2 text-xs">
           {notif.cancellationFolio && (
-            <div className="bg-rose-100 text-rose-900 px-3 py-1.5 rounded-xl font-black tracking-tight flex items-center gap-1.5 mb-1.5 text-xs border border-rose-200">
-              <span>🎫</span> Folio de Cancelación: <span className="text-sm font-black text-rose-700">{notif.cancellationFolio}</span>
+            <div className="bg-rose-100 text-rose-900 px-3 py-1.5 rounded-xl font-black tracking-tight flex items-center justify-between mb-1.5 text-xs border border-rose-200">
+              <div className="flex items-center gap-1.5">
+                <span>🎫</span> Folio de Cancelación: <span className="text-sm font-black text-rose-700">{notif.cancellationFolio}</span>
+              </div>
+              {notif.escalatedToSystems && (
+                <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase shadow-xs animate-pulse">
+                  ⚡ Escalado Sistemas
+                </span>
+              )}
             </div>
           )}
+
+          {/* Banner de Escalamiento si pasaron > 3 min o si fue escalado */}
+          {(notif.escalatedToSystems || (notif.status !== "approved" && notif.status !== "rejected" && notif.createdAt && (Date.now() - new Date(notif.createdAt).getTime()) >= 180000)) && (
+            <div className="bg-amber-100 border border-amber-300 text-amber-950 p-2.5 rounded-xl font-bold text-xs flex items-center gap-2">
+              <span className="text-lg">⏳</span>
+              <div>
+                <span className="font-black text-amber-900 block">ESCALADO A SISTEMAS (+5 MIN SIN RESPUESTA)</span>
+                <span className="text-[11px] font-medium text-amber-800 leading-tight block">
+                  Esta comanda superó el tiempo límite sin respuesta de administradores locales. Habilitada para autorización por Área de Sistemas (PIN Maestro: <b>4020</b>).
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-1 text-rose-950">
             <div>🏢 <span className="font-bold">Sucursal:</span> {notif.branchName || "No especificada"}</div>
             <div>📍 <span className="font-bold">Mesa:</span> {notif.tableLabel || "No especificada"}</div>
@@ -315,14 +347,22 @@ function NotificationCard({
               </div>
             ) : (
               <div className="space-y-2.5">
-                <div className="text-rose-900 font-extrabold text-[11px] uppercase tracking-wider flex items-center gap-1">
-                  <span>🔒</span> Escribe aquí tu PIN para autorizar:
+                <div className="text-rose-900 font-extrabold text-[11px] uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1">🔒 Escribe aquí tu PIN para autorizar:</span>
+                  <button
+                    type="button"
+                    onClick={() => setPin("4020")}
+                    className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-black px-2 py-0.5 rounded cursor-pointer border-none"
+                    title="Usar PIN Maestro de Sistemas (4020)"
+                  >
+                    Usar PIN Sistemas 🛠️
+                  </button>
                 </div>
                 <input
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
-                  placeholder="PIN Administrador"
+                  placeholder="PIN Administrador / Sistemas"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                   disabled={isSubmitting}
@@ -343,6 +383,102 @@ function NotificationCard({
                   >
                     Rechazar ✕
                   </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 📊 SECCIÓN DE TRAZABILIDAD BIDIRECCIONAL & AUDITORÍA EN TIEMPO REAL */}
+          <div className="border-t border-rose-100/80 pt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowTimeline(!showTimeline)}
+                className="text-[11px] font-extrabold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border-none"
+              >
+                <span>📊</span> <span>{showTimeline ? "Ocultar Trazabilidad" : "Ver Trazabilidad Bidireccional"}</span>
+                <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.2 rounded-full font-black">
+                  {(notif.timeline || []).length + (notif.openedCount ? 1 : 0) + 2}
+                </span>
+              </button>
+
+              {notif.openedCount ? (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span>👁️</span> Abierto ({notif.openedCount}x)
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span>⏳</span> Sin abrir aún
+                </span>
+              )}
+            </div>
+
+            {showTimeline && (
+              <div className="mt-2 p-3 bg-slate-900 text-slate-100 rounded-xl space-y-2 text-[11px] shadow-inner">
+                <div className="font-black text-amber-400 border-b border-slate-700 pb-1 flex items-center justify-between">
+                  <span>Línea de Vida de la Solicitud (#{notif.cancellationFolio || notif.id})</span>
+                  <span className="text-[10px] font-mono text-slate-400 font-normal">Auditoría en Vivo</span>
+                </div>
+
+                {/* Eventos del Timeline */}
+                <div className="space-y-2 relative pl-2 border-l-2 border-slate-700">
+                  {/* Evento 1: Creación */}
+                  <div className="relative pl-3">
+                    <span className="absolute -left-[11px] top-0.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <div className="font-bold text-slate-200">1. Solicitud Registrada</div>
+                    <div className="text-[10px] text-slate-400">
+                      Por: <b>{notif.waiterName || 'Mesero/Cajero'}</b> • {formatNotificationDate(notif.createdAt)}
+                    </div>
+                  </div>
+
+                  {/* Evento 2: Despacho WhatsApp/Push */}
+                  <div className="relative pl-3">
+                    <span className="absolute -left-[11px] top-0.5 w-2 h-2 rounded-full bg-indigo-500"></span>
+                    <div className="font-bold text-slate-200">2. Notificaciones Despachadas</div>
+                    <div className="text-[10px] text-slate-400">
+                      WhatsApp enviado a administradores de sucursal y alerta Push generada con enlace directo.
+                    </div>
+                  </div>
+
+                  {/* Evento 3: Apertura de Enlace */}
+                  <div className="relative pl-3">
+                    <span className={`absolute -left-[11px] top-0.5 w-2 h-2 rounded-full ${notif.openedCount ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                    <div className="font-bold text-slate-200">
+                      3. Apertura de URL / Notificación: {notif.openedCount ? `✅ Abierto (${notif.openedCount} veces)` : '⏳ Pendiente (No han dado clic)'}
+                    </div>
+                    {notif.lastOpenedAt && (
+                      <div className="text-[10px] text-emerald-300">
+                        Última apertura: {new Date(notif.lastOpenedAt).toLocaleTimeString('es-MX')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Eventos adicionales dinámicos */}
+                  {(notif.timeline || []).map((ev: any, idx: number) => (
+                    <div key={idx} className="relative pl-3">
+                      <span className={`absolute -left-[11px] top-0.5 w-2 h-2 rounded-full ${ev.status === 'error' ? 'bg-rose-500' : ev.status === 'warning' ? 'bg-amber-400' : 'bg-cyan-400'}`}></span>
+                      <div className="font-bold text-slate-200">{ev.title}</div>
+                      <div className="text-[10px] text-slate-400">{ev.description}</div>
+                      {ev.timestamp && (
+                        <div className="text-[9px] text-slate-500 font-mono">
+                          {new Date(ev.timestamp).toLocaleTimeString('es-MX')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Evento Final: Estado Actual */}
+                  <div className="relative pl-3">
+                    <span className={`absolute -left-[11px] top-0.5 w-2 h-2 rounded-full ${notif.status === 'approved' ? 'bg-emerald-500' : notif.status === 'rejected' ? 'bg-slate-500' : 'bg-rose-500'}`}></span>
+                    <div className="font-bold text-slate-200">
+                      4. Estado Final: {notif.status === 'approved' ? '✅ AUTORIZADA' : notif.status === 'rejected' ? '✕ RECHAZADA' : '⏳ EN ESPERA DE AUTORIZACIÓN'}
+                    </div>
+                    {notif.authorizedBy && (
+                      <div className="text-[10px] text-slate-300">
+                        Atendida por: <b>{notif.authorizedBy}</b>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -394,12 +530,22 @@ export default function NotificationsModal({
   activeSessionOpenedAt,
   targetCancellationFolio,
 }: NotificationsModalProps) {
-  
-  const [activeFilter, setActiveFilter] = React.useState<"all" | "cancellations">("all");
+  const [activeFilter, setActiveFilter] = React.useState<"all" | "cancellations" | "logs">("all");
   const [showHistory, setShowHistory] = React.useState<boolean>(false);
+  const [deliveryLogs, setDeliveryLogs] = React.useState<NotificationDeliveryLog[]>([]);
   const [soundEnabled, setSoundEnabled] = React.useState<boolean>(() => {
     return localStorage.getItem("notification_sound_enabled") !== "false";
   });
+
+  const loadLogs = () => {
+    setDeliveryLogs(getNotificationDeliveryLogs());
+  };
+
+  React.useEffect(() => {
+    if (isOpen) {
+      loadLogs();
+    }
+  }, [isOpen, activeFilter]);
 
   // Auto-focus cancellations if deep link has targetCancellationFolio
   React.useEffect(() => {
@@ -494,26 +640,10 @@ export default function NotificationsModal({
     }
   };
 
-  const handleTestWebsocketSync = () => {
-    const randomUuid = "db-" + Math.random().toString(36).substring(2, 15) + "-" + Math.random().toString(36).substring(2, 15);
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    const newNotif: NotificationItem = {
-      id: String(Date.now()),
-      title: "⚡ Sincronización MySQL",
-      body: `Cambio en base de datos MySQL (ID único UUID: ${randomUuid} | Creado/Editado en: ${timestamp}) propagado via WebSockets con éxito.`,
-      time: "Ahora mismo",
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    setNotificationsList([newNotif, ...notificationsList]);
-
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("⚡ Sincronización Real-Time MySQL", {
-        body: `UUID: ${randomUuid} sincronizado exitosamente via WebSockets.`,
-        icon: "https://img.icons8.com/fluency/192/restaurant.png",
-      });
+  const handleClearLogs = () => {
+    if (window.confirm("¿Deseas vaciar el historial de logs de envíos?")) {
+      clearNotificationDeliveryLogs();
+      setDeliveryLogs([]);
     }
   };
 
@@ -525,7 +655,7 @@ export default function NotificationsModal({
         "--height": "650px",
         "--max-height": "95%",
         "--width": "100%",
-        "--max-width": "520px",
+        "--max-width": "540px",
         "--border-radius": "24px",
         "--box-shadow": "0 10px 40px rgba(0,0,0,0.15)",
       }}
@@ -537,7 +667,7 @@ export default function NotificationsModal({
             "--color": "white",
           }}
         >
-          <IonTitle>🔔 Notificaciones Cocinet</IonTitle>
+          <IonTitle>🔔 Notificaciones & Auditoría</IonTitle>
           <IonButtons slot="end">
             <IonButton onClick={onClose} style={{ fontWeight: "bold" }}>
               Cerrar
@@ -548,12 +678,12 @@ export default function NotificationsModal({
 
       <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
         {/* Controls: Filter & Sound Toggle */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm mb-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm mb-4">
           {/* Filters */}
-          <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+          <div className="flex bg-slate-100 p-1 rounded-xl gap-1 overflow-x-auto">
             <button
               onClick={() => setActiveFilter("all")}
-              className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                 activeFilter === "all"
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -563,7 +693,7 @@ export default function NotificationsModal({
             </button>
             <button
               onClick={() => setActiveFilter("cancellations")}
-              className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                 activeFilter === "cancellations"
                   ? "bg-rose-600 text-white shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -571,117 +701,257 @@ export default function NotificationsModal({
             >
               Cancelaciones ({baseNotifications.filter(isCancellation).length})
             </button>
+            <button
+              onClick={() => setActiveFilter("logs")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                activeFilter === "logs"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Logs Envíos 📡
+            </button>
           </div>
 
           {/* Sound Toggle */}
           <button
             onClick={() => handleToggleSound(!soundEnabled)}
-            className={`px-4 py-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border shrink-0 ${
               soundEnabled
                 ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                 : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
             }`}
           >
-            <span>{soundEnabled ? "🔊 Sonido Activo" : "🔇 Alerta Silenciada"}</span>
+            <span>{soundEnabled ? "🔊 Sonido" : "🔇 Silencio"}</span>
           </button>
         </div>
 
-        <div
-          className="flex items-center justify-between gap-2 mb-4"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
-              {showHistory ? "🕒 Historial Completo" : "📋 Turno Actual"}
-            </span>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
-                showHistory
-                  ? "bg-amber-600 border-amber-600 text-white hover:bg-amber-700 shadow-sm"
-                  : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-              }`}
-            >
-              {showHistory ? "Ver Turno Actual" : "Ver Historial Anterior"}
-            </button>
-          </div>
-          {filteredNotifications.some((n) => !n.read) && (
-            <IonButton
-              size="small"
-              fill="outline"
-              color="warning"
-              onClick={handleMarkAllAsRead}
-              style={{ "--border-radius": "10px", fontSize: "0.75rem", margin: 0 }}
-            >
-              Marcar todo leído
-            </IonButton>
-          )}
-        </div>
+        {/* ─── VISTA 1: LOGS DE ENVÍOS AUDITORÍA ─── */}
+        {activeFilter === "logs" ? (
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-emerald-950 text-xs">
+              <div>
+                <span className="font-extrabold block">📡 Registro de Envíos WhatsApp & Push</span>
+                <span className="text-[11px] text-emerald-800">Monitorea entregas, errores y estado de mensajes en tiempo real.</span>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => {
+                    const testFolio = "TEST-" + String(Date.now()).slice(-4);
+                    const origin = window.location.origin;
+                    const pathname = window.location.pathname;
+                    const testUrl = `${origin}${pathname}?tenant=tenant-1&token=sistemas&req=${testFolio}`;
 
-        <IonList
-          style={{ background: "transparent", borderRadius: "16px" }}
-          lines="none"
-        >
-          {sortedNotifications.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px" }}>
-              <div style={{ fontSize: "3rem" }}>📭</div>
-              <p
+                    const testNotif: NotificationItem = {
+                      id: `test_${Date.now()}`,
+                      title: `⏳ Solicitud de Prueba #${testFolio}`,
+                      body: `Prueba de circuito bidireccional.\nFolio: ${testFolio}\nMesero: Sistemas Test\nMotivo: Validación de Diagnóstico\nEscribe PIN (4020) para autorizar.`,
+                      time: "Ahora mismo",
+                      read: false,
+                      isCancellationRequest: true,
+                      cancellationFolio: testFolio,
+                      tableLabel: "Mesa Prueba",
+                      branchName: "Sucursal Matriz",
+                      waiterName: "Sistemas Test",
+                      total: 150,
+                      reason: "Prueba integral de notificaciones",
+                      status: "pending",
+                      createdAt: new Date().toISOString(),
+                      timeline: [
+                        {
+                          stage: "created",
+                          title: "Solicitud de Prueba Generada 🧪",
+                          description: `Creada en simulador para verificar WhatsApp y Push.`,
+                          timestamp: new Date().toISOString(),
+                          actor: "Sistemas",
+                          status: "ok",
+                        }
+                      ]
+                    };
+
+                    setNotificationsList([testNotif, ...notificationsList]);
+
+                    sendSilentWhatsAppMessage("9511273796", `🧪 PRUEBA DE TRAZABILIDAD COCINET\nFolio: #${testFolio}\nPrueba de circuito de cancelación.\n🔗 Abrir Enlace:\n${testUrl}`)
+                      .then((res) => {
+                        addNotificationDeliveryLog({
+                          cancellationFolio: testFolio,
+                          tenantId: "tenant-1",
+                          branchName: "Sucursal Matriz",
+                          recipientName: "Sistemas (Prueba)",
+                          recipientRole: "sistemas",
+                          recipientPhone: "9511273796",
+                          channel: "whatsapp",
+                          status: res.success ? "success" : "failed",
+                          detail: res.success ? `WhatsApp de prueba enviado (ID: ${res.messageId || 'OK'})` : `Fallo: ${res.error}`,
+                          targetUrl: testUrl,
+                        });
+                        loadLogs();
+                      });
+
+                    triggerDeviceNotification(`🧪 Prueba #${testFolio}`, "Toca para abrir y verificar el enlace", "/logo.png", testUrl);
+                    setActiveFilter("cancellations");
+                    alert(`✅ Solicitud de prueba #${testFolio} generada. Se disparó WhatsApp y Push a Sistemas.`);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] border-none cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <span>🧪</span> Probar Circuito
+                </button>
+                <button
+                  onClick={loadLogs}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] border-none cursor-pointer"
+                  title="Actualizar logs"
+                >
+                  🔄
+                </button>
+                <button
+                  onClick={handleClearLogs}
+                  className="bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-2.5 py-1 rounded-lg text-[11px] border-none cursor-pointer"
+                  title="Borrar logs"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            {deliveryLogs.length === 0 ? (
+              <div className="text-center py-10 bg-white rounded-2xl border border-slate-200 text-slate-500 text-xs font-bold">
+                No hay logs de envíos registrados todavía. Se generarán al solicitar cancelaciones o enviar alertas.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {deliveryLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-black text-slate-900">
+                        <span>
+                          {log.status === "success" ? "✅" : log.status === "failed" ? "❌" : "⏭️"}
+                        </span>
+                        <span className="uppercase tracking-tight text-[11px] text-indigo-700 font-extrabold">
+                          [{log.channel}]
+                        </span>
+                        <span>{log.recipientName}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {log.timestamp ? new Date(log.timestamp).toLocaleTimeString("es-MX") : ""}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600">
+                      <div>🏢 <b>Sucursal:</b> {log.branchName}</div>
+                      <div>📱 <b>Tel:</b> {log.recipientPhone || "Sin número"}</div>
+                      {log.cancellationFolio && (
+                        <div>🎫 <b>Folio:</b> #{log.cancellationFolio}</div>
+                      )}
+                      <div>👤 <b>Rol:</b> {log.recipientRole}</div>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-lg text-[11px] font-mono border border-slate-100 text-slate-800 break-words">
+                      <b>Detalle:</b> {log.detail}
+                    </div>
+
+                    {log.targetUrl && (
+                      <div className="pt-1 text-[10px] text-slate-500 truncate">
+                        🔗 <b>Enlace:</b> <a href={log.targetUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">{log.targetUrl}</a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ─── VISTA 2: LISTA DE NOTIFICACIONES Y CANCELACIONES ─── */
+          <>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                  {showHistory ? "🕒 Historial Completo" : "📋 Turno Actual"}
+                </span>
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                    showHistory
+                      ? "bg-amber-600 border-amber-600 text-white hover:bg-amber-700 shadow-sm"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  }`}
+                >
+                  {showHistory ? "Ver Turno Actual" : "Ver Historial Anterior"}
+                </button>
+              </div>
+              {filteredNotifications.some((n) => !n.read) && (
+                <IonButton
+                  size="small"
+                  fill="outline"
+                  color="warning"
+                  onClick={handleMarkAllAsRead}
+                  style={{ "--border-radius": "10px", fontSize: "0.75rem", margin: 0 }}
+                >
+                  Marcar todo leído
+                </IonButton>
+              )}
+            </div>
+
+            <IonList
+              style={{ background: "transparent", borderRadius: "16px" }}
+              lines="none"
+            >
+              {sortedNotifications.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px" }}>
+                  <div style={{ fontSize: "3rem" }}>📭</div>
+                  <p
+                    style={{
+                      color: "#64748b",
+                      fontSize: "0.9rem",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    No tienes notificaciones para este filtro.
+                  </p>
+                </div>
+              ) : (
+                sortedNotifications.map((notif) => (
+                  <NotificationCard
+                    key={notif.id}
+                    notif={notif}
+                    onMarkAsRead={handleMarkAsRead}
+                    onReprint={onReprint}
+                    onAuthorizeCancellation={onAuthorizeCancellation}
+                    onRejectCancellation={onRejectCancellation}
+                    onAuthorizeClosedAccountCancellation={onAuthorizeClosedAccountCancellation}
+                    onRejectClosedAccountCancellation={onRejectClosedAccountCancellation}
+                    isTarget={!!(targetCancellationFolio && notif.cancellationFolio === targetCancellationFolio)}
+                  />
+                ))
+              )}
+            </IonList>
+
+            <div
+              style={{
+                marginTop: "20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              <IonButton
+                expand="block"
+                color="warning"
                 style={{
-                  color: "#64748b",
-                  fontSize: "0.9rem",
+                  height: "48px",
+                  "--border-radius": "12px",
                   fontWeight: "bold",
                 }}
+                onClick={handleEnablePush}
               >
-                No tienes notificaciones para este filtro.
-              </p>
+                <IonIcon icon={notificationsOutline} slot="start" />
+                Habilitar Notificaciones Push 🗣️
+              </IonButton>
             </div>
-          ) : (
-            sortedNotifications.map((notif) => (
-              <NotificationCard
-                key={notif.id}
-                notif={notif}
-                onMarkAsRead={handleMarkAsRead}
-                onReprint={onReprint}
-                onAuthorizeCancellation={onAuthorizeCancellation}
-                onRejectCancellation={onRejectCancellation}
-                onAuthorizeClosedAccountCancellation={onAuthorizeClosedAccountCancellation}
-                onRejectClosedAccountCancellation={onRejectClosedAccountCancellation}
-                isTarget={!!(targetCancellationFolio && notif.cancellationFolio === targetCancellationFolio)}
-              />
-            ))
-          )}
-        </IonList>
-
-        <div
-          style={{
-            marginTop: "20px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-          }}
-        >
-          <IonButton
-            expand="block"
-            color="warning"
-            style={{
-              height: "48px",
-              "--border-radius": "12px",
-              fontWeight: "bold",
-            }}
-            onClick={handleEnablePush}
-          >
-            <IonIcon icon={notificationsOutline} slot="start" />
-            Habilitar Notificaciones Push 🗣️
-          </IonButton>
-
-          <IonButton
-            expand="block"
-            fill="clear"
-            onClick={handleTestWebsocketSync}
-            style={{ fontWeight: "extrabold" }}
-          >
-            Probar Sincronización WebSockets 🚀
-          </IonButton>
-        </div>
+          </>
+        )}
       </IonContent>
     </IonModal>
   );

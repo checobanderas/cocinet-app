@@ -164,15 +164,27 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular.`, "warning");
         return;
       }
-      const msg = `Hola ${user.name}! Mensaje operativo de Cocinet Pro:\n\nTu acceso a la sucursal ${modalTenant?.name || ''} está activo.`;
+      const testLink = `${window.location.origin}${window.location.pathname}?tenant=${modalTenant?.id || 'tenant-1'}&token=propietario`;
+      const msg = `Hola ${user.name}! 🔔 Alerta de prueba de Cocinet Pro:\n\nTu número está correctamente vinculado para recibir notificaciones y autorizaciones.\n🔗 Acceso Directo:\n${testLink}`;
 
-      const metaConfig = getWhatsAppCloudConfig();
-      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
-        const res = await sendSilentWhatsAppMessage(user.phone, msg);
-        if (res.success) {
-          triggerAppNotification("Aviso Entregado ✅", `Mensaje silencioso enviado al WhatsApp de ${user.name}.`, "success");
-          return;
-        }
+      const res = await sendSilentWhatsAppMessage(user.phone, msg);
+      addNotificationDeliveryLog({
+        tenantId: modalTenant?.id || 'tenant-1',
+        branchName: modalTenant?.name || 'Cocinet',
+        recipientName: user.name,
+        recipientRole: user.role || 'user',
+        recipientPhone: user.phone,
+        channel: 'whatsapp',
+        status: res.success ? 'success' : 'failed',
+        detail: res.success ? `WhatsApp de prueba enviado con éxito (ID: ${res.messageId || 'OK'})` : `Error al enviar: ${res.error || 'Fallo API'}`,
+        targetUrl: testLink,
+      });
+
+      if (res.success) {
+        triggerAppNotification("Aviso Entregado ✅", `Mensaje silencioso de prueba enviado al WhatsApp de ${user.name}.`, "success");
+        return;
+      } else {
+        triggerAppNotification("Fallo Envío ⚠️", `No se pudo enviar vía API (${res.error}). Abriendo WhatsApp Web...`, "warning");
       }
 
       const encoded = encodeURIComponent(msg);
@@ -189,28 +201,33 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         }
       }
 
+      const testLink = `${window.location.origin}${window.location.pathname}?tenant=${modalTenant?.id || 'tenant-1'}&token=propietario`;
       const title = isCorte
         ? `📊 Corte Diario • ${modalTenant?.name || 'Cocinet'}`
-        : `💬 Mensaje Directo • ${modalTenant?.name || 'Cocinet'}`;
+        : `💬 Prueba Notificación • ${modalTenant?.name || 'Cocinet'}`;
       const body = isCorte
-        ? `Hola ${user.name}! Tu corte programado (${user.reportSchedule || 'Al Cierre'}) está listo: Venta $0.00, Efectivo $0.00.`
-        : `Hola ${user.name}! Notificación operativa enviada a tu dispositivo.`;
+        ? `Hola ${user.name}! Tu corte programado (${user.reportSchedule || 'Al Cierre'}) está listo.`
+        : `Hola ${user.name}! Alerta de prueba enviada a tu dispositivo. Toca para abrir.`;
 
-      triggerDeviceNotification(title, body);
+      triggerDeviceNotification(title, body, "/logo.png", testLink);
 
-      if (isCorte) {
-        triggerAppNotification(
-          "🔔 Cloud Messaging Push 🚀",
-          `Notificación enviada al dispositivo de ${user.name} (${user.role}). Revisa tu barra de notificaciones.`,
-          "success"
-        );
-      } else {
-        triggerAppNotification(
-          "🔔 Cloud Messaging Push 📲",
-          `Aviso operativo enviado al dispositivo de ${user.name}.`,
-          "info"
-        );
-      }
+      addNotificationDeliveryLog({
+        tenantId: modalTenant?.id || 'tenant-1',
+        branchName: modalTenant?.name || 'Cocinet',
+        recipientName: user.name,
+        recipientRole: user.role || 'user',
+        recipientPhone: user.phone,
+        channel: 'fcm_push',
+        status: 'success',
+        detail: `Notificación Push disparada al dispositivo de ${user.name}`,
+        targetUrl: testLink,
+      });
+
+      triggerAppNotification(
+        "🔔 Notificación Push Disparada 🚀",
+        `Alerta enviada al dispositivo de ${user.name}. Revisa tu barra de notificaciones del móvil/escritorio.`,
+        "success"
+      );
     };
 
     return (

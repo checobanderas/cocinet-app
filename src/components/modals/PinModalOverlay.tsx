@@ -21,6 +21,39 @@ export const PinModalOverlay: React.FC<PinModalOverlayProps> = ({
   setTypedPin,
   handlePinNumericPress
 }) => {
+  React.useEffect(() => {
+    if (!showTenantPinModal || !pendingTenant) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handlePinNumericPress(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handlePinNumericPress('BACKSPACE');
+      } else if (e.key === 'Delete' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handlePinNumericPress('CLEAR');
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowTenantPinModal(false);
+        setPendingTenant(null);
+        setTypedPin('');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showTenantPinModal, pendingTenant, handlePinNumericPress, setShowTenantPinModal, setPendingTenant, setTypedPin]);
+
   const renderPinModalOverlay = () => {
     if (!pendingTenant) return null;
 

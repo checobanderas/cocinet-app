@@ -3237,6 +3237,47 @@ export async function updateNotificationInFirebase(id: string, updateData: any) 
   );
 }
 
+export async function recordCancellationTimelineEvent(
+  notifId: string,
+  event: {
+    stage: "created" | "dispatched" | "link_opened" | "pin_failed" | "escalated" | "resolved";
+    title: string;
+    description: string;
+    actor?: string;
+    deviceInfo?: string;
+    channel?: string;
+    status?: "ok" | "warning" | "error" | "info";
+  }
+) {
+  try {
+    const ref = doc(db, "notifications", notifId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const existingTimeline = Array.isArray(data.timeline) ? data.timeline : [];
+    
+    const newEvent = {
+      ...event,
+      timestamp: getMexicoISOString(),
+    };
+
+    const updatePayload: any = {
+      timeline: [...existingTimeline, newEvent],
+      updatedAt: getMexicoISOString(),
+    };
+
+    if (event.stage === "link_opened") {
+      updatePayload.openedCount = (data.openedCount || 0) + 1;
+      updatePayload.lastOpenedAt = getMexicoISOString();
+      if (!data.firstOpenedAt) updatePayload.firstOpenedAt = getMexicoISOString();
+    }
+
+    await runWrite(updateDoc(ref, cleanUndefined(updatePayload)));
+  } catch (e) {
+    console.warn("Error recording cancellation timeline event:", e);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 🏢 COMPANIES CONFIG (Global visibility config synced to Firestore)
 // ─────────────────────────────────────────────────────────────────────────────
