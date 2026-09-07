@@ -5806,7 +5806,8 @@ export default function App() {
   const notifyAdminsAboutCancellation = async (
     tenantId: string,
     branchName: string,
-    cancellationFolio: string
+    cancellationFolio: string,
+    isResend = false
   ) => {
     try {
       const origin = window.location.origin;
@@ -5822,10 +5823,21 @@ export default function App() {
         u.role === "owner"
       );
 
-      // Si no hay administradores específicos con teléfono en el tenant, buscar en el catálogo
+      // Si la empresa tiene un dueño asignado en el catálogo / customOwners, incluirlo
       const matchedCompany = COMPANY_CATALOG.find((c) => c.id === tenantId);
-      
-      // Construir lista unificada de destinatarios con roles y teléfonos
+      if (matchedCompany?.ownerKey) {
+        const ownerObj = Array.isArray(customOwners) ? customOwners.find((o: any) => o.key === matchedCompany.ownerKey) : null;
+        if (ownerObj && ownerObj.phone && !adminRecipients.some(a => a.phone === ownerObj.phone)) {
+          adminRecipients.push({
+            id: `owner-${ownerObj.key}`,
+            name: ownerObj.name || "Propietario",
+            role: "owner",
+            phone: ownerObj.phone,
+          } as any);
+        }
+      }
+
+      // Construir lista unificada de destinatarios autorizados para ESTA sucursal
       const targets: Array<{ name: string; role: string; phone?: string; tokenParam: string }> = [];
 
       adminRecipients.forEach((admin) => {
@@ -5841,20 +5853,11 @@ export default function App() {
         });
       });
 
-      // Siempre asegurar que Sistemas / Soporte Central esté en la lista para monitoreo técnico
-      if (!targets.some((t) => t.phone === "9511273796" || t.tokenParam === "sistemas")) {
-        targets.push({
-          name: "Sistemas Cocinet 🛠️",
-          role: "sistemas",
-          phone: "9511273796",
-          tokenParam: "sistemas",
-        });
-      }
-
       // Disparar envíos y registrar logs de auditoría
       for (const target of targets) {
         const directLink = `${origin}${pathname}?tenant=${tenantId}&token=${target.tokenParam}&req=${cancellationFolio}`;
-        const shortMsg = `🚨 CANCELACIÓN PENDIENTE\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${directLink}`;
+        const prefix = isResend ? "📲 REENVÍO DE CANCELACIÓN" : "🚨 CANCELACIÓN PENDIENTE";
+        const shortMsg = `${prefix}\n📍 Sucursal: ${branchName}\n🔗 Autorizar #${cancellationFolio}:\n${directLink}`;
 
         if (target.phone) {
           sendSilentWhatsAppMessage(target.phone, shortMsg)
@@ -5868,7 +5871,7 @@ export default function App() {
                 recipientPhone: target.phone,
                 channel: "whatsapp",
                 status: res.success ? "success" : "failed",
-                detail: res.success ? `WhatsApp entregado (ID: ${res.messageId || 'OK'})` : `Error API: ${res.error || 'Fallo desconocido'}`,
+                detail: res.success ? `WhatsApp ${isResend ? 'reenviado' : 'entregado'} (ID: ${res.messageId || 'OK'})` : `Error API: ${res.error || 'Fallo desconocido'}`,
                 targetUrl: directLink,
               });
             })
@@ -5905,7 +5908,7 @@ export default function App() {
       // Notificación Push para el dispositivo con URL directa
       const mainLink = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
       triggerDeviceNotification(
-        `🚨 Solicitud #${cancellationFolio}`,
+        `${isResend ? '📲 Reenvío' : '🚨 Solicitud'} #${cancellationFolio}`,
         `Sucursal: ${branchName} (Toca para autorizar)`,
         "/logo.png",
         mainLink,
@@ -5920,7 +5923,7 @@ export default function App() {
         recipientRole: "broadcast",
         channel: "local_push",
         status: "success",
-        detail: "Alerta Push / Cloud Messaging activada con enlace directo",
+        detail: `Alerta Push / Cloud Messaging ${isResend ? 'reenviada' : 'activada'} con enlace directo`,
         targetUrl: mainLink,
       });
     } catch (err) {
@@ -5949,6 +5952,19 @@ export default function App() {
         u.isReportRecipient || 
         u.role === "owner"
       );
+
+      const matchedCompany = COMPANY_CATALOG.find((c) => c.id === tenantId);
+      if (matchedCompany?.ownerKey) {
+        const ownerObj = Array.isArray(customOwners) ? customOwners.find((o: any) => o.key === matchedCompany.ownerKey) : null;
+        if (ownerObj && ownerObj.phone && !adminRecipients.some(a => a.phone === ownerObj.phone)) {
+          adminRecipients.push({
+            id: `owner-${ownerObj.key}`,
+            name: ownerObj.name || "Propietario",
+            role: "owner",
+            phone: ownerObj.phone,
+          } as any);
+        }
+      }
 
       adminRecipients.forEach((admin) => {
         const phone = admin.phone || (admin.id.endsWith("-sistemas") ? "9511273796" : undefined);
@@ -9673,6 +9689,56 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
   };
 
+  const handleResendCancellationNotification = async (itemOrAccount: any, folio?: any, selectedTableOrAccount?: any) => {
+    try {
+      const tenantId = selectedTenant?.id || "tenant-1";
+      const branchName = selectedTenant?.name || "Cocinet";
+
+      // 1. Buscar la notificación existente activa para NO generar un folio nuevo
+      let matchingNotif = notificationsList.find(n =>
+        (n.isCancellationRequest || n.isClosedAccountCancellationRequest) &&
+        n.status !== "approved" &&
+        n.status !== "rejected" &&
+        (
+          (selectedTableOrAccount?.id && (n.tableId === selectedTableOrAccount.id || n.accountId === selectedTableOrAccount.id)) ||
+          (itemOrAccount?.id && (n.tableId === itemOrAccount.id || n.accountId === itemOrAccount.id)) ||
+          (itemOrAccount?.cancellationFolio && n.cancellationFolio === itemOrAccount.cancellationFolio)
+        )
+      );
+
+      const cancellationFolio = matchingNotif?.cancellationFolio || itemOrAccount?.cancellationFolio || `CAN-${folio || String(Date.now()).slice(-5)}`;
+
+      // 2. Reenviar únicamente a los administradores / propietario de ESTA sucursal
+      await notifyAdminsAboutCancellation(
+        matchingNotif?.tenantId || tenantId,
+        matchingNotif?.branchName || branchName,
+        cancellationFolio,
+        true
+      );
+
+      // 3. Registrar el evento en el timeline si existe el documento de notificación
+      if (matchingNotif?.id) {
+        recordCancellationTimelineEvent(matchingNotif.id, {
+          stage: "dispatched",
+          title: "📲 Notificación SMS/WhatsApp Reenviada",
+          description: `Reenvío manual de notificación SMS solicitado desde la comanda por ${currentUser?.name || 'Mesero/Cajero'}.`,
+          actor: currentUser?.name || 'Mesero/Cajero',
+          deviceInfo: getSimplifiedDeviceInfo(),
+          status: "ok",
+        });
+      }
+
+      triggerAppNotification(
+        "📲 Notificación Reenviada",
+        `Se reenvió la alerta SMS/WhatsApp de la solicitud #${cancellationFolio} al propietario y administradores de ${branchName}.`,
+        "success"
+      );
+    } catch (err) {
+      console.error("Error al reenviar notificación de cancelación:", err);
+      triggerAppNotification("⚠️ Error", "No se pudo reenviar la notificación.", "warning");
+    }
+  };
+
   const handleAuthorizeItemCancellation = async (tableId: string, tableInfo: any, folio: number, productId: string, plate: number, adminUser: User) => {
     try {
       await finalizeComandaItemsCancellationInFirebase(
@@ -9681,6 +9747,46 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         [{ folio, productId, plate }],
         adminUser
       );
+
+      // Buscar notificación pendiente asociada para marcarla como aprobada y notificar resolución
+      const matchingNotif = notificationsList.find(n => 
+        (n.isCancellationRequest || n.isClosedAccountCancellationRequest) &&
+        n.status !== "approved" &&
+        n.status !== "rejected" &&
+        n.tableId === tableId
+      );
+
+      if (matchingNotif) {
+        await updateNotificationInFirebase(matchingNotif.id, {
+          status: "approved",
+          authorizedBy: adminUser.name,
+          authorizedAt: new Date().toISOString()
+        });
+
+        recordCancellationTimelineEvent(matchingNotif.id, {
+          stage: "resolved",
+          title: "Cancelación Autorizada en Terminal ✅",
+          description: `Autorizada directamente en terminal por ${adminUser.name} (${adminUser.role}).`,
+          actor: adminUser.name,
+          deviceInfo: getSimplifiedDeviceInfo(),
+          status: "ok",
+        });
+
+        setNotificationsList(prev => prev.map(n => 
+          n.id === matchingNotif.id ? { ...n, status: "approved", authorizedBy: adminUser.name } : n
+        ));
+
+        if (matchingNotif.cancellationFolio) {
+          notifyAdminsCancellationResolved(
+            matchingNotif.tenantId || selectedTenant?.id || "tenant-1",
+            matchingNotif.branchName || selectedTenant?.name || "Cocinet",
+            matchingNotif.cancellationFolio,
+            true,
+            adminUser.name
+          );
+        }
+      }
+
       triggerAppNotification("Producto cancelado", "La cancelación ha sido autorizada ✅", "success");
     } catch (error) {
       console.error("Error authorizing item cancellation:", error);
@@ -9747,6 +9853,46 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const account = history.find(a => a.id === accountId);
       const reason = account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
       await cancelClosedAccountInFirebase(accountId, reason, adminUser);
+
+      // Buscar notificación pendiente asociada
+      const matchingNotif = notificationsList.find(n => 
+        n.isClosedAccountCancellationRequest &&
+        n.status !== "approved" &&
+        n.status !== "rejected" &&
+        n.accountId === accountId
+      );
+
+      if (matchingNotif) {
+        await updateNotificationInFirebase(matchingNotif.id, {
+          status: "approved",
+          authorizedBy: adminUser.name,
+          authorizedAt: new Date().toISOString()
+        });
+
+        recordCancellationTimelineEvent(matchingNotif.id, {
+          stage: "resolved",
+          title: "Cancelación de Cuenta Autorizada ✅",
+          description: `Autorizada por ${adminUser.name} (${adminUser.role}).`,
+          actor: adminUser.name,
+          deviceInfo: getSimplifiedDeviceInfo(),
+          status: "ok",
+        });
+
+        setNotificationsList(prev => prev.map(n => 
+          n.id === matchingNotif.id ? { ...n, status: "approved", authorizedBy: adminUser.name } : n
+        ));
+
+        if (matchingNotif.cancellationFolio) {
+          notifyAdminsCancellationResolved(
+            matchingNotif.tenantId || selectedTenant?.id || "tenant-1",
+            matchingNotif.branchName || selectedTenant?.name || "Cocinet",
+            matchingNotif.cancellationFolio,
+            true,
+            adminUser.name
+          );
+        }
+      }
+
       triggerAppNotification("Cuenta cancelada", `La cuenta ha sido cancelada definitivamente por ${adminUser.name} 🚫`, "success");
     } catch (error) {
       console.error("Error authorizing account cancellation:", error);
@@ -10298,6 +10444,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       handleQuickChangeAccountStatus={handleQuickChangeAccountStatus}
       handleRevertAccountCancellation={handleRevertAccountCancellation}
       handleSendWhatsAppInvoice={handleSendWhatsAppInvoice}
+      handleResendCancellationNotification={handleResendCancellationNotification}
       invoicePhone={invoicePhone}
       paymentMethod={paymentMethod}
       paymentMethodFilter={paymentMethodFilter}
@@ -10321,12 +10468,11 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       setTempPaymentCardType={setTempPaymentCardType}
       setTempPaymentMethod={setTempPaymentMethod}
       triggerAppNotification={triggerAppNotification}
-          historyForCuentasTab={historyForCuentasTab}
-          markAsPaid={markAsPaid}
-          reprintAccount={reprintAccount}
-      
+      historyForCuentasTab={historyForCuentasTab}
+      markAsPaid={markAsPaid}
+      reprintAccount={reprintAccount}
     />
-  );;
+  );
 
   const handleSwitchTablesMode = (targetMode: "floorplan" | "gestion_cuentas") => {
     setPreferredTablesMode(targetMode);
@@ -11175,7 +11321,8 @@ Instrucciones:
       selectedTable={selectedTable}
       setItemsSelectedForCancellation={setItemsSelectedForCancellation}
       setPendingCancellationTarget={setPendingCancellationTarget}
-      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal} 
+      setShowAuthorizeCancellationModal={setShowAuthorizeCancellationModal}
+      handleResendCancellationNotification={handleResendCancellationNotification}
       folio={folio} 
       index={index}
       getComensalColor={getComensalColor}

@@ -13,8 +13,9 @@ interface PrecuentaItemViewProps {
   setItemsSelectedForCancellation: any;
   setPendingCancellationTarget: any;
   setShowAuthorizeCancellationModal: any;
+  handleResendCancellationNotification?: (item: any, folio: any, selectedTable: any) => void;
   item: any;
-  showDeletefalse: any;
+  showDeletefalse?: any;
   folio: any;
   index: any;
   getComensalColor: any;
@@ -31,6 +32,7 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
   setItemsSelectedForCancellation,
   setPendingCancellationTarget,
   setShowAuthorizeCancellationModal,
+  handleResendCancellationNotification,
   showDeletefalse,
   getComensalColor,
   showDelete
@@ -136,7 +138,22 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
                     {getFormattedProductName(item.product)}
                   </h3>
                   {isPendingCancellation && (
-                    <IonBadge color="warning" style={{ fontSize: "0.6rem", fontWeight: "bold" }}>EN ESPERA ⏳</IonBadge>
+                    <div className="inline-flex items-center gap-1.5 flex-wrap">
+                      <IonBadge color="warning" style={{ fontSize: "0.6rem", fontWeight: "bold" }}>EN ESPERA ⏳</IonBadge>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (handleResendCancellationNotification) {
+                            handleResendCancellationNotification(item, folio, selectedTable);
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[9px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs border-none cursor-pointer transition-all uppercase tracking-tight"
+                        title="Reenviar notificación SMS/WhatsApp a los administradores de esta sucursal"
+                      >
+                        <span>📲</span> Reenviar SMS
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div
@@ -183,7 +200,20 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
               </IonText>
 
               {isPendingCancellation && folio !== undefined && (
-                <div className="flex gap-1">
+                <div className="flex gap-1 items-center">
+                   <button
+                     type="button"
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       if (handleResendCancellationNotification) {
+                         handleResendCancellationNotification(item, folio, selectedTable);
+                       }
+                     }}
+                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-1.5 rounded-lg border border-indigo-200 cursor-pointer flex items-center justify-center text-xs transition-all shadow-2xs"
+                     title="Reenviar Notificación SMS/WhatsApp"
+                   >
+                     📲
+                   </button>
                    <IonButton
                       fill="clear"
                       color="danger"
@@ -194,6 +224,7 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
                         setPendingCancellationTarget({ type: 'item', id: selectedTable!.id, items: [{ folio, productId: item.product.id, plate: item.plate }] });
                         setShowAuthorizeCancellationModal(true);
                       }}
+                      title="Autorizar cancelación en terminal"
                     >
                       <IonIcon icon={shieldCheckmarkOutline} slot="icon-only" />
                    </IonButton>
@@ -205,6 +236,7 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
                         e.stopPropagation();
                         handleRevertItemCancellation(selectedTable!.id, selectedTable, folio, item.product.id, item.plate);
                       }}
+                      title="Revertir solicitud de cancelación"
                     >
                       <IonIcon icon={refreshOutline} slot="icon-only" />
                    </IonButton>

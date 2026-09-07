@@ -13,6 +13,7 @@ interface ClosedAccountsListViewProps {
   handleQuickChangeAccountStatus: any;
   handleRevertAccountCancellation: any;
   handleSendWhatsAppInvoice: any;
+  handleResendCancellationNotification?: any;
   invoicePhone: any;
   paymentMethod: any;
   paymentMethodFilter: any;
@@ -50,6 +51,7 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   handleQuickChangeAccountStatus,
   handleRevertAccountCancellation,
   handleSendWhatsAppInvoice,
+  handleResendCancellationNotification,
   invoicePhone,
   paymentMethod,
   paymentMethodFilter,
@@ -923,21 +925,34 @@ return (
                                          </button>
                                        </div>
                                      )}
-                                    {account.isPendingCancellation && (
-                                      <div className="flex items-center gap-2">
-                                        <IonBadge color="warning" className="font-black px-3 py-1.5 rounded-xl">EN ESPERA ⏳</IonBadge>
-                                        <IonButton
-                                          size="small"
-                                          color="danger"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setPendingCancellationTarget({ type: 'account', id: account.id });
-                                            setShowAuthorizeCancellationModal(true);
-                                          }}
-                                        >
-                                          <IonIcon icon={shieldCheckmarkOutline} slot="start" />
-                                          Autorizar
-                                        </IonButton>
+                                     {account.isPendingCancellation && (
+                                       <div className="flex items-center gap-2 flex-wrap">
+                                         <IonBadge color="warning" className="font-black px-3 py-1.5 rounded-xl">EN ESPERA ⏳</IonBadge>
+                                         <button
+                                           type="button"
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             if (handleResendCancellationNotification) {
+                                               handleResendCancellationNotification(account, undefined, account);
+                                             }
+                                           }}
+                                           className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs border-none cursor-pointer transition-all uppercase tracking-tight"
+                                           title="Reenviar notificación SMS/WhatsApp a administradores de esta sucursal"
+                                         >
+                                           <span>📲</span> Reenviar SMS
+                                         </button>
+                                         <IonButton
+                                           size="small"
+                                           color="danger"
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             setPendingCancellationTarget({ type: 'account', id: account.id });
+                                             setShowAuthorizeCancellationModal(true);
+                                           }}
+                                         >
+                                           <IonIcon icon={shieldCheckmarkOutline} slot="start" />
+                                           Autorizar
+                                         </IonButton>
                                         <IonButton
                                           size="small"
                                           color="medium"
