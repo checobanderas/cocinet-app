@@ -385,6 +385,69 @@ export const LoginView: React.FC<LoginViewProps> = ({
     };
   }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, handleOwnerPinSubmit, setOwnerPasswordInput]);
 
+  // ⌨️ Vinculación de teclado físico para Paso 2 (Selección de Sucursal / Matriz con teclas 1-9, Flechas y Enter)
+  React.useEffect(() => {
+    if (!showPinPanel || (!isOwnerUnlocked && !restrictedOwnerKey)) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+
+      // Obtener la lista de empresas visibles actualmente en pantalla
+      const filtered = COMPANY_CATALOG.filter((company: any) => {
+        const conf = companiesConfig[company.id];
+        const isVisible = conf ? conf.visible : true;
+        if (!isVisible) return false;
+        if (activeOwnerFilter && company.ownerKey !== activeOwnerFilter) {
+          return false;
+        }
+        return true;
+      });
+
+      const matricesList = filtered.filter((c: any) => c.type === "Matriz");
+      const sucursalesList = filtered.filter((c: any) => c.type !== "Matriz");
+      const allSelectable = [...matricesList, ...sucursalesList];
+
+      if (allSelectable.length === 0) return;
+
+      if (e.key >= '1' && e.key <= '9') {
+        const idx = parseInt(e.key, 10) - 1;
+        if (allSelectable[idx]) {
+          e.preventDefault();
+          handleSelectCompanyWithPinCheck(allSelectable[idx], "login");
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        // Si hay una seleccionada previamente, usar esa; si no, la primera disponible
+        const targetComp = (selectedTenant && allSelectable.find((c: any) => c.id === selectedTenant.id)) || allSelectable[0];
+        if (targetComp) {
+          handleSelectCompanyWithPinCheck(targetComp, "login");
+        }
+      } else if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (!restrictedOwnerKey && (activeOwnerFilter || !isMasterAdmin)) {
+          e.preventDefault();
+          if (isMasterAdmin) {
+            setActiveOwnerFilter(null);
+            localStorage.removeItem("cocinet_active_owner_filter");
+          } else {
+            setIsOwnerUnlocked(false);
+            localStorage.setItem("cocinet_is_owner_unlocked", "false");
+            setActiveOwnerFilter(null);
+            localStorage.removeItem("cocinet_active_owner_filter");
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, activeOwnerFilter, isMasterAdmin, companiesConfig, COMPANY_CATALOG, selectedTenant, handleSelectCompanyWithPinCheck, setActiveOwnerFilter, setIsOwnerUnlocked]);
+
   if (showLandingIntro && !showPinPanel) {
     return (
       <LandingIntroView

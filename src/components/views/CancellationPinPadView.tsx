@@ -14,23 +14,54 @@ export const CancellationPinPadView: React.FC<CancellationPinPadViewProps> = ({
   onComplete,
   setPin
 }) => {
-const handlePress = (key: string) => {
-      if (key === "CLEAR") {
-        setPin("");
-      } else if (key === "BACKSPACE") {
-        setPin(currentPin.slice(0, -1));
-      } else {
-        if (currentPin.length < 4) {
-          const nextPin = currentPin + key;
-          setPin(nextPin);
-          if (nextPin.length === 4) {
-            onComplete(nextPin);
-          }
+  const handlePress = (key: string) => {
+    if (key === "CLEAR") {
+      setPin("");
+    } else if (key === "BACKSPACE") {
+      setPin(currentPin.slice(0, -1));
+    } else {
+      if (currentPin.length < 4) {
+        const nextPin = currentPin + key;
+        setPin(nextPin);
+        if (nextPin.length === 4) {
+          onComplete(nextPin);
+        }
+      }
+    }
+  };
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        return;
+      }
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handlePress(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handlePress('BACKSPACE');
+      } else if (e.key === 'Delete' || e.key === 'Escape' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handlePress('CLEAR');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentPin.length > 0) {
+          onComplete(currentPin);
         }
       }
     };
 
-    return (
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentPin, onComplete]);
+
+  return (
       <div className="space-y-4 select-none">
         {/* Code dots */}
         <div className="flex justify-center gap-3 py-2">
