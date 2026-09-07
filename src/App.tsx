@@ -112,6 +112,7 @@ import { CorteTabla2View } from './components/views/CorteTabla2View';
 import { ReporteMovimientosView } from './components/views/ReporteMovimientosView';
 import { MaterialHeaderView } from './components/views/MaterialHeaderView';
 import { PrecuentaItemView } from './components/views/PrecuentaItemView';
+import { DirectCancellationPortalView } from './components/views/DirectCancellationPortalView';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
@@ -960,7 +961,6 @@ export default function App() {
       const reqParam = (params.get("req") || params.get("cancellation") || params.get("folio") || "").trim();
       if (reqParam) {
         setTargetCancellationFolio(reqParam);
-        setShowNotificationModal(true);
       }
 
       const ownerParam =
@@ -5869,11 +5869,25 @@ export default function App() {
       const totalText = details?.total ? `\n💰 *Total:* $${details.total}` : "";
       const reasonText = details?.reason ? `\n📝 *Motivo:* ${details.reason}` : "";
 
+      const getPublicBaseUrl = () => {
+        if (typeof window !== "undefined") {
+          const org = window.location.origin;
+          if (org && !org.includes("localhost") && !org.includes("127.0.0.1") && org.startsWith("https://")) {
+            return org;
+          }
+        }
+        return "https://cocinet-prueba.web.app";
+      };
+
+      const publicBase = getPublicBaseUrl();
+      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+
       // Disparar envíos y registrar logs de auditoría
       for (const target of targets) {
-        const directLink = `${origin}${pathname}?tenant=${tenantId}&token=${target.tokenParam}&req=${cancellationFolio}`;
+        const directLink = `${publicBase}${cleanPath}?tenant=${tenantId}&token=${target.tokenParam}&req=${cancellationFolio}`;
         const prefix = isResend ? "📲 *REENVÍO DE CANCELACIÓN*" : "🚨 *SOLICITUD DE CANCELACIÓN*";
-        const shortMsg = `${prefix}\n📍 *Sucursal:* ${branch}\n👤 *Solicitó:* ${requester}\n📋 *Folio:* #${cancellationFolio}${tableText}${itemsText}${totalText}${reasonText}\n\n🔗 *Autorizar con tu PIN en Cocinet:*\n${directLink}\n\n_Abre el enlace para validar con tu PIN de Administrador._`;
+        const shortMsg = `${prefix}\n📍 *Sucursal:* ${branch}\n👤 *Solicitó:* ${requester}\n📋 *Folio:* #${cancellationFolio}${tableText}${itemsText}${totalText}${reasonText}\n\n🔗 *Enlace de Autorización Directa:*\n\n${directLink}\n\n_Toca el enlace de arriba para autorizar con tu PIN en Cocinet._`;
 
         if (target.phone) {
           sendSilentWhatsAppMessage(target.phone, shortMsg)
@@ -5922,7 +5936,7 @@ export default function App() {
       }
 
       // Notificación Push para el dispositivo con URL directa
-      const mainLink = `${origin}${pathname}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
+      const mainLink = `${publicBase}${cleanPath}?tenant=${tenantId}&token=propietario&req=${cancellationFolio}`;
       triggerDeviceNotification(
         `${isResend ? '📲 Reenvío' : '🚨 Solicitud'} #${cancellationFolio}`,
         `Sucursal: ${branch} (Toca para autorizar)`,
@@ -6089,8 +6103,13 @@ export default function App() {
             // 3. Enviar Alerta WhatsApp Urgente a Sistemas (951-127-3796)
             const branch = notif.branchName || selectedTenant?.name || "Cocinet";
             const targetTenantId = notif.tenantId || selectedTenant?.id || "tenant-1";
-            const directLink = `${origin}${pathname}?tenant=${targetTenantId}&token=sistemas&req=${notif.cancellationFolio}`;
-            const escalationMsg = `⏳ ALERTA DE ESCALAMIENTO (+5 MIN SIN RESPUESTA)\n🚨 Folio: #${notif.cancellationFolio}\n📍 Sucursal: ${branch}\n👤 Solicitó: ${notif.waiterName || 'Mesero/Cajero'}\n⚠️ Ningún administrador local atendió la solicitud.\n🔗 Atender como Área de Sistemas:\n${directLink}`;
+            const escBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+              ? window.location.origin
+              : "https://cocinet-prueba.web.app";
+            const escRawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+            const escCleanPath = escRawPath.endsWith("/") ? escRawPath : `${escRawPath}/`;
+            const directLink = `${escBase}${escCleanPath}?tenant=${targetTenantId}&token=sistemas&req=${notif.cancellationFolio}`;
+            const escalationMsg = `⏳ *ALERTA DE ESCALAMIENTO (+5 MIN SIN RESPUESTA)*\n🚨 *Folio:* #${notif.cancellationFolio}\n📍 *Sucursal:* ${branch}\n👤 *Solicitó:* ${notif.waiterName || 'Mesero/Cajero'}\n⚠️ *Ningún administrador local atendió la solicitud.*\n\n🔗 *Enlace para Área de Sistemas:*\n\n${directLink}\n\n_Toca el enlace para validar con credenciales de soporte._`;
 
             sendSilentWhatsAppMessage("9511273796", escalationMsg)
               .then((res) => {
@@ -13700,7 +13719,22 @@ Instrucciones:
         }}
       />
       {/* Master Render */}
-      {!currentUser ? (
+      {targetCancellationFolio ? (
+        <DirectCancellationPortalView
+          folio={targetCancellationFolio}
+          selectedTenant={selectedTenant}
+          notificationsList={notificationsList}
+          onAuthorizeCancellation={handleAuthorizeCancellationFromNotification}
+          onRejectCancellation={handleRejectCancellationFromNotification}
+          onAuthorizeClosedAccountCancellation={handleAuthorizeClosedAccountCancellationFromNotification}
+          onRejectClosedAccountCancellation={handleRejectClosedAccountCancellationFromNotification}
+          onClose={() => {
+            setTargetCancellationFolio(null);
+            setShowNotificationModal(false);
+            window.location.href = window.location.origin + window.location.pathname;
+          }}
+        />
+      ) : !currentUser ? (
         renderLogin()
       ) : (
         <>
