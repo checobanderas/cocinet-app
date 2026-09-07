@@ -359,6 +359,30 @@ export const LoginView: React.FC<LoginViewProps> = ({
     } catch (e) {}
   }, [setIsMasterAdmin, setIsSystemsMode, setIsOwnerUnlocked, setActiveOwnerFilter, setRestrictedOwnerKey, setSelectedLoginUser, setLoginSubStep, setShowPinPanel, setOwnerPasswordInput]);
 
+  // 👥 Función para regresar al selector de propietarios / cambio de patrón
+  const handleChangeOwner = React.useCallback(() => {
+    if (isMasterAdmin) {
+      setActiveOwnerFilter(null);
+      localStorage.removeItem("cocinet_active_owner_filter");
+      triggerAppNotification(
+        "👥 Directorio de Patrones",
+        "Regresando al directorio general de propietarios.",
+        "info"
+      );
+    } else {
+      setIsOwnerUnlocked(false);
+      localStorage.setItem("cocinet_is_owner_unlocked", "false");
+      setActiveOwnerFilter(null);
+      localStorage.removeItem("cocinet_active_owner_filter");
+      setOwnerPasswordInput("");
+      triggerAppNotification(
+        "🔒 Filtro Retirado",
+        "Regresando a la selección del propietario principal.",
+        "info"
+      );
+    }
+  }, [isMasterAdmin, setActiveOwnerFilter, setIsOwnerUnlocked, setOwnerPasswordInput]);
+
   // ⌨️ Vinculación de teclado físico para ingreso rápido de PIN y Enter
   React.useEffect(() => {
     if (!showPinPanel || isOwnerUnlocked || restrictedOwnerKey) return;
@@ -409,7 +433,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     };
   }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, handleOwnerPinSubmit, setOwnerPasswordInput, handleReturnToHome]);
 
-  // ⌨️ Vinculación de teclado físico para Paso 2 (Selección de Sucursal / Matriz con teclas 1-9, Flechas y Enter)
+  // ⌨️ Vinculación de teclado físico para Paso 2 (Selección de Sucursal / Matriz con teclas 1-9, Flechas y Enter, Escape para Cambiar Patrón)
   React.useEffect(() => {
     if (!showPinPanel || (!isOwnerUnlocked && !restrictedOwnerKey)) return;
 
@@ -452,7 +476,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        handleReturnToHome();
+        if (!restrictedOwnerKey && (activeOwnerFilter || !isMasterAdmin)) {
+          handleChangeOwner();
+        } else {
+          handleReturnToHome();
+        }
       }
     };
 
@@ -460,7 +488,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, activeOwnerFilter, isMasterAdmin, companiesConfig, COMPANY_CATALOG, selectedTenant, handleSelectCompanyWithPinCheck, setActiveOwnerFilter, setIsOwnerUnlocked, handleReturnToHome]);
+  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, activeOwnerFilter, isMasterAdmin, companiesConfig, COMPANY_CATALOG, selectedTenant, handleSelectCompanyWithPinCheck, setActiveOwnerFilter, setIsOwnerUnlocked, handleReturnToHome, handleChangeOwner]);
 
   if (showLandingIntro && !showPinPanel) {
     return (
@@ -1192,27 +1220,7 @@ return (
                           {!restrictedOwnerKey && (activeOwnerFilter || !isMasterAdmin) && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (isMasterAdmin) {
-                                  setActiveOwnerFilter(null);
-                                  localStorage.removeItem("cocinet_active_owner_filter");
-                                  triggerAppNotification(
-                                    "👥 Directorio de Patrones",
-                                    "Regresando al directorio general de propietarios.",
-                                    "info"
-                                  );
-                                } else {
-                                  setIsOwnerUnlocked(false);
-                                  localStorage.setItem("cocinet_is_owner_unlocked", "false");
-                                  setActiveOwnerFilter(null);
-                                  localStorage.removeItem("cocinet_active_owner_filter");
-                                  triggerAppNotification(
-                                    "🔒 Filtro Retirado",
-                                    "Regresando a la selección del propietario principal.",
-                                    "info"
-                                  );
-                                }
-                              }}
+                              onClick={handleChangeOwner}
                               className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl px-4 py-2 text-xs font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-xs"
                             >
                               ⬅️ Cambiar Patrón
