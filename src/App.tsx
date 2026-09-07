@@ -10349,11 +10349,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const confirmPayment = async (account: ClosedAccount) => {
-    // if (paymentMethod === "card" && !paymentCardType) {
-    //   alert("⚠️ Error de Validación: Para pagos con Tarjeta, es obligatorio seleccionar si es Crédito o Débito.");
-    //   return;
-    // }
-
     if ((paymentMethod === "card" || paymentMethod === "transfer") && selectedTenant?.requireCardDigits !== false && (!paymentCardLastFour || paymentCardLastFour.length < 4)) {
       alert("⚠️ Error de Validación: Para pagos con Tarjeta o Transferencia, es obligatorio ingresar los últimos 4 dígitos de verificación.");
       return;
@@ -10374,37 +10369,38 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     );
     const billTotal = account.subtotal - discountAmount + paymentTipValue;
     const lastFour = (paymentMethod === "card" || paymentMethod === "transfer") ? paymentCardLastFour : "";
+    const cardTypeVal = (paymentMethod === "card") ? paymentCardType : "";
+    const reqInv = requiresInvoice;
+    const invPhone = requiresInvoice ? invoicePhone : "";
+    const tipVal = paymentTipValue;
+    const pMethod = paymentMethod;
 
-    try {
-      await confirmPaymentInFirebase(account.id, {
-        isPaid: true,
-        tip: paymentTipValue,
-        discount: discountAmount,
-        total: billTotal,
-        paymentMethod: paymentMethod,
-        cardLastFour: lastFour,
-        cardType: (paymentMethod === "card") ? paymentCardType : "",
-        requiresInvoice: requiresInvoice,
-        invoicePhone: requiresInvoice ? invoicePhone : "",
-      });
-    } catch (e) {
-      console.error("Error updating payment in Firebase:", e);
-    }
+    // 1. Optimistic UI: Close modal immediately and clear modal input states (0 ms latency)
+    setShowPaymentModal(false);
+    setSelectedAccountForPayment(null);
+    setPaymentTipValue(0);
+    setPaymentDiscountValue(0);
+    setPaymentTipTarget("");
+    setPaymentDiscountTarget("");
+    setPaymentAmountReceived("");
+    setPaymentCardLastFour("");
+    setPaymentCardType("");
 
+    // 2. Optimistic UI: Update local React state instantly
     setHistory((prev) =>
       prev.map((acc) =>
         acc.id === account.id
           ? {
               ...acc,
               isPaid: true,
-              tip: paymentTipValue,
+              tip: tipVal,
               discount: discountAmount,
               total: billTotal,
-              paymentMethod: paymentMethod,
+              paymentMethod: pMethod,
               cardLastFour: lastFour,
-              cardType: (paymentMethod === "card") ? paymentCardType : "",
-              requiresInvoice: requiresInvoice,
-              invoicePhone: requiresInvoice ? invoicePhone : "",
+              cardType: cardTypeVal,
+              requiresInvoice: reqInv,
+              invoicePhone: invPhone,
             }
           : acc,
       ),
@@ -10419,30 +10415,43 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       }),
     );
 
-    // Auto-print ticket when payment is confirmed
+    // 3. Asynchronous background execution: Print ticket and sync with Firebase without blocking POS
     const finalizedAccount = {
       ...account,
       isPaid: true,
-      tip: paymentTipValue,
+      tip: tipVal,
       discount: discountAmount,
       total: billTotal,
-      paymentMethod: paymentMethod,
+      paymentMethod: pMethod,
       cardLastFour: lastFour,
-      cardType: (paymentMethod === "card") ? paymentCardType : "",
-      requiresInvoice: requiresInvoice,
-      invoicePhone: requiresInvoice ? invoicePhone : "",
+      cardType: cardTypeVal,
+      requiresInvoice: reqInv,
+      invoicePhone: invPhone,
     };
-    reprintAccount(finalizedAccount);
 
-    setShowPaymentModal(false);
-    setSelectedAccountForPayment(null);
-    setPaymentTipValue(0);
-    setPaymentDiscountValue(0);
-    setPaymentTipTarget("");
-    setPaymentDiscountTarget("");
-    setPaymentAmountReceived("");
-    setPaymentCardLastFour("");
-    setPaymentCardType("");
+    (async () => {
+      try {
+        reprintAccount(finalizedAccount);
+      } catch (printErr) {
+        console.error("Error auto-printing payment ticket:", printErr);
+      }
+
+      try {
+        await confirmPaymentInFirebase(account.id, {
+          isPaid: true,
+          tip: tipVal,
+          discount: discountAmount,
+          total: billTotal,
+          paymentMethod: pMethod,
+          cardLastFour: lastFour,
+          cardType: cardTypeVal,
+          requiresInvoice: reqInv,
+          invoicePhone: invPhone,
+        });
+      } catch (e) {
+        console.error("Error updating payment in Firebase in background:", e);
+      }
+    })();
   };
 
   const handleUpdatePaymentMethod = async () => {
