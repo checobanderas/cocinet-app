@@ -57,6 +57,8 @@ interface TenantCrudModalProps {
   setFormTenantRequireCardDigits: (v: boolean) => void;
   formTenantCancellationTimeoutMinutes?: number;
   setFormTenantCancellationTimeoutMinutes?: (v: number) => void;
+  formTenantShowFiscalData?: boolean;
+  setFormTenantShowFiscalData?: (v: boolean) => void;
   transferStep: number;
   setTransferStep: (v: number) => void;
   transferTargetOwnerKey: string;
@@ -120,6 +122,8 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   setFormTenantRequireCardDigits,
   formTenantCancellationTimeoutMinutes,
   setFormTenantCancellationTimeoutMinutes,
+  formTenantShowFiscalData,
+  setFormTenantShowFiscalData,
   transferStep,
   setTransferStep,
   transferTargetOwnerKey,
@@ -667,6 +671,24 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                   />
                   <span className="text-xs font-bold text-slate-600">min</span>
                 </div>
+              </div>
+
+              {/* Mostrar Datos Fiscales en Tickets Impresos */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 flex items-center justify-between">
+                <div className="pr-3">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer">
+                    <span>📜</span> Mostrar Datos Fiscales en Tickets (RFC y Régimen)
+                  </label>
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
+                    Por defecto activo. Si se desactiva, los tickets impresos de cuenta y precuenta omitirán el RFC y el Régimen Fiscal, manteniendo únicamente el nombre, dirección, teléfono y detalle del pedido.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formTenantShowFiscalData ?? true}
+                  onChange={(e) => setFormTenantShowFiscalData && setFormTenantShowFiscalData(e.target.checked)}
+                  className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
+                />
               </div>
 
               {/* Sección Terminal Windows & Instalación PWA (Aislamiento de Sucursal) */}

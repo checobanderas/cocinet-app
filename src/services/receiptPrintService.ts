@@ -189,9 +189,10 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
       .setPrintMode(job.FONT_SIZE_NORMAL)
       .bold(false);
     job.printLine("--------------------------------");
-    if (companyConfig.rfc)
+    const showFiscal = selectedTenant?.showFiscalData !== false;
+    if (showFiscal && companyConfig.rfc)
       job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
-    if (companyConfig.regimenFiscal)
+    if (showFiscal && companyConfig.regimenFiscal)
       job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
     if (companyConfig.lugarExpedicion)
       job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);

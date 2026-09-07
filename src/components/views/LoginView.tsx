@@ -160,6 +160,8 @@ interface LoginViewProps {
   setFormTenantRequireCardDigits: any;
   formTenantCancellationTimeoutMinutes?: any;
   setFormTenantCancellationTimeoutMinutes?: any;
+  formTenantShowFiscalData?: any;
+  setFormTenantShowFiscalData?: any;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -306,6 +308,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setFormTenantRequireCardDigits,
   formTenantCancellationTimeoutMinutes,
   setFormTenantCancellationTimeoutMinutes,
+  formTenantShowFiscalData,
+  setFormTenantShowFiscalData,
 }) => {
   const [showEditMasterPinModal, setShowEditMasterPinModal] = React.useState(false);
   const [newMasterPinInput, setNewMasterPinInput] = React.useState("");
@@ -569,6 +573,8 @@ return (
           setFormTenantRequireCardDigits={setFormTenantRequireCardDigits}
           formTenantCancellationTimeoutMinutes={formTenantCancellationTimeoutMinutes}
           setFormTenantCancellationTimeoutMinutes={setFormTenantCancellationTimeoutMinutes}
+          formTenantShowFiscalData={formTenantShowFiscalData}
+          setFormTenantShowFiscalData={setFormTenantShowFiscalData}
           transferStep={transferStep}
           setTransferStep={setTransferStep}
           transferTargetOwnerKey={transferTargetOwnerKey}

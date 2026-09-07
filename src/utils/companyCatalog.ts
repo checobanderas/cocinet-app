@@ -27,6 +27,7 @@ export interface CompanyTenant {
   allowTransferencia?: boolean;
   requireCardDigits?: boolean;
   cancellationTimeoutMinutes?: number;
+  showFiscalData?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

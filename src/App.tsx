@@ -2811,6 +2811,7 @@ export default function App() {
   const [formTenantAllowLupay, setFormTenantAllowLupay] = useState<boolean>(true);
   const [formTenantRequireCardDigits, setFormTenantRequireCardDigits] = useState<boolean>(true);
   const [formTenantCancellationTimeoutMinutes, setFormTenantCancellationTimeoutMinutes] = useState<number>(7);
+  const [formTenantShowFiscalData, setFormTenantShowFiscalData] = useState<boolean>(true);
 
   // Tenant Transfer States (Traspaso de Inquilino inline)
   const [transferStep, setTransferStep] = useState<0 | 1 | 2>(0);
@@ -2841,6 +2842,7 @@ export default function App() {
     setFormTenantAllowLupay(true);
     setFormTenantRequireCardDigits(true);
     setFormTenantCancellationTimeoutMinutes(7);
+    setFormTenantShowFiscalData(true);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(true);
@@ -2868,6 +2870,7 @@ export default function App() {
     setFormTenantAllowLupay(tenant.allowLupay !== false);
     setFormTenantRequireCardDigits(tenant.requireCardDigits !== false);
     setFormTenantCancellationTimeoutMinutes(Number(tenant.cancellationTimeoutMinutes) || 7);
+    setFormTenantShowFiscalData(tenant.showFiscalData !== false);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(tenant.type === "Matriz");
@@ -2904,6 +2907,7 @@ export default function App() {
       allowLupay: formTenantAllowLupay,
       requireCardDigits: formTenantRequireCardDigits,
       cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
+      showFiscalData: formTenantShowFiscalData !== false,
       updatedAt: getMexicoISOString(),
     };
 
@@ -3029,6 +3033,7 @@ export default function App() {
         allowLupay: formTenantAllowLupay,
         requireCardDigits: formTenantRequireCardDigits,
         cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
+        showFiscalData: formTenantShowFiscalData !== false,
         createdAt: editingTenant?.createdAt || getMexicoISOString(),
         updatedAt: getMexicoISOString(),
       };
@@ -5018,8 +5023,9 @@ export default function App() {
         const emlVal = sanitizeEmail(pedido.email || companyConfig.email || selectedTenant?.email || "");
         const sucVal = (pedido.sucursal || companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase();
 
-        if (rfcVal) job.printLine(`RFC: ${rfcVal}`);
-        if (regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
+        const showFiscal = selectedTenant?.showFiscalData !== false;
+        if (showFiscal && rfcVal) job.printLine(`RFC: ${rfcVal}`);
+        if (showFiscal && regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
         if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
         if (dirVal) job.printLine(`DIR: ${dirVal}`);
         if (sucVal) job.printLine(`SUC: ${sucVal}`);
@@ -7716,8 +7722,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const bNameStr = (companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
 
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    const showFiscal = selectedTenant?.showFiscalData !== false;
+    if (showFiscal && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (showFiscal && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
     if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
     if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
@@ -7780,8 +7787,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
     let t = "";
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    const showFiscal = selectedTenant?.showFiscalData !== false;
+    if (showFiscal && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (showFiscal && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
     if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
     if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
@@ -7839,8 +7847,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
     let t = "";
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    if (companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
-    if (companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
+    const showFiscalExpress = selectedTenant?.showFiscalData !== false;
+    if (showFiscalExpress && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
+    if (showFiscalExpress && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
     if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
     if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
@@ -7969,7 +7978,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         .bold(true)
         .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
         .printLine(
-          companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
+          selectedTenant?.showFiscalData !== false && companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
         )
         .printLine(
           companyConfig.sucursal
@@ -8083,7 +8092,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         .bold(true)
         .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
         .printLine(
-          companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
+          selectedTenant?.showFiscalData !== false && companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
         )
         .printLine(
           companyConfig.sucursal
@@ -8330,6 +8339,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       setFormTenantRequireCardDigits={setFormTenantRequireCardDigits}
       formTenantCancellationTimeoutMinutes={formTenantCancellationTimeoutMinutes}
       setFormTenantCancellationTimeoutMinutes={setFormTenantCancellationTimeoutMinutes}
+      formTenantShowFiscalData={formTenantShowFiscalData}
+      setFormTenantShowFiscalData={setFormTenantShowFiscalData}
       formTenantRfc={formTenantRfc}
       formTenantSucursal={formTenantSucursal}
       formTenantType={formTenantType}
@@ -10559,8 +10570,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         .setPrintMode(job.FONT_SIZE_NORMAL)
         .bold(false);
       job.printLine("--------------------------------");
-      if (rfcVal) job.printLine(`RFC: ${rfcVal}`);
-      if (regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
+      const showFiscal = selectedTenant?.showFiscalData !== false;
+      if (showFiscal && rfcVal) job.printLine(`RFC: ${rfcVal}`);
+      if (showFiscal && regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
       if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
       if (dirVal) job.printLine(`DIR: ${dirVal}`);
       if (sucVal) job.printLine(`SUC: ${sucVal}`);
