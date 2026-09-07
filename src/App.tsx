@@ -10017,16 +10017,24 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   const handleAuthorizeAccountCancellation = async (accountId: string, adminUser: User) => {
     try {
       const account = history.find(a => a.id === accountId);
-      const reason = account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
-      await cancelClosedAccountInFirebase(accountId, reason, adminUser);
-
-      // Buscar notificación pendiente asociada
       const matchingNotif = notificationsList.find(n => 
         n.isClosedAccountCancellationRequest &&
         n.status !== "approved" &&
         n.status !== "rejected" &&
         n.accountId === accountId
       );
+
+      const fallbackAccountData: any = matchingNotif ? {
+        tenantId: matchingNotif.tenantId || selectedTenant?.id || "tenant-1",
+        branchName: matchingNotif.branchName || selectedTenant?.name || "Cocinet",
+        cancellationFolio: matchingNotif.cancellationFolio,
+        total: matchingNotif.total,
+        tableName: matchingNotif.tableLabel,
+        isClosedAccount: true,
+      } : undefined;
+
+      const reason = matchingNotif?.reason || account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
+      await cancelClosedAccountInFirebase(accountId, reason, adminUser, fallbackAccountData);
 
       if (matchingNotif) {
         await updateNotificationInFirebase(matchingNotif.id, {
@@ -13549,8 +13557,16 @@ Instrucciones:
 
     try {
       const account = history.find(a => a.id === accountId);
-      const reason = account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
-      await cancelClosedAccountInFirebase(accountId, reason, admin);
+      const reason = notif?.reason || account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
+      const fallbackAccountData: any = {
+        tenantId: notif?.tenantId || selectedTenant?.id || "tenant-1",
+        branchName: notif?.branchName || selectedTenant?.name || "Cocinet",
+        cancellationFolio: notif?.cancellationFolio,
+        total: notif?.total,
+        tableName: notif?.tableLabel,
+        isClosedAccount: true,
+      };
+      await cancelClosedAccountInFirebase(accountId, reason, admin, fallbackAccountData);
       
       // Persist the approval in Firebase so other devices see it
       await updateNotificationInFirebase(notifId, { 

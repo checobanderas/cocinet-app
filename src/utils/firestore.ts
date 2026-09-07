@@ -836,17 +836,24 @@ export async function cancelClosedAccountInFirebase(
   accountId: string,
   reason: string,
   user: any,
+  additionalData?: any
 ) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      status: "cancelled",
-      cancellationReason: reason,
-      cancelledBy: cleanUndefined(user),
-      isPendingCancellation: false,
-      pendingCancellationReason: null,
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        status: "cancelled",
+        cancellationReason: reason,
+        cancelledBy: cleanUndefined(user),
+        isPendingCancellation: false,
+        pendingCancellationReason: null,
+        updatedAt: getMexicoISOString(),
+        ...(additionalData || {}),
+      }),
+      { merge: true }
+    )
   );
 }
 
@@ -867,10 +874,15 @@ export async function confirmPaymentInFirebase(
   console.log("Firestore: Updating account:", accountId, "with data:", paymentData);
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      ...paymentData,
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        ...paymentData,
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    )
   );
   console.log("Firestore: Update successful.");
 }
@@ -882,11 +894,16 @@ export async function updateInvoiceRequirementInFirebase(
 ) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      requiresInvoice,
-      invoicePhone: invoicePhone || "",
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        requiresInvoice,
+        invoicePhone: invoicePhone || "",
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    )
   );
 }
 
@@ -897,6 +914,7 @@ export async function updateClosedAccountDeliveryStatusInFirebase(
 ) {
   const accountRef = doc(db, "history", accountId);
   const payload: any = {
+    id: accountId,
     deliveryStatus,
     updatedAt: getMexicoISOString(),
   };
@@ -904,7 +922,7 @@ export async function updateClosedAccountDeliveryStatusInFirebase(
     payload.isPaid = isPaid;
   }
   await runWrite(
-    updateDoc(accountRef, payload)
+    setDoc(accountRef, cleanUndefined(payload), { merge: true })
   );
 }
 
@@ -2966,35 +2984,50 @@ export async function importFullDatabaseJson(parsedJson: any, onProgress?: (msg:
 export async function markAccountForCancellationInFirebase(accountId: string, reason: string) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      isPendingCancellation: true,
-      pendingCancellationReason: reason,
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        isPendingCancellation: true,
+        pendingCancellationReason: reason,
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    )
   );
 }
 
 export async function authorizeAccountCancellationInFirebase(accountId: string, admin: any) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      status: "cancelled",
-      cancellationReason: "Autorizado", // Or merge with pending reason
-      cancelledBy: cleanUndefined(admin),
-      isPendingCancellation: false,
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        status: "cancelled",
+        cancellationReason: "Autorizado", // Or merge with pending reason
+        cancelledBy: cleanUndefined(admin),
+        isPendingCancellation: false,
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    )
   );
 }
 
 export async function revertAccountCancellationInFirebase(accountId: string) {
   const accountRef = doc(db, "history", accountId);
   await runWrite(
-    updateDoc(accountRef, {
-      isPendingCancellation: false,
-      pendingCancellationReason: null,
-      updatedAt: getMexicoISOString(),
-    })
+    setDoc(
+      accountRef,
+      cleanUndefined({
+        id: accountId,
+        isPendingCancellation: false,
+        pendingCancellationReason: null,
+        updatedAt: getMexicoISOString(),
+      }),
+      { merge: true }
+    )
   );
 }
 
@@ -3008,14 +3041,26 @@ export async function markComandaItemsForCancellationInFirebase(
   const tableRef = doc(db, "tables", tableId);
   const now = getMexicoISOString();
 
-  const newComandas = (tableInfo.comandas || []).map((c: any) => {
+  let liveTableInfo = tableInfo;
+  if (!liveTableInfo || !liveTableInfo.comandas || liveTableInfo.comandas.length === 0) {
+    try {
+      const snap = await getDoc(tableRef);
+      if (snap.exists()) {
+        liveTableInfo = snap.data();
+      }
+    } catch (e) {
+      console.warn("Could not fetch live table doc:", e);
+    }
+  }
+
+  const newComandas = ((liveTableInfo && liveTableInfo.comandas) || []).map((c: any) => {
     const matchedItemsFromThisFolio = itemsToMark.filter(it => it.folio === c.folio);
     if (matchedItemsFromThisFolio.length > 0) {
       return {
         ...c,
         updatedAt: now,
         items: (c.items || []).map((item: any) => {
-          const isMatched = matchedItemsFromThisFolio.some(it => it.productId === item.product.id && it.plate === item.plate);
+          const isMatched = matchedItemsFromThisFolio.some(it => it.productId === item.product?.id && it.plate === item.plate);
           if (isMatched && !item.isCancelled) {
             return {
               ...item,
@@ -3031,10 +3076,10 @@ export async function markComandaItemsForCancellationInFirebase(
   });
 
   await runWrite(
-    updateDoc(tableRef, {
+    setDoc(tableRef, cleanUndefined({
       comandas: cleanUndefined(newComandas),
       updatedAt: now,
-    })
+    }), { merge: true })
   );
 }
 
@@ -3048,13 +3093,25 @@ export async function revertComandaItemsCancellationInFirebase(
   const tableRef = doc(db, "tables", tableId);
   const now = getMexicoISOString();
 
-  const newComandas = (tableInfo.comandas || []).map((c: any) => {
+  let liveTableInfo = tableInfo;
+  if (!liveTableInfo || !liveTableInfo.comandas || liveTableInfo.comandas.length === 0) {
+    try {
+      const snap = await getDoc(tableRef);
+      if (snap.exists()) {
+        liveTableInfo = snap.data();
+      }
+    } catch (e) {
+      console.warn("Could not fetch live table doc:", e);
+    }
+  }
+
+  const newComandas = ((liveTableInfo && liveTableInfo.comandas) || []).map((c: any) => {
     if (c.folio === folio) {
       return {
         ...c,
         updatedAt: now,
         items: (c.items || []).map((item: any) => {
-          if (item.product.id === productId && item.plate === plate) {
+          if (item.product?.id === productId && item.plate === plate) {
             return {
               ...item,
               isPendingCancellation: false,
@@ -3069,10 +3126,10 @@ export async function revertComandaItemsCancellationInFirebase(
   });
 
   await runWrite(
-    updateDoc(tableRef, {
+    setDoc(tableRef, cleanUndefined({
       comandas: cleanUndefined(newComandas),
       updatedAt: now,
-    })
+    }), { merge: true })
   );
 }
 
@@ -3085,14 +3142,26 @@ export async function finalizeComandaItemsCancellationInFirebase(
   const tableRef = doc(db, "tables", tableId);
   const now = getMexicoISOString();
 
-  const newComandas = (tableInfo.comandas || []).map((c: any) => {
-    const matchedItemsFromThisFolio = itemsToFinalize.filter(it => it.folio === c.folio);
+  let liveTableInfo = tableInfo;
+  if (!liveTableInfo || !liveTableInfo.comandas || liveTableInfo.comandas.length === 0) {
+    try {
+      const snap = await getDoc(tableRef);
+      if (snap.exists()) {
+        liveTableInfo = snap.data();
+      }
+    } catch (e) {
+      console.warn("Could not fetch live table doc:", e);
+    }
+  }
+
+  const newComandas = ((liveTableInfo && liveTableInfo.comandas) || []).map((c: any) => {
+    const matchedItemsFromThisFolio = (itemsToFinalize || []).filter(it => it.folio === c.folio);
     if (matchedItemsFromThisFolio.length > 0) {
       return {
         ...c,
         updatedAt: now,
         items: (c.items || []).map((item: any) => {
-          const isMatched = matchedItemsFromThisFolio.some(it => it.productId === item.product.id && it.plate === item.plate);
+          const isMatched = matchedItemsFromThisFolio.some(it => it.productId === item.product?.id && it.plate === item.plate);
           if (isMatched && item.isPendingCancellation) {
             return {
               ...item,
@@ -3115,19 +3184,19 @@ export async function finalizeComandaItemsCancellationInFirebase(
 
   if (!hasActiveItems) {
     await runWrite(
-      updateDoc(tableRef, {
+      setDoc(tableRef, cleanUndefined({
         status: "available",
         comandas: [],
         waiterId: null,
         updatedAt: now,
-      }),
+      }), { merge: true }),
     );
   } else {
     await runWrite(
-      updateDoc(tableRef, {
+      setDoc(tableRef, cleanUndefined({
         comandas: cleanUndefined(newComandas),
         updatedAt: now,
-      }),
+      }), { merge: true }),
     );
   }
 }
@@ -3141,7 +3210,19 @@ export async function markEntireComandaForCancellationInFirebase(
   const tableRef = doc(db, "tables", tableId);
   const now = getMexicoISOString();
 
-  const newComandas = (tableInfo.comandas || []).map((c: any) => {
+  let liveTableInfo = tableInfo;
+  if (!liveTableInfo || !liveTableInfo.comandas || liveTableInfo.comandas.length === 0) {
+    try {
+      const snap = await getDoc(tableRef);
+      if (snap.exists()) {
+        liveTableInfo = snap.data();
+      }
+    } catch (e) {
+      console.warn("Could not fetch live table doc:", e);
+    }
+  }
+
+  const newComandas = ((liveTableInfo && liveTableInfo.comandas) || []).map((c: any) => {
     if (c.folio === folio) {
       return {
         ...c,
@@ -3154,10 +3235,10 @@ export async function markEntireComandaForCancellationInFirebase(
   });
 
   await runWrite(
-    updateDoc(tableRef, {
+    setDoc(tableRef, cleanUndefined({
       comandas: cleanUndefined(newComandas),
       updatedAt: now,
-    })
+    }), { merge: true })
   );
 }
 
@@ -3169,7 +3250,19 @@ export async function revertEntireComandaCancellationInFirebase(
   const tableRef = doc(db, "tables", tableId);
   const now = getMexicoISOString();
 
-  const newComandas = (tableInfo.comandas || []).map((c: any) => {
+  let liveTableInfo = tableInfo;
+  if (!liveTableInfo || !liveTableInfo.comandas || liveTableInfo.comandas.length === 0) {
+    try {
+      const snap = await getDoc(tableRef);
+      if (snap.exists()) {
+        liveTableInfo = snap.data();
+      }
+    } catch (e) {
+      console.warn("Could not fetch live table doc:", e);
+    }
+  }
+
+  const newComandas = ((liveTableInfo && liveTableInfo.comandas) || []).map((c: any) => {
     if (c.folio === folio) {
       return {
         ...c,
@@ -3182,10 +3275,10 @@ export async function revertEntireComandaCancellationInFirebase(
   });
 
   await runWrite(
-    updateDoc(tableRef, {
+    setDoc(tableRef, cleanUndefined({
       comandas: cleanUndefined(newComandas),
       updatedAt: now,
-    })
+    }), { merge: true })
   );
 }
 
@@ -3233,7 +3326,7 @@ export function subscribeToNotifications(
 export async function updateNotificationInFirebase(id: string, updateData: any) {
   const ref = doc(db, "notifications", id);
   await runWrite(
-    updateDoc(ref, cleanUndefined(updateData))
+    setDoc(ref, cleanUndefined(updateData), { merge: true })
   );
 }
 
@@ -3285,7 +3378,7 @@ export async function recordCancellationTimelineEvent(
       if (!data.firstOpenedAt) updatePayload.firstOpenedAt = getMexicoISOString();
     }
 
-    await runWrite(updateDoc(ref, cleanUndefined(updatePayload)));
+    await runWrite(setDoc(ref, cleanUndefined(updatePayload), { merge: true }));
   } catch (e) {
     console.warn("Error recording cancellation timeline event:", e);
   }
