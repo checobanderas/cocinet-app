@@ -338,6 +338,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const resolvedAccentColor = effectiveTenant?.accentColor || "#2563eb";
   const neutralPlatformLogo = "/cocinet-logo.png";
 
+  // 🏠 Función centralizada para volver al inicio / landing page comercial
+  const handleReturnToHome = React.useCallback(() => {
+    setIsMasterAdmin(false);
+    localStorage.removeItem("pos_master_admin");
+    setIsSystemsMode(false);
+    localStorage.setItem("cocinet_is_systems", "false");
+    setIsOwnerUnlocked(false);
+    localStorage.setItem("cocinet_is_owner_unlocked", "false");
+    setActiveOwnerFilter(null);
+    localStorage.removeItem("cocinet_active_owner_filter");
+    setRestrictedOwnerKey(null);
+    localStorage.removeItem("cocinet_restricted_owner_key");
+    setSelectedLoginUser(null);
+    setLoginSubStep("tenant");
+    setShowPinPanel(false);
+    setOwnerPasswordInput("");
+    try {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (e) {}
+  }, [setIsMasterAdmin, setIsSystemsMode, setIsOwnerUnlocked, setActiveOwnerFilter, setRestrictedOwnerKey, setSelectedLoginUser, setLoginSubStep, setShowPinPanel, setOwnerPasswordInput]);
+
   // ⌨️ Vinculación de teclado físico para ingreso rápido de PIN y Enter
   React.useEffect(() => {
     if (!showPinPanel || isOwnerUnlocked || restrictedOwnerKey) return;
@@ -365,9 +386,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
       } else if (e.key === 'Backspace') {
         e.preventDefault();
         setOwnerPasswordInput((prev) => prev.slice(0, -1));
-      } else if (e.key === 'Delete' || e.key === 'Escape' || e.key.toLowerCase() === 'c') {
+      } else if (e.key === 'Delete' || e.key.toLowerCase() === 'c') {
         e.preventDefault();
         setOwnerPasswordInput('');
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleReturnToHome();
       } else if (e.key === 'Enter') {
         e.preventDefault();
         setOwnerPasswordInput((curr) => {
@@ -383,7 +407,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, handleOwnerPinSubmit, setOwnerPasswordInput]);
+  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, handleOwnerPinSubmit, setOwnerPasswordInput, handleReturnToHome]);
 
   // ⌨️ Vinculación de teclado físico para Paso 2 (Selección de Sucursal / Matriz con teclas 1-9, Flechas y Enter)
   React.useEffect(() => {
@@ -426,19 +450,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
         if (targetComp) {
           handleSelectCompanyWithPinCheck(targetComp, "login");
         }
-      } else if (e.key === 'Escape' || e.key === 'Backspace') {
-        if (!restrictedOwnerKey && (activeOwnerFilter || !isMasterAdmin)) {
-          e.preventDefault();
-          if (isMasterAdmin) {
-            setActiveOwnerFilter(null);
-            localStorage.removeItem("cocinet_active_owner_filter");
-          } else {
-            setIsOwnerUnlocked(false);
-            localStorage.setItem("cocinet_is_owner_unlocked", "false");
-            setActiveOwnerFilter(null);
-            localStorage.removeItem("cocinet_active_owner_filter");
-          }
-        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleReturnToHome();
       }
     };
 
@@ -446,7 +460,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, activeOwnerFilter, isMasterAdmin, companiesConfig, COMPANY_CATALOG, selectedTenant, handleSelectCompanyWithPinCheck, setActiveOwnerFilter, setIsOwnerUnlocked]);
+  }, [showPinPanel, isOwnerUnlocked, restrictedOwnerKey, activeOwnerFilter, isMasterAdmin, companiesConfig, COMPANY_CATALOG, selectedTenant, handleSelectCompanyWithPinCheck, setActiveOwnerFilter, setIsOwnerUnlocked, handleReturnToHome]);
 
   if (showLandingIntro && !showPinPanel) {
     return (
@@ -1007,27 +1021,10 @@ return (
                     <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
                       <button
                         type="button"
-                        onClick={() => {
-                          setIsMasterAdmin(false);
-                          localStorage.removeItem("pos_master_admin");
-                          setIsSystemsMode(false);
-                          localStorage.setItem("cocinet_is_systems", "false");
-                          setIsOwnerUnlocked(false);
-                          localStorage.setItem("cocinet_is_owner_unlocked", "false");
-                          setActiveOwnerFilter(null);
-                          localStorage.removeItem("cocinet_active_owner_filter");
-                          setRestrictedOwnerKey(null);
-                          localStorage.removeItem("cocinet_restricted_owner_key");
-                          setSelectedLoginUser(null);
-                          setLoginSubStep("tenant");
-                          setShowPinPanel(false);
-                          try {
-                            window.history.replaceState({}, document.title, window.location.pathname);
-                          } catch (e) {}
-                        }}
+                        onClick={handleReturnToHome}
                         className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer select-none border-none"
                       >
-                        🚪 Volver a Inicio
+                        ⬅️ Volver a Inicio
                       </button>
                     </div>
                   </div>
@@ -1039,13 +1036,10 @@ return (
                     <div className="text-left">
                       <button
                         type="button"
-                        onClick={() => {
-                          setOwnerPasswordInput("");
-                          setShowPinPanel(false);
-                        }}
+                        onClick={handleReturnToHome}
                         className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-black rounded-xl flex items-center gap-1.5 transition-all select-none border-none cursor-pointer"
                       >
-                        ↩️ Volver a Inicio
+                        ⬅️ Volver a Inicio
                       </button>
                     </div>
 
