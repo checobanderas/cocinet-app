@@ -139,6 +139,7 @@ function NotificationCard({
 }) {
   const [pin, setPin] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [showTimeline, setShowTimeline] = React.useState(false);
 
   const isAnyCancellationRequest = notif.isCancellationRequest || notif.isClosedAccountCancellationRequest;
 

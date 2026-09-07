@@ -116,19 +116,32 @@ export async function sendSilentWhatsAppMessage(
       });
       clearTimeout(timeoutId);
 
-      const data = await response.json();
+      if (!response.ok) {
+        console.warn(`⚠️ UltraMsg respondió con código HTTP ${response.status} para instancia ${cleanInstance}.`);
+        return {
+          success: false,
+          error: `UltraMsg Error HTTP ${response.status}. Verifique que la instancia (${cleanInstance}) esté activa y configurada en UltraMsg.`
+        };
+      }
+
+      const data = await response.json().catch(() => ({}));
 
       if (data.sent === "true" || data.sent === true || data.id) {
         console.log("✅ WhatsApp enviado silenciosamente con UltraMsg. ID:", data.id);
         return { success: true, messageId: String(data.id) };
       } else {
         const err = data.error || data.message || "Error al enviar con UltraMsg";
-        console.error("❌ Error de UltraMsg:", data);
+        console.warn("⚠️ Advertencia de UltraMsg:", data);
         return { success: false, error: String(err) };
       }
     } catch (err: any) {
-      console.error("❌ Error de red con UltraMsg:", err);
-      return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con UltraMsg.' : (err.message || "Error de conexión.") };
+      console.warn("⚠️ UltraMsg no disponible o conexión rechazada:", err?.message || err);
+      return { 
+        success: false, 
+        error: err.name === 'AbortError' 
+          ? 'Tiempo de espera agotado al conectar con UltraMsg.' 
+          : 'No se pudo conectar con la pasarela UltraMsg (verifique ID de instancia y conectividad).' 
+      };
     }
   }
 
