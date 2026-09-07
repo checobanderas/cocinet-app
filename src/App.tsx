@@ -13678,7 +13678,7 @@ Instrucciones:
 
   return (
     <IonApp>
-      {currentUser && <InstallPWA />}
+      {currentUser && !targetCancellationFolio && !excelDownloadDay && <InstallPWA />}
       <NotificationsModal 
         isOpen={showNotificationModal && !targetCancellationFolio}
         onClose={() => {

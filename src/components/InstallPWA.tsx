@@ -2,6 +2,19 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function InstallPWA() {
+  // Omit PWA prompt if on direct cancellation portal or direct download link
+  const hasDirectActionParam = typeof window !== "undefined" && (() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return !!(p.get("req") || p.get("cancellation") || p.get("folio") || p.get("download") || p.get("export"));
+    } catch {
+      return false;
+    }
+  })();
+
+  if (hasDirectActionParam) {
+    return null;
+  }
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIOS, setIsIOS] = useState(false);

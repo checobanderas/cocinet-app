@@ -356,46 +356,125 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
             )}
 
             {/* Metadatos y Folio */}
-            <div className="mt-2 p-4 bg-white/90 border border-rose-200/80 rounded-2xl space-y-2.5 text-xs shadow-xs">
+            <div className="mt-3 p-4 bg-white/95 border border-rose-200 rounded-2xl space-y-3 text-sm shadow-xs">
               {notif.cancellationFolio && (
-                <div className="bg-rose-100 text-rose-950 px-3 py-1.5 rounded-xl font-black tracking-tight flex items-center justify-between text-xs border border-rose-200">
-                  <div className="flex items-center gap-1.5">
-                    <span>🎫</span> Folio de Cancelación: <span className="text-sm font-black text-rose-700">{notif.cancellationFolio}</span>
+                <div className="bg-rose-100/90 text-rose-950 px-3.5 py-2 rounded-xl font-black tracking-tight flex items-center justify-between text-xs sm:text-sm border border-rose-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🎫</span> Folio: <span className="text-base font-black text-rose-700">#{notif.cancellationFolio}</span>
                   </div>
                   {notif.escalatedToSystems && (
-                    <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase shadow-xs">
-                      ⚡ Escalado Sistemas
+                    <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase shadow-xs">
+                      ⚡ Escalado a Sistemas
                     </span>
                   )}
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2 text-rose-950">
-                <div>🏢 <span className="font-bold">Sucursal:</span> {notif.branchName || selectedTenant?.name || "Cocinet"}</div>
-                <div>📍 <span className="font-bold">Mesa/Cuenta:</span> {notif.tableLabel || (notif.tableId ? `Mesa ${notif.tableId}` : "Caja")}</div>
-                <div>🤵 <span className="font-bold">Solicitó:</span> {notif.waiterName || "Cajero / Mesero"}</div>
-                <div>💰 <span className="font-bold">Total:</span> <span className="font-extrabold text-rose-700 text-sm">${typeof notif.total === 'number' ? notif.total.toFixed(2) : notif.total || "0.00"}</span></div>
+              {/* Bloque de Sucursal, Mesa, Solicitó y Monto en tarjetas visuales */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 font-bold text-base">
+                    🏢
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Sucursal</p>
+                    <p className="text-sm font-extrabold text-slate-900 truncate">
+                      {notif.branchName || selectedTenant?.name || "Cocinet"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 font-bold text-base">
+                    📍
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Mesa / Cuenta</p>
+                    <p className="text-sm font-extrabold text-slate-900 truncate">
+                      {notif.tableLabel || (notif.tableId ? `Mesa ${notif.tableId}` : "Caja")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-rose-50/90 border border-rose-200 rounded-xl p-2.5 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-rose-200 text-rose-800 flex items-center justify-center shrink-0 font-bold text-base">
+                    👤
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wider">Solicitó Cancelación</p>
+                    <p className="text-sm font-black text-rose-900 truncate">
+                      {notif.waiterName || "Cajero / Mesero"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-base">
+                    💰
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Monto a Cancelar</p>
+                    <p className="text-base font-black text-emerald-900">
+                      ${typeof notif.total === 'number' ? notif.total.toFixed(2) : notif.total || "0.00"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Lista de Productos si es cancelación de ítems */}
+              {/* Tabla Detallada de Productos a Cancelar */}
               {Array.isArray(notif.itemsToCancel) && notif.itemsToCancel.length > 0 && (
-                <div className="text-rose-950 font-semibold border-t border-rose-100 pt-2">
-                  📦 <span className="font-black">Productos a Cancelar ({notif.itemsToCancel.length}):</span>
-                  <ul className="list-disc pl-5 mt-1 space-y-1 font-normal">
-                    {notif.itemsToCancel.map((it: any, idx: number) => (
-                      <li key={idx}>
-                        <span className="font-bold text-slate-800">{it.name || it.productId}</span>{" "}
-                        <span className="font-black text-rose-600">(x{it.quantity || 1})</span>{" "}
-                        {it.folio !== undefined ? `- Plato #${it.plate || 1}` : ""}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="border-t border-rose-200/80 pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                      <span>📦</span> Productos Solicitados para Cancelación:
+                    </span>
+                    <span className="bg-rose-100 text-rose-800 font-black text-[11px] px-2.5 py-0.5 rounded-full">
+                      {notif.itemsToCancel.length} {notif.itemsToCancel.length === 1 ? "ítem" : "ítems"}
+                    </span>
+                  </div>
+
+                  <div className="overflow-hidden border border-rose-200 rounded-xl bg-white shadow-xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-rose-50/90 text-rose-900 font-bold border-b border-rose-200 text-[11px] uppercase tracking-wider">
+                          <th className="py-2 px-2.5 text-center w-8">#</th>
+                          <th className="py-2 px-2.5">Producto / Concepto</th>
+                          <th className="py-2 px-2.5 text-center w-14">Cant.</th>
+                          <th className="py-2 px-2.5 text-right w-20">Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-rose-100">
+                        {notif.itemsToCancel.map((it: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-rose-50/40 transition-colors">
+                            <td className="py-2 px-2.5 text-center font-bold text-slate-400 text-[11px]">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2 px-2.5 font-extrabold text-slate-900 text-xs sm:text-sm">
+                              {it.name || it.productId}
+                            </td>
+                            <td className="py-2 px-2.5 text-center">
+                              <span className="inline-block bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-md text-xs">
+                                x{it.quantity || 1}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2.5 text-right text-[11px] text-slate-500 font-medium">
+                              {it.folio !== undefined ? `Plato #${it.plate || 1}` : "Directo"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
               {notif.reason && (
-                <div className="text-rose-950 border-t border-rose-100 pt-2">
-                  📝 <span className="font-bold">Motivo:</span> <span className="font-semibold text-rose-800">{notif.reason}</span>
+                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5 text-xs sm:text-sm">
+                  <span className="text-amber-700 font-bold text-base leading-none">📝</span>
+                  <div>
+                    <span className="font-bold text-amber-900 block text-[11px] uppercase tracking-wider">Motivo de Cancelación:</span>
+                    <span className="font-extrabold text-amber-950 mt-0.5 block">{notif.reason}</span>
+                  </div>
                 </div>
               )}
 
@@ -438,10 +517,13 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="text-rose-900 font-extrabold text-xs uppercase tracking-wider flex items-center justify-between">
-                      <span className="flex items-center gap-1">🔒 Escribe aquí tu PIN para autorizar:</span>
-                      <span className="text-[10px] text-slate-500 font-medium lowercase">o teclea en físico</span>
+                  <div className="space-y-3 pt-1">
+                    <div className="text-rose-900 font-black text-sm uppercase tracking-wide flex items-center justify-between border-b border-rose-200/80 pb-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-base">🔒</span>
+                        <span>Escribe aquí tu PIN para autorizar:</span>
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-semibold lowercase">o teclea en físico</span>
                     </div>
 
                     {/* Puntos visuales del PIN */}
