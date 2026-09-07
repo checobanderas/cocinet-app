@@ -24,7 +24,7 @@ function smsLogPlugin() {
                   instanceId = '',
                   token = '',
                   phoneNumberId = '1333624529829399',
-                  accessToken = 'EAAWMw7qndssBSWTxw2J8Kh2cBTO126ku7OaDCsE3cl3V0R7zHUWR0XveLbZANKeGjpAOvLYOKH899ZCI1fT1HNN3Yl9DT6f9WlE6YV7CZBoJ3yM9pqZCKJCJdNfZCZAHDyUF6i7edZCNZAJTsVBxFMWoBBpn3J9IVKf1w8FRdbo9iFfPe5qZCQJx6pDXJsbEQpbaIThcf8VIHgzZBLP9YhHZAv2I5HZAYfwqSyZArLY983EyrZCRjt45ZC4Ql1zTU6K5CUUZCIptLNZCB5VoDS0rEynglNKrz'
+                  accessToken = 'EAAWMw7qndssBSerl6nOEugdvr44OCrAikaLe9NafpbiPbB0jobmxZCgo5CRREWlhV1FhO7GFvHDsqsTuYrwV46OfjZAQIjAaqUQqq8MCZBrv3sPxwk4kZC509TeKaxMyI8B01d4BTn7fiK3VtrinM9zgrKmP47nLQEjSZAFNycSzeh96h3qXhzvieAqUDVQZDZD'
                 } = data;
 
                 if (!to || !message) {
