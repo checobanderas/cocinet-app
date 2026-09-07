@@ -550,41 +550,27 @@ let UNIQUE_OWNERS: any[] = (() => {
 })();
 
 let OWNER_PINS: Record<string, string> = (() => {
+  const defaults: Record<string, string> = {};
+  for (let i = 1; i <= 30; i++) {
+    defaults[i.toString()] = (2000 + i * 10).toString();
+  }
   try {
     const cached = localStorage.getItem("cocinet_custom_owner_pins_v3");
-    if (cached) return JSON.parse(cached);
+    if (cached) return { ...defaults, ...JSON.parse(cached) };
   } catch (e) {}
-  return {
-    "1": "2010",
-    "2": "2020",
-    "3": "2030",
-    "4": "2040",
-    "5": "2050",
-    "6": "2060",
-    "7": "2070",
-    "8": "2080",
-    "9": "2090",
-    "10": "2100"
-  };
+  return defaults;
 })();
 
 let OWNER_SUPERVISOR_PINS: Record<string, string> = (() => {
+  const defaults: Record<string, string> = {};
+  for (let i = 1; i <= 30; i++) {
+    defaults[i.toString()] = (2001 + i * 10).toString();
+  }
   try {
     const cached = localStorage.getItem("cocinet_custom_supervisor_pins_v3");
-    if (cached) return JSON.parse(cached);
+    if (cached) return { ...defaults, ...JSON.parse(cached) };
   } catch (e) {}
-  return {
-    "1": "2011",
-    "2": "2021",
-    "3": "2031",
-    "4": "2041",
-    "5": "2051",
-    "6": "2061",
-    "7": "2071",
-    "8": "2081",
-    "9": "2091",
-    "10": "2101"
-  };
+  return defaults;
 })();
 
 const MAPS_API_KEY =
@@ -1094,16 +1080,6 @@ export default function App() {
               return false;
             };
             if (!hasCustom()) {
-              <LoginView
-                triggerAppNotification={triggerAppNotification}
-                users={users}
-                executeTenantTransfer={executeTenantTransfer}
-                resetTenantForm={resetTenantForm}
-                setCompaniesConfig={setCompaniesConfig}
-                searchCompanyQuery={searchCompanyQuery}
-                setSearchCompanyQuery={setSearchCompanyQuery}
-                setSelectedTenant={setSelectedTenant}
-              />
               setShowChangePinModal(true);
             }
 
@@ -1144,18 +1120,22 @@ export default function App() {
 
           setActiveOwnerFilter(matchedOwnerKey);
           localStorage.setItem("cocinet_active_owner_filter", matchedOwnerKey);
-          setIsOwnerUnlocked(true);
-          localStorage.setItem("cocinet_is_owner_unlocked", "true");
+          // Requiere forzosamente introducir el PIN de seguridad asignado al dueño
+          setIsOwnerUnlocked(false);
+          localStorage.setItem("cocinet_is_owner_unlocked", "false");
           
           setIsSystemsMode(false);
           localStorage.setItem("cocinet_is_systems", "false");
           setRestrictedOwnerKey(matchedOwnerKey);
           localStorage.setItem("cocinet_restricted_owner_key", matchedOwnerKey);
 
+          setShowPinPanel(true);
+          setLoginSubStep("tenant");
+
           triggerAppNotification(
-            "🔑 Código Propietario por Enlace",
-            `Filtrado automático activado para el propietario #${ownerParam}. Acceso rápido configurado.`,
-            "success"
+            "🔒 Propietario Seleccionado",
+            `Grupo de Propietario #${ownerParam} enfocado. Ingrese su PIN de 4 dígitos para acceder a sus sucursales.`,
+            "info"
           );
         }
       }
@@ -2538,35 +2518,38 @@ export default function App() {
         }
       });
 
+      const baseDefaultPins: Record<string, string> = {};
+      const baseDefaultSupervisorPins: Record<string, string> = {};
+      for (let i = 1; i <= 30; i++) {
+        baseDefaultPins[i.toString()] = (2000 + i * 10).toString();
+        baseDefaultSupervisorPins[i.toString()] = (2001 + i * 10).toString();
+      }
+
       const mergedPins = {
-        "1": "2010",
-        "2": "2020",
-        "3": "2030",
-        "4": "2040",
-        "5": "2050",
-        "6": "2060",
-        "7": "2070",
-        "8": "2080",
-        "9": "2090",
-        "10": "2100",
+        ...baseDefaultPins,
         ...cachedLocalPins,
         ...pins
       };
 
       const mergedSupervisorPins = {
-        "1": "2011",
-        "2": "2021",
-        "3": "2031",
-        "4": "2041",
-        "5": "2051",
-        "6": "2061",
-        "7": "2071",
-        "8": "2081",
-        "9": "2091",
-        "10": "2101",
+        ...baseDefaultSupervisorPins,
         ...cachedLocalSupervisorPins,
         ...supervisorPins
       };
+
+      // Ensure every owner in list has a valid pin assigned
+      mergedOwners.forEach(o => {
+        if (o && o.key) {
+          const k = o.key;
+          const kNum = parseInt(k, 10);
+          if (!mergedPins[k]) {
+            mergedPins[k] = (!isNaN(kNum) && kNum > 0 ? (2000 + kNum * 10) : 2026).toString();
+          }
+          if (!mergedSupervisorPins[k]) {
+            mergedSupervisorPins[k] = (!isNaN(kNum) && kNum > 0 ? (2001 + kNum * 10) : 2027).toString();
+          }
+        }
+      });
 
       setCustomOwners(mergedOwners);
       setCustomOwnerPins(mergedPins);
@@ -2697,6 +2680,27 @@ export default function App() {
       localStorage.setItem("cocinet_custom_owners_v3", JSON.stringify(updatedOwners));
       localStorage.setItem("cocinet_custom_owner_pins_v3", JSON.stringify(updatedPins));
       localStorage.setItem("cocinet_custom_supervisor_pins_v3", JSON.stringify(updatedSupervisorPins));
+
+      try {
+        const ownerKeyToSync = editingOwner ? editingOwner.key : (updatedOwners[updatedOwners.length - 1]?.key);
+        const newAdminPin = updatedPins[ownerKeyToSync];
+        if (ownerKeyToSync && newAdminPin) {
+          const allUsers = initializeUsersDatabase();
+          const ownerTenants = COMPANY_CATALOG.filter(c => c.ownerKey === ownerKeyToSync);
+          let usersChanged = false;
+          allUsers.forEach(u => {
+            const belongsToOwner = ownerTenants.some(t => t.id === u.tenantId);
+            if (belongsToOwner && (u.id.endsWith("-admin") || u.role === "admin")) {
+              u.pin = newAdminPin;
+              usersChanged = true;
+            }
+          });
+          if (usersChanged) {
+            localStorage.setItem("cocinet_users_db", JSON.stringify(allUsers));
+          }
+        }
+      } catch (e) {}
+
       setOwnersVersion(prev => prev + 1);
       setShowOwnerCrudModal(false);
       setEditingOwner(null);
@@ -6100,39 +6104,68 @@ export default function App() {
         let matchedRole = "Usuario";
 
         if (pendingTenant) {
-          let parsedNum = parseInt(pendingTenant.id.replace(/[^0-9]/g, ""), 10);
-          if (isNaN(parsedNum) || parsedNum <= 0) parsedNum = 1;
-          const tenantNum = (parsedNum % 100) || 1;
-          const oPin = (2026 + tenantNum).toString();
-          const mPin = (1526 + tenantNum).toString();
-          const sPin = "4020";
-          const c1Pin = (1026 + tenantNum).toString();
-          const c2Pin = (1126 + tenantNum).toString();
-          const g1Pin = (126 + tenantNum).toString().padStart(4, "0");
-          const g2Pin = (226 + tenantNum).toString().padStart(4, "0");
-          const g3Pin = (326 + tenantNum).toString().padStart(4, "0");
+          const ownerKey = pendingTenant.ownerKey;
+          const ownerPin = (ownerKey && OWNER_PINS[ownerKey]) || (ownerKey ? (2000 + (parseInt(ownerKey) || 1) * 10).toString() : "");
+          const supervisorPin = (ownerKey && OWNER_SUPERVISOR_PINS[ownerKey]) || (ownerKey ? (2001 + (parseInt(ownerKey) || 1) * 10).toString() : "");
+          
+          const companyUsers = getTenantUsers(pendingTenant.id);
+          const matchedUserInDb = companyUsers.find((u) => u.pin === nextPin);
 
-          if (nextPin === oPin) {
+          if (nextPin === masterAdminPin || nextPin === "2052") {
             isValidPin = true;
-            matchedRole = "Patrón (Dueño)";
-          } else if (nextPin === mPin) {
+            matchedRole = "Administrador Maestro 👑";
+            setIsMasterAdmin(true);
+            setIsOwnerUnlocked(true);
+            setActiveOwnerFilter(null);
+            setRestrictedOwnerKey(null);
+            localStorage.setItem("cocinet_is_owner_unlocked", "true");
+            localStorage.setItem("pos_master_admin", "true");
+            localStorage.removeItem("cocinet_active_owner_filter");
+            localStorage.removeItem("cocinet_restricted_owner_key");
+          } else if (nextPin === "4020") {
             isValidPin = true;
-            matchedRole = "Gerente (Administrador)";
-          } else if (nextPin === sPin) {
+            matchedRole = "Sistemas ⚙️";
+            setIsOwnerUnlocked(true);
+            setActiveOwnerFilter(null);
+            setIsSystemsMode(true);
+            setRestrictedOwnerKey(null);
+            localStorage.setItem("cocinet_is_owner_unlocked", "true");
+            localStorage.setItem("cocinet_is_systems", "true");
+            localStorage.removeItem("cocinet_active_owner_filter");
+            localStorage.removeItem("cocinet_restricted_owner_key");
+          } else if (ownerPin && nextPin === ownerPin) {
             isValidPin = true;
-            matchedRole = "Sistemas";
-          } else if (nextPin === c1Pin) {
+            matchedRole = "Patrón (Propietario) 👑";
+            setIsOwnerUnlocked(true);
+            setActiveOwnerFilter(ownerKey);
+            setRestrictedOwnerKey(ownerKey);
+            setIsSystemsMode(false);
+            localStorage.setItem("cocinet_is_owner_unlocked", "true");
+            localStorage.setItem("cocinet_active_owner_filter", ownerKey);
+            localStorage.setItem("cocinet_restricted_owner_key", ownerKey);
+            localStorage.setItem("cocinet_is_systems", "false");
+          } else if (supervisorPin && nextPin === supervisorPin) {
             isValidPin = true;
-            matchedRole = "Cajero 1";
-          } else if (nextPin === c2Pin) {
+            matchedRole = "Supervisor 📋";
+            setIsOwnerUnlocked(true);
+            setActiveOwnerFilter(ownerKey);
+            setRestrictedOwnerKey(ownerKey);
+            setIsSystemsMode(false);
+            localStorage.setItem("cocinet_is_owner_unlocked", "true");
+            localStorage.setItem("cocinet_active_owner_filter", ownerKey);
+            localStorage.setItem("cocinet_restricted_owner_key", ownerKey);
+            localStorage.setItem("cocinet_is_systems", "false");
+          } else if (matchedUserInDb) {
             isValidPin = true;
-            matchedRole = "Cajero 2";
-          } else if (nextPin === g1Pin || nextPin === g2Pin || nextPin === g3Pin) {
-            isValidPin = true;
-            matchedRole = "Mesero";
-          } else if (nextPin === "2026" || nextPin === "2027") {
-            isValidPin = true;
-            matchedRole = "Acceso Maestro";
+            matchedRole = matchedUserInDb.name;
+            if (matchedUserInDb.role === "admin" || matchedUserInDb.id.endsWith("-admin")) {
+              setIsOwnerUnlocked(true);
+              setActiveOwnerFilter(ownerKey);
+              setRestrictedOwnerKey(ownerKey);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              localStorage.setItem("cocinet_active_owner_filter", ownerKey);
+              localStorage.setItem("cocinet_restricted_owner_key", ownerKey);
+            }
           }
         }
 
@@ -6146,8 +6179,49 @@ export default function App() {
             setSelectedTableId(null);
 
             setSelectedTenant(pendingTenant);
-            if (pendingTenantContext === "login") {
+            localStorage.setItem("pos_selected_tenant", JSON.stringify(pendingTenant));
+
+            const tenantUsers = getTenantUsers(pendingTenant.id);
+            const ownerKey = pendingTenant.ownerKey;
+            const ownerPin = (ownerKey && OWNER_PINS[ownerKey]) || (ownerKey ? (2000 + (parseInt(ownerKey) || 1) * 10).toString() : "");
+            const supervisorPin = (ownerKey && OWNER_SUPERVISOR_PINS[ownerKey]) || (ownerKey ? (2001 + (parseInt(ownerKey) || 1) * 10).toString() : "");
+            const matchedUserInDb = tenantUsers.find((u) => u.pin === nextPin);
+
+            let targetUser: User | null = null;
+            if (nextPin === "4020") {
+              targetUser = tenantUsers.find(u => u.id.endsWith("-sistemas")) || {
+                id: `${pendingTenant.id}-sistemas`,
+                name: `Sistemas (${pendingTenant.name}) ⚙️`,
+                role: "admin",
+                pin: "4020",
+                avatar: "fa-solid fa-laptop-code",
+                tenantId: pendingTenant.id,
+              };
+            } else if ((ownerPin && nextPin === ownerPin) || (supervisorPin && nextPin === supervisorPin)) {
+              targetUser = tenantUsers.find(u => u.id.endsWith("-admin")) || {
+                id: `${pendingTenant.id}-admin`,
+                name: `Propietario (${pendingTenant.name}) 👑`,
+                role: "admin",
+                pin: nextPin,
+                avatar: "fa-solid fa-user-shield",
+                tenantId: pendingTenant.id,
+              };
+            } else if (matchedUserInDb) {
+              targetUser = matchedUserInDb;
+            }
+
+            if (targetUser) {
+              setCurrentUser(targetUser);
+              if (targetUser.role === "admin" || targetUser.id.endsWith("-sistemas")) {
+                setAppMode("corte-tabla");
+              } else {
+                setAppMode(getPreferredTablesMode());
+              }
+            } else {
               setLoginSubStep("user");
+            }
+
+            if (pendingTenantContext === "login") {
               triggerAppNotification(
                 "🏢 Acceso Autorizado",
                 `Conectado a ${pendingTenant.name} como [${matchedRole}]. Sincronizando datos...`,
@@ -13032,7 +13106,15 @@ Instrucciones:
         targetCancellationFolio={targetCancellationFolio}
       />
       {isSwitchingTenant && renderSwitchingTenantOverlay()}
-      {showTenantPinModal && renderPinModalOverlay()}
+      <PinModalOverlay
+        showTenantPinModal={showTenantPinModal}
+        setShowTenantPinModal={setShowTenantPinModal}
+        pendingTenant={pendingTenant}
+        setPendingTenant={setPendingTenant}
+        typedPin={typedPin}
+        setTypedPin={setTypedPin}
+        handlePinNumericPress={handlePinNumericPress}
+      />
       <BranchSwitcherModal
           showBranchSwitcherModal={showBranchSwitcherModal}
           setShowBranchSwitcherModal={setShowBranchSwitcherModal}
@@ -13162,7 +13244,11 @@ Instrucciones:
           existingSubgroups={existingSubgroups}
           setRelationMatches={setRelationMatches}
           COMPANY_CATALOG={COMPANY_CATALOG}
-          ownerBranches={COMPANY_CATALOG.filter(c => c.ownerKey === (currentUser?.ownerKey || (currentUser?.id || "").replace("-admin", "")))}
+          selectedTenant={selectedTenant}
+          customOwners={customOwners}
+          activeOwnerFilter={activeOwnerFilter}
+          restrictedOwnerKey={restrictedOwnerKey}
+          ownerBranches={COMPANY_CATALOG.filter(c => c.ownerKey === (selectedTenant?.ownerKey || activeOwnerFilter || (currentUser?.id || "").replace("-admin", "")))}
           allProducts={products}
           existing={null}
           tid={null}

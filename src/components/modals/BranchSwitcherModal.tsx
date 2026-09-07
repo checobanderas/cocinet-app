@@ -44,6 +44,10 @@ export const BranchSwitcherModal: React.FC<BranchSwitcherModalProps> = ({
       const isVisible = conf ? conf.visible : true;
       if (!isVisible) return false;
 
+      if (!isSistemas && restrictedOwnerKey && company.ownerKey !== restrictedOwnerKey) {
+        return false;
+      }
+
       if (!isSistemas && ownerKey && company.ownerKey !== ownerKey) {
         return false;
       }

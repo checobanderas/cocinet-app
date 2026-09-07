@@ -277,12 +277,29 @@ export const getDefaultUsersList = (): User[] => {
     else if (tenant.ownerKey === "5") ownerDisplayName = () => "San Sebastián";
     else ownerDisplayName = () => tenant.propietario;
 
+    const ownerKey = tenant.ownerKey || tenantNum.toString();
+    let defaultOwnerPin = "";
+    try {
+      const cachedPinsStr = localStorage.getItem("cocinet_custom_owner_pins_v3");
+      if (cachedPinsStr) {
+        const cachedPins = JSON.parse(cachedPinsStr);
+        if (cachedPins[ownerKey]) {
+          defaultOwnerPin = cachedPins[ownerKey];
+        }
+      }
+    } catch (e) {}
+
+    if (!defaultOwnerPin) {
+      const parsedKey = parseInt(ownerKey, 10);
+      defaultOwnerPin = (!isNaN(parsedKey) && parsedKey > 0 ? (2000 + parsedKey * 10) : (2026 + tenantNum)).toString();
+    }
+
     const baseUsers: User[] = [
       {
         id: `${tenant.id}-admin`,
         name: `Propietario: ${ownerDisplayName()} 👑`,
         role: "admin",
-        pin: getUserPin(`${tenant.id}-admin`, (2026 + tenantNum).toString()),
+        pin: getUserPin(`${tenant.id}-admin`, defaultOwnerPin),
         avatar: tenant.avatar === "🤠" ? "fa-solid fa-hat-cowboy" : "fa-solid fa-user-shield",
         tenantId: tenant.id,
       },

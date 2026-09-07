@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 import { logoToUse, logoUrl } from 'ionicons/icons';
 import { getLockedTerminalTenantId } from '../../services/pwaTerminalService';
+import { LandingIntroView } from './LandingIntroView';
 
 interface LoginViewProps {
   setCompanyCatalog: any;
@@ -307,6 +308,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [confirmMasterPinInput, setConfirmMasterPinInput] = React.useState("");
   const [isSavingMasterPin, setIsSavingMasterPin] = React.useState(false);
 
+  const [showLandingIntro, setShowLandingIntro] = React.useState<boolean>(() => {
+    try {
+      const locked = getLockedTerminalTenantId();
+      if (locked) return false;
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("tenant") || urlParams.get("token") || urlParams.get("owner")) return false;
+    } catch (e) {}
+    return true;
+  });
+
   // 🏢 Resolver Tenant activo e identidad de marca (Logo / Avatar / Nombre)
   const lockedTerminalId = typeof window !== "undefined" ? getLockedTerminalTenantId() : null;
   const effectiveTenant = selectedTenant || (lockedTerminalId ? COMPANY_CATALOG?.find((c: any) => c.id === lockedTerminalId) : null);
@@ -320,6 +331,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const resolvedTenantAvatar = effectiveTenant?.avatar || "🍽️";
   const resolvedAccentColor = effectiveTenant?.accentColor || "#2563eb";
   const neutralPlatformLogo = "https://img.icons8.com/fluency/256/restaurant.png";
+
+  if (showLandingIntro && !showPinPanel) {
+    return (
+      <LandingIntroView
+        onEnterLogin={() => setShowLandingIntro(false)}
+        resolvedTenantName={resolvedTenantName}
+        neutralPlatformLogo={neutralPlatformLogo}
+      />
+    );
+  }
 
 return (
       <IonPage>
@@ -539,6 +560,21 @@ return (
                     pointerEvents: "none",
                   }}
                 ></div>
+
+                {/* 🌐 Botón para ir a la Página de Presentación Comercial COCINET */}
+                <div className="absolute top-4 left-4 z-30 no-pin-trigger">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowLandingIntro(true);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#e6dbbf] hover:bg-[#d8cbb0] text-[#4a3f35] border border-[#8c7c68]/40 text-xs font-black flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none"
+                    title="Ver presentación y beneficios del sistema COCINET POS"
+                  >
+                    <span>🌐 Conocer Cocinet POS</span>
+                  </button>
+                </div>
 
                 {/* 🌊 MARCA DE AGUA DEL LOGO OFICIAL COCINET / TENANT */}
                 {/* 🎨 EMBLEMA / LOGO DE FONDO (MARCA DE AGUA) */}
