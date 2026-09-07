@@ -148,10 +148,10 @@ export const PrecuentaItemView: React.FC<PrecuentaItemViewProps> = ({
                             handleResendCancellationNotification(item, folio, selectedTable);
                           }
                         }}
-                        className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[9px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs border-none cursor-pointer transition-all uppercase tracking-tight"
-                        title="Reenviar notificación SMS/WhatsApp a los administradores de esta sucursal"
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[9px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs border-none cursor-pointer transition-all uppercase tracking-tight"
+                        title="Reenviar enlace de autorización por WhatsApp silencioso a los administradores de esta sucursal"
                       >
-                        <span>📲</span> Reenviar SMS
+                        <i className="fa-brands fa-whatsapp text-[10px]" /> Reenviar WhatsApp
                       </button>
                     </div>
                   )}

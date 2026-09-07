@@ -9720,8 +9720,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (matchingNotif?.id) {
         recordCancellationTimelineEvent(matchingNotif.id, {
           stage: "dispatched",
-          title: "📲 Notificación SMS/WhatsApp Reenviada",
-          description: `Reenvío manual de notificación SMS solicitado desde la comanda por ${currentUser?.name || 'Mesero/Cajero'}.`,
+          title: "💬 Notificación WhatsApp Reenviada",
+          description: `Reenvío manual de enlace de autorización por WhatsApp solicitado desde la comanda por ${currentUser?.name || 'Mesero/Cajero'}.`,
           actor: currentUser?.name || 'Mesero/Cajero',
           deviceInfo: getSimplifiedDeviceInfo(),
           status: "ok",
@@ -9729,8 +9729,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       }
 
       triggerAppNotification(
-        "📲 Notificación Reenviada",
-        `Se reenvió la alerta SMS/WhatsApp de la solicitud #${cancellationFolio} al propietario y administradores de ${branchName}.`,
+        "💬 WhatsApp Reenviado",
+        `Se reenvió el enlace de autorización por WhatsApp de la solicitud #${cancellationFolio} al propietario y administradores de ${branchName}.`,
         "success"
       );
     } catch (err) {
