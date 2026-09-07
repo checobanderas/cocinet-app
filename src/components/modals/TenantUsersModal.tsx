@@ -70,6 +70,10 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         triggerAppNotification('Faltan Credenciales ⚠️', 'Ingresa tu Instance ID y Token de UltraMsg.', 'warning');
         return;
       }
+      if (provider === 'meta' && (!phoneNumberId.trim() || !accessToken.trim())) {
+        triggerAppNotification('Faltan Credenciales ⚠️', 'Ingresa tu Phone Number ID y Access Token de Meta.', 'warning');
+        return;
+      }
       if (!testPhone.trim()) {
         triggerAppNotification('Teléfono Requerido 📱', 'Ingresa un número celular para probar.', 'warning');
         return;
@@ -78,28 +82,32 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       setIsSendingTest(true);
       handleSaveConfig();
 
-      const result = await sendSilentWhatsAppMessage(
-        testPhone.trim(),
-        `🌮 *COCINET PRO: PRUEBA DE CORTE SILENCIOSO*\n\n¡Hola! El sistema de envío automático en segundo plano está funcionando al 100%. 🚀✨\n\n🟢 *Servicio:* ${provider.toUpperCase()}\n⏰ *Fecha:* ${new Date().toLocaleString('es-MX')}\n📊 *Estado:* Conexión Exitosa`,
-        {
-          provider,
-          instanceId: instanceId.trim(),
-          token: token.trim(),
-          phoneNumberId: phoneNumberId.trim(),
-          accessToken: accessToken.trim(),
-        }
-      );
-
-      setIsSendingTest(false);
-
-      if (result.success) {
-        triggerAppNotification(
-          '¡WhatsApp Silencioso Entregado! ✅🚀',
-          `Mensaje entregado con éxito a +52 ${testPhone} (ID: ${result.messageId}).`,
-          'success'
+      try {
+        const result = await sendSilentWhatsAppMessage(
+          testPhone.trim(),
+          `🌮 *COCINET PRO: PRUEBA DE MENSAJE SILENCIOSO*\n\n¡Hola! El sistema de envío automático en segundo plano está funcionando al 100%. 🚀✨\n\n🟢 *Servicio:* ${provider.toUpperCase()}\n⏰ *Fecha:* ${new Date().toLocaleString('es-MX')}\n📊 *Estado:* Conexión Exitosa`,
+          {
+            provider,
+            instanceId: instanceId.trim(),
+            token: token.trim(),
+            phoneNumberId: phoneNumberId.trim(),
+            accessToken: accessToken.trim(),
+          }
         );
-      } else {
-        triggerAppNotification('Error al Enviar ❌', result.error || 'Verifica tus credenciales.', 'error');
+
+        if (result.success) {
+          triggerAppNotification(
+            '¡WhatsApp Silencioso Entregado! ✅🚀',
+            `Mensaje entregado con éxito a +52 ${testPhone} (ID: ${result.messageId}).`,
+            'success'
+          );
+        } else {
+          triggerAppNotification('Error al Enviar ❌', result.error || 'Verifica tus credenciales de WhatsApp.', 'error');
+        }
+      } catch (err: any) {
+        triggerAppNotification('Error Inesperado ⚠️', err.message || 'Error al conectar con el servidor.', 'error');
+      } finally {
+        setIsSendingTest(false);
       }
     };
 
