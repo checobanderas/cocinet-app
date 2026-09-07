@@ -32,8 +32,8 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
 }) => {
     const [showWhatsAppPanel, setShowWhatsAppPanel] = useState(false);
     const [provider, setProvider] = useState<any>('ultramsg');
-    const [instanceId, setInstanceId] = useState('instance190130');
-    const [token, setToken] = useState('ayi9d3764t8h8t7s');
+    const [instanceId, setInstanceId] = useState('instance190849');
+    const [token, setToken] = useState('bkhjvsg23hizl211');
     const [phoneNumberId, setPhoneNumberId] = useState('');
     const [accessToken, setAccessToken] = useState('');
     const [testPhone, setTestPhone] = useState('9511273796');
@@ -44,8 +44,8 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       const cfg = getWhatsAppCloudConfig();
       if (cfg) {
         setProvider(cfg.provider || 'ultramsg');
-        setInstanceId(cfg.instanceId || 'instance190130');
-        setToken(cfg.token || '');
+        setInstanceId(cfg.instanceId || 'instance190849');
+        setToken(cfg.token || 'bkhjvsg23hizl211');
         setPhoneNumberId(cfg.phoneNumberId || '');
         setAccessToken(cfg.accessToken || '');
       }

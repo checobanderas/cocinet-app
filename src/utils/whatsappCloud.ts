@@ -22,8 +22,8 @@ export interface WhatsAppGatewayConfig {
 const DEFAULT_CONFIG_KEY = "cocinet_whatsapp_cloud_config";
 
 /** Credenciales globales preconfiguradas para todos los tenants */
-const GLOBAL_DEFAULT_INSTANCE = "instance190130";
-const GLOBAL_DEFAULT_TOKEN = "ayi9d3764t8h8t7s";
+const GLOBAL_DEFAULT_INSTANCE = "instance190849";
+const GLOBAL_DEFAULT_TOKEN = "bkhjvsg23hizl211";
 
 /** Obtiene la configuración activa de WhatsApp guardada o la global por defecto */
 export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
@@ -32,10 +32,12 @@ export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
       const saved = localStorage.getItem(DEFAULT_CONFIG_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const inst = (!parsed.instanceId || parsed.instanceId === "instance190130") ? GLOBAL_DEFAULT_INSTANCE : parsed.instanceId;
+        const tok = (!parsed.token || parsed.token === "ayi9d3764t8h8t7s") ? GLOBAL_DEFAULT_TOKEN : parsed.token;
         return {
           provider: parsed.provider || "ultramsg",
-          instanceId: parsed.instanceId || GLOBAL_DEFAULT_INSTANCE,
-          token: parsed.token || GLOBAL_DEFAULT_TOKEN,
+          instanceId: inst,
+          token: tok,
           phoneNumberId: parsed.phoneNumberId || "",
           accessToken: parsed.accessToken || "",
           isEnabled: true,

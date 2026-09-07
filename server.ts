@@ -689,8 +689,8 @@ async function startServer() {
         to,
         message,
         provider = 'ultramsg',
-        instanceId = 'instance190130',
-        token = 'ayi9d3764t8h8t7s',
+        instanceId = 'instance190849',
+        token = 'bkhjvsg23hizl211',
         phoneNumberId,
         accessToken
       } = req.body || {};
