@@ -174,8 +174,13 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular de 10 dígitos.`, "warning");
         return;
       }
-      const testLink = `${window.location.origin}${window.location.pathname}?tenant=${modalTenant?.id || 'tenant-1'}&token=propietario`;
-      const msg = `Hola ${user.name}! 🔔 Alerta de prueba de Cocinet Pro:\n\nTu número está correctamente vinculado para recibir notificaciones y autorizaciones silenciosas.\n🔗 Acceso Directo:\n${testLink}`;
+      const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+        ? window.location.origin
+        : "https://cocinet-prueba.web.app";
+      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+      const testLink = `${publicBase}${cleanPath}?tenant=${modalTenant?.id || 'tenant-1'}`;
+      const msg = `Hola ${user.name}! 🔔\n\nTu número está correctamente vinculado para recibir notificaciones y autorizaciones en Cocinet Pro.\n\n🔗 *Enlace de Acceso:*\n\n${testLink}\n\n⚠️ *IMPORTANTE:* _No compartas tu contraseña para seguridad de la captura del sistema._`;
 
       triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Enviando mensaje de prueba a ${user.name}...`, "info");
       const res = await sendSilentWhatsAppMessage(user.phone, msg);
@@ -200,15 +205,23 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       }
     };
 
-    const handleShareAccessWA = async (user: any, accessLink: string) => {
+    const handleShareAccessWA = async (user: any, accessLink?: string) => {
       const phoneTarget = formatMexicoPhone(user.phone || "");
       if (!phoneTarget) {
         triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular de 10 dígitos.`, "warning");
         return;
       }
-      const msg = `Hola ${user.name}! 🔑 Aquí tienes tu acceso directo al sistema Cocinet Pro:\n\n🔗 ${accessLink}\n\nGuarda este enlace en tus favoritos.`;
 
-      triggerAppNotification("Enviando Acceso Silencioso 🚀", `Enviando enlace de acceso a ${user.name}...`, "info");
+      const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+        ? window.location.origin
+        : "https://cocinet-prueba.web.app";
+      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+      const cleanAccessLink = accessLink || `${publicBase}${cleanPath}?tenant=${modalTenant?.id || 'tenant-1'}`;
+
+      const msg = `Hola ${user.name}! 👋\n\n🔑 *Tus Credenciales de Acceso a Cocinet Pro:*\n🏪 *Sucursal:* ${modalTenant?.name || "Cocinet"}\n👤 *Usuario / Rol:* ${user.name} (${user.role.toUpperCase()})\n🔢 *Tu PIN / Contraseña:* *${user.pin || "Sin PIN asignado"}*\n\n🔗 *Enlace para ingresar al Sistema:*\n\n${cleanAccessLink}\n\n⚠️ *IMPORTANTE:* _No compartas tu contraseña para seguridad de la captura del sistema._`;
+
+      triggerAppNotification("Enviando Acceso Silencioso 🚀", `Enviando credenciales de acceso a ${user.name}...`, "info");
       const res = await sendSilentWhatsAppMessage(user.phone, msg);
 
       addNotificationDeliveryLog({
@@ -220,11 +233,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         channel: 'whatsapp',
         status: res.success ? 'success' : 'failed',
         detail: res.success ? `Enlace de acceso entregado silenciosamente a ${user.name}` : `Error al enviar enlace: ${res.error || 'Fallo API'}`,
-        targetUrl: accessLink,
+        targetUrl: cleanAccessLink,
       });
 
       if (res.success) {
-        triggerAppNotification("Acceso Entregado ✅", `Enlace enviado silenciosamente al WhatsApp de ${user.name}.`, "success");
+        triggerAppNotification("Acceso Entregado ✅", `Credenciales enviadas silenciosamente al WhatsApp de ${user.name}.`, "success");
       } else {
         triggerAppNotification("Error al Enviar Silencioso ⚠️", `No se pudo enviar vía pasarela: ${res.error}`, "warning");
       }
@@ -450,17 +463,12 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                     {modalUsers.map((user) => {
                       const isProtected = user.id.endsWith("-admin") || user.id.endsWith("-sistemas") || user.id.endsWith("-manager");
                       
-                      let roleLabel = user.id;
-                      if (user.id.endsWith("-admin")) roleLabel = "propietario";
-                      else if (user.id.endsWith("-manager")) roleLabel = "gerente";
-                      else if (user.id.endsWith("-sistemas")) roleLabel = "sistemas";
-                      else if (user.id.endsWith("-cajero-1")) roleLabel = "cajero1";
-                      else if (user.id.endsWith("-cajero-2")) roleLabel = "cajero2";
-                      else if (user.id.endsWith("-mesero-main")) roleLabel = "mesero1";
-                      else if (user.id.endsWith("-mesero-1")) roleLabel = "mesero2";
-                      else if (user.id.endsWith("-mesero-2")) roleLabel = "mesero3";
-                      
-                      const link = `${window.location.origin}${window.location.pathname}?tenant=${modalTenant.id}&token=${roleLabel}${roleLabel === "propietario" ? `&owner=${modalTenant.ownerKey}` : ""}`;
+                      const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+                        ? window.location.origin
+                        : "https://cocinet-prueba.web.app";
+                      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+                      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+                      const link = `${publicBase}${cleanPath}?tenant=${modalTenant.id}`;
                       
                       return (
                         <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">

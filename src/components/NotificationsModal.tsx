@@ -760,9 +760,12 @@ export default function NotificationsModal({
                 <button
                   onClick={() => {
                     const testFolio = "TEST-" + String(Date.now()).slice(-4);
-                    const origin = window.location.origin;
-                    const pathname = window.location.pathname;
-                    const testUrl = `${origin}${pathname}?tenant=tenant-1&token=sistemas&req=${testFolio}`;
+                    const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+                      ? window.location.origin
+                      : "https://cocinet-prueba.web.app";
+                    const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+                    const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+                    const testUrl = `${publicBase}${cleanPath}?tenant=tenant-1&token=sistemas&req=${testFolio}`;
 
                     const testNotif: NotificationItem = {
                       id: `test_${Date.now()}`,
@@ -793,7 +796,7 @@ export default function NotificationsModal({
 
                     setNotificationsList([testNotif, ...notificationsList]);
 
-                    sendSilentWhatsAppMessage("9511273796", `🧪 PRUEBA DE TRAZABILIDAD COCINET\nFolio: #${testFolio}\nPrueba de circuito de cancelación.\n🔗 Abrir Enlace:\n${testUrl}`)
+                    sendSilentWhatsAppMessage("9511273796", `🧪 *PRUEBA DE TRAZABILIDAD COCINET*\n📋 *Folio:* #${testFolio}\nPrueba de circuito de cancelación.\n\n🔗 *Enlace para Autorizar:*\n\n${testUrl}\n\n_Toca el enlace para probar el flujo de validación._`)
                       .then((res) => {
                         addNotificationDeliveryLog({
                           cancellationFolio: testFolio,
