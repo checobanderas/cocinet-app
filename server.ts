@@ -688,11 +688,11 @@ async function startServer() {
       const {
         to,
         message,
-        provider = 'ultramsg',
-        instanceId = 'instance190849',
-        token = 'bkhjvsg23hizl211',
-        phoneNumberId,
-        accessToken
+        provider = 'meta',
+        instanceId = '',
+        token = '',
+        phoneNumberId = '1333624529829399',
+        accessToken = 'EAAWMw7qndssBSWTxw2J8Kh2cBTO126ku7OaDCsE3cl3V0R7zHUWR0XveLbZANKeGjpAOvLYOKH899ZCI1fT1HNN3Yl9DT6f9WlE6YV7CZBoJ3yM9pqZCKJCJdNfZCZAHDyUF6i7edZCNZAJTsVBxFMWoBBpn3J9IVKf1w8FRdbo9iFfPe5qZCQJx6pDXJsbEQpbaIThcf8VIHgzZBLP9YhHZAv2I5HZAYfwqSyZArLY983EyrZCRjt45ZC4Ql1zTU6K5CUUZCIptLNZCB5VoDS0rEynglNKrz'
       } = req.body || {};
 
       if (!to || !message) {

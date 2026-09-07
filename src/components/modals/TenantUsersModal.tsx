@@ -358,87 +358,36 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                   </button>
                 </div>
 
-                {/* Selector de Proveedor */}
-                <div className="flex bg-slate-100 p-1 rounded-xl gap-1 max-w-md">
-                  <button
-                    type="button"
-                    onClick={() => setProvider('ultramsg')}
-                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition border-none cursor-pointer flex items-center justify-center gap-1.5 ${
-                      provider === 'ultramsg' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600'
-                    }`}
-                  >
-                    <span>⚡ UltraMsg (Por Código QR)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProvider('meta')}
-                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition border-none cursor-pointer flex items-center justify-center gap-1.5 ${
-                      provider === 'meta' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-transparent text-slate-600'
-                    }`}
-                  >
-                    <span>🏢 Meta Cloud API</span>
-                  </button>
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {provider === 'ultramsg' ? (
-                    <>
-                      <div>
-                        <label className="block text-xs font-black text-slate-700 mb-1">
-                          Instance ID (Identificador de Instancia) 🆔:
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej: instance190130"
-                          value={instanceId}
-                          onChange={(e) => setInstanceId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="block text-xs font-black text-slate-700">Token Secreto de UltraMsg 🔑:</label>
-                          <button
-                            type="button"
-                            onClick={() => setShowToken(!showToken)}
-                            className="text-[10px] text-emerald-600 font-bold bg-transparent border-none cursor-pointer"
-                          >
-                            {showToken ? 'Ocultar' : 'Mostrar'}
-                          </button>
-                        </div>
-                        <input
-                          type={showToken ? 'text' : 'password'}
-                          placeholder="Ej: ayi9d3764t8h8t7s..."
-                          value={token}
-                          onChange={(e) => setToken(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <label className="block text-xs font-black text-slate-700 mb-1">Phone Number ID de Meta 🆔:</label>
-                        <input
-                          type="text"
-                          placeholder="Ej: 104582910482910"
-                          value={phoneNumberId}
-                          onChange={(e) => setPhoneNumberId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-black text-slate-700 mb-1">Access Token de Meta (Bearer) 🔑:</label>
-                        <input
-                          type="password"
-                          placeholder="EAABw..."
-                          value={accessToken}
-                          onChange={(e) => setAccessToken(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1">Phone Number ID de Meta 🆔:</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 1333624529829399"
+                      value={phoneNumberId}
+                      onChange={(e) => setPhoneNumberId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-black text-slate-700">Access Token de Meta (Bearer) 🔑:</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowToken(!showToken)}
+                        className="text-[10px] text-indigo-600 font-bold bg-transparent border-none cursor-pointer"
+                      >
+                        {showToken ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      placeholder="EAABw..."
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Fila de Prueba y Guardado */}

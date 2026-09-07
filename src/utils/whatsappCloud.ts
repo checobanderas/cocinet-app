@@ -21,9 +21,9 @@ export interface WhatsAppGatewayConfig {
 /** Clave de almacenamiento en LocalStorage */
 const DEFAULT_CONFIG_KEY = "cocinet_whatsapp_cloud_config";
 
-/** Credenciales globales preconfiguradas para todos los tenants */
-const GLOBAL_DEFAULT_INSTANCE = "instance190849";
-const GLOBAL_DEFAULT_TOKEN = "bkhjvsg23hizl211";
+/** Credenciales oficiales de Meta Cloud API */
+const GLOBAL_DEFAULT_PHONE_NUMBER_ID = "1333624529829399";
+const GLOBAL_DEFAULT_ACCESS_TOKEN = "EAAWMw7qndssBSWTxw2J8Kh2cBTO126ku7OaDCsE3cl3V0R7zHUWR0XveLbZANKeGjpAOvLYOKH899ZCI1fT1HNN3Yl9DT6f9WlE6YV7CZBoJ3yM9pqZCKJCJdNfZCZAHDyUF6i7edZCNZAJTsVBxFMWoBBpn3J9IVKf1w8FRdbo9iFfPe5qZCQJx6pDXJsbEQpbaIThcf8VIHgzZBLP9YhHZAv2I5HZAYfwqSyZArLY983EyrZCRjt45ZC4Ql1zTU6K5CUUZCIptLNZCB5VoDS0rEynglNKrz";
 
 /** Obtiene la configuración activa de WhatsApp guardada o la global por defecto */
 export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
@@ -32,14 +32,12 @@ export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
       const saved = localStorage.getItem(DEFAULT_CONFIG_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const inst = (!parsed.instanceId || parsed.instanceId === "instance190130") ? GLOBAL_DEFAULT_INSTANCE : parsed.instanceId;
-        const tok = (!parsed.token || parsed.token === "ayi9d3764t8h8t7s") ? GLOBAL_DEFAULT_TOKEN : parsed.token;
         return {
-          provider: parsed.provider || "ultramsg",
-          instanceId: inst,
-          token: tok,
-          phoneNumberId: parsed.phoneNumberId || "",
-          accessToken: parsed.accessToken || "",
+          provider: parsed.provider || "meta",
+          instanceId: parsed.instanceId || "",
+          token: parsed.token || "",
+          phoneNumberId: parsed.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID,
+          accessToken: parsed.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN,
           isEnabled: true,
         };
       }
@@ -49,11 +47,11 @@ export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
   }
 
   return {
-    provider: "ultramsg",
-    instanceId: GLOBAL_DEFAULT_INSTANCE,
-    token: GLOBAL_DEFAULT_TOKEN,
-    phoneNumberId: "",
-    accessToken: "",
+    provider: "meta",
+    instanceId: "",
+    token: "",
+    phoneNumberId: GLOBAL_DEFAULT_PHONE_NUMBER_ID,
+    accessToken: GLOBAL_DEFAULT_ACCESS_TOKEN,
     isEnabled: true,
   };
 }
