@@ -3,7 +3,7 @@ import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonCo
 import { closeOutline, settingsOutline } from 'ionicons/icons';
 import { formatMexicoPhone } from '../../utils/appHelpers';
 import { requestFCMToken, triggerDeviceNotification, addNotificationDeliveryLog } from '../../utils/fcm';
-import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage, GLOBAL_DEFAULT_PHONE_NUMBER_ID, GLOBAL_DEFAULT_ACCESS_TOKEN } from '../../utils/whatsappCloud';
 
 interface TenantUsersModalProps {
   showTenantUsersModal: boolean;
@@ -31,11 +31,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
   triggerAppNotification
 }) => {
     const [showWhatsAppPanel, setShowWhatsAppPanel] = useState(false);
-    const [provider, setProvider] = useState<any>('ultramsg');
-    const [instanceId, setInstanceId] = useState('instance190849');
-    const [token, setToken] = useState('bkhjvsg23hizl211');
-    const [phoneNumberId, setPhoneNumberId] = useState('');
-    const [accessToken, setAccessToken] = useState('');
+    const [provider, setProvider] = useState<any>('meta');
+    const [instanceId, setInstanceId] = useState('');
+    const [token, setToken] = useState('');
+    const [phoneNumberId, setPhoneNumberId] = useState(GLOBAL_DEFAULT_PHONE_NUMBER_ID);
+    const [accessToken, setAccessToken] = useState(GLOBAL_DEFAULT_ACCESS_TOKEN);
     const [testPhone, setTestPhone] = useState('9511273796');
     const [showToken, setShowToken] = useState(false);
     const [isSendingTest, setIsSendingTest] = useState(false);
@@ -43,11 +43,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
     React.useEffect(() => {
       const cfg = getWhatsAppCloudConfig();
       if (cfg) {
-        setProvider(cfg.provider || 'ultramsg');
-        setInstanceId(cfg.instanceId || 'instance190849');
-        setToken(cfg.token || 'bkhjvsg23hizl211');
-        setPhoneNumberId(cfg.phoneNumberId || '');
-        setAccessToken(cfg.accessToken || '');
+        setProvider(cfg.provider || 'meta');
+        setInstanceId(cfg.instanceId || '');
+        setToken(cfg.token || '');
+        setPhoneNumberId(cfg.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID);
+        setAccessToken(cfg.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN);
       }
     }, [showTenantUsersModal]);
 

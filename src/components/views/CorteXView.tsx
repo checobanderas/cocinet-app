@@ -1,5 +1,6 @@
 import { getMexicoISOString } from '../../utils/firestore';
-import { getProductReportName, getProductSortScore } from '../../utils/appHelpers';
+import { getProductReportName, getProductSortScore, getTenantUsers } from '../../utils/appHelpers';
+import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
@@ -342,10 +343,46 @@ if (currentUser?.role === "mesero") {
       return text;
     };
 
-    const handleShareWhatsApp = () => {
+    const handleShareWhatsApp = async () => {
       const text = getCorteText();
-      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-      window.open(url, "_blank");
+      const phonesSet = new Set<string>();
+      const recipients: Array<{ name: string; phone: string }> = [];
+      const addRecipient = (name: string, rawPhone?: string) => {
+        if (!rawPhone) return;
+        const clean = rawPhone.replace(/\D/g, "");
+        if (clean.length >= 10 && !phonesSet.has(clean)) {
+          phonesSet.add(clean);
+          recipients.push({ name, phone: clean });
+        }
+      };
+      try {
+        const saved = localStorage.getItem("pos_selected_tenant");
+        const tid = saved ? JSON.parse(saved)?.id : (companyConfig?.tenantId || "tenant-1");
+        const users = getTenantUsers(tid);
+        users.forEach(u => {
+          if ((u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) && u.phone) {
+            addRecipient(u.name, u.phone);
+          }
+        });
+      } catch(e) {}
+      if (recipients.length === 0) {
+        addRecipient("Administrador", "9511273796");
+      }
+
+      let anySent = false;
+      for (const r of recipients) {
+        if (r.phone) {
+          const res = await sendSilentWhatsAppMessage(r.phone, text);
+          if (res.success) anySent = true;
+        }
+      }
+
+      if (anySent) {
+        alert("Corte X enviado exitosamente a WhatsApp ✅");
+      } else {
+        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank");
+      }
     };
 
     const handleCopyClipboard = () => {

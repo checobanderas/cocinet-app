@@ -22,8 +22,8 @@ export interface WhatsAppGatewayConfig {
 const DEFAULT_CONFIG_KEY = "cocinet_whatsapp_cloud_config";
 
 /** Credenciales oficiales de Meta Cloud API */
-const GLOBAL_DEFAULT_PHONE_NUMBER_ID = "1333624529829399";
-const GLOBAL_DEFAULT_ACCESS_TOKEN = "EAAWMw7qndssBSWTxw2J8Kh2cBTO126ku7OaDCsE3cl3V0R7zHUWR0XveLbZANKeGjpAOvLYOKH899ZCI1fT1HNN3Yl9DT6f9WlE6YV7CZBoJ3yM9pqZCKJCJdNfZCZAHDyUF6i7edZCNZAJTsVBxFMWoBBpn3J9IVKf1w8FRdbo9iFfPe5qZCQJx6pDXJsbEQpbaIThcf8VIHgzZBLP9YhHZAv2I5HZAYfwqSyZArLY983EyrZCRjt45ZC4Ql1zTU6K5CUUZCIptLNZCB5VoDS0rEynglNKrz";
+export const GLOBAL_DEFAULT_PHONE_NUMBER_ID = "1333624529829399";
+export const GLOBAL_DEFAULT_ACCESS_TOKEN = "EAAWMw7qndssBSWTxw2J8Kh2cBTO126ku7OaDCsE3cl3V0R7zHUWR0XveLbZANKeGjpAOvLYOKH899ZCI1fT1HNN3Yl9DT6f9WlE6YV7CZBoJ3yM9pqZCKJCJdNfZCZAHDyUF6i7edZCNZAJTsVBxFMWoBBpn3J9IVKf1w8FRdbo9iFfPe5qZCQJx6pDXJsbEQpbaIThcf8VIHgzZBLP9YhHZAv2I5HZAYfwqSyZArLY983EyrZCRjt45ZC4Ql1zTU6K5CUUZCIptLNZCB5VoDS0rEynglNKrz";
 
 /** Obtiene la configuración activa de WhatsApp guardada o la global por defecto */
 export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
@@ -32,8 +32,11 @@ export function getWhatsAppCloudConfig(): WhatsAppGatewayConfig {
       const saved = localStorage.getItem(DEFAULT_CONFIG_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const isUltraValid = parsed.provider === "ultramsg" && parsed.instanceId && parsed.instanceId !== "instance190849" && parsed.token && parsed.token !== "bkhjvsg23hizl211";
+        const provider: WhatsAppProvider = isUltraValid ? "ultramsg" : "meta";
+
         return {
-          provider: parsed.provider || "meta",
+          provider,
           instanceId: parsed.instanceId || "",
           token: parsed.token || "",
           phoneNumberId: parsed.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID,
@@ -67,8 +70,55 @@ export function saveWhatsAppCloudConfig(config: WhatsAppGatewayConfig): void {
   }
 }
 
+/** Helper para envío directo a Meta Cloud API */
+async function sendViaMetaCloudDirect(
+  phone: string,
+  text: string,
+  phoneNumberId?: string,
+  accessToken?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const effectivePhoneId = phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID;
+  const effectiveToken = accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN;
+  const endpoint = `https://graph.facebook.com/v19.0/${effectivePhoneId}/messages`;
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: phone,
+    type: "text",
+    text: {
+      preview_url: false,
+      body: text,
+    },
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${effectiveToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.messages?.[0]?.id) {
+      console.log("✅ WhatsApp enviado silenciosamente con Meta Cloud API. ID:", data.messages[0].id);
+      return { success: true, messageId: data.messages[0].id };
+    }
+
+    const errorMsg = data?.error?.message || "Error en la API de Meta";
+    console.warn("❌ Error de Meta WhatsApp:", data);
+    return { success: false, error: errorMsg };
+  } catch (err: any) {
+    console.warn("❌ Error de red directo con Meta:", err);
+    return { success: false, error: err.message || "Error de conexión con Meta." };
+  }
+}
+
 /**
- * Envía un mensaje de texto formateado 100% silencioso a través de UltraMsg o Meta Cloud API.
+ * Envía un mensaje de texto formateado 100% silencioso a través de Meta Cloud API (o UltraMsg si está activo).
  * @param toPhone Número de teléfono del destinatario (10 dígitos o con lada)
  * @param messageText Texto del mensaje (admite emojis, saltos de línea y formato *negrita*)
  * @param customConfig Configuración opcional personalizada
@@ -85,8 +135,7 @@ export async function sendSilentWhatsAppMessage(
     return { success: false, error: "Número de teléfono no válido." };
   }
 
-  // 1. Intentar envío a través del Proxy Backend / Cloud Function (/api/send-whatsapp)
-  // Esto elimina por completo los problemas de CORS y bloqueos del navegador en segundo plano
+  // 1. Intentar envío a través del Proxy Backend (/api/send-whatsapp)
   try {
     const proxyResponse = await fetch("/api/send-whatsapp", {
       method: "POST",
@@ -97,8 +146,8 @@ export async function sendSilentWhatsAppMessage(
         provider: config.provider,
         instanceId: config.instanceId,
         token: config.token,
-        phoneNumberId: config.phoneNumberId,
-        accessToken: config.accessToken,
+        phoneNumberId: config.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID,
+        accessToken: config.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN,
       }),
     });
 
@@ -108,6 +157,13 @@ export async function sendSilentWhatsAppMessage(
         console.log("✅ WhatsApp enviado silenciosamente vía Backend Proxy:", proxyData);
         return { success: true, messageId: proxyData.messageId };
       } else {
+        console.warn("⚠️ Proxy Backend retornó fallo:", proxyData.error);
+        // Si el proveedor que falló era UltraMsg, intentar fallback automático a Meta Cloud API
+        if (config.provider === "ultramsg") {
+          console.log("🔄 Reintentando con Meta Cloud API oficial...");
+          const metaResult = await sendViaMetaCloudDirect(cleanPhone, messageText, config.phoneNumberId, config.accessToken);
+          if (metaResult.success) return metaResult;
+        }
         return { success: false, error: proxyData.error || "Fallo en pasarela de WhatsApp" };
       }
     }
@@ -116,14 +172,7 @@ export async function sendSilentWhatsAppMessage(
   }
 
   // 2. Envío directo como fallback (UltraMsg)
-  if (config.provider === "ultramsg" || (!config.provider && config.instanceId)) {
-    if (!config.instanceId || !config.token) {
-      return {
-        success: false,
-        error: "UltraMsg no está configurado (Falta Instance ID o Token).",
-      };
-    }
-
+  if (config.provider === "ultramsg" && config.instanceId && config.token && config.instanceId !== "instance190849") {
     const cleanInstance = config.instanceId.trim();
     const endpoint = `https://api.ultramsg.com/${cleanInstance}/messages/chat`;
 
@@ -134,7 +183,7 @@ export async function sendSilentWhatsAppMessage(
       bodyParams.append("body", messageText);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -146,83 +195,23 @@ export async function sendSilentWhatsAppMessage(
       });
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        console.warn(`⚠️ UltraMsg respondió con código HTTP ${response.status} para instancia ${cleanInstance}.`);
-        return {
-          success: false,
-          error: `UltraMsg Error HTTP ${response.status}. Verifique que la instancia (${cleanInstance}) esté activa y configurada.`
-        };
-      }
-
       const data = await response.json().catch(() => ({}));
-
-      if (data.sent === "true" || data.sent === true || data.id) {
+      if (response.ok && (data.sent === "true" || data.sent === true || data.id)) {
         console.log("✅ WhatsApp enviado silenciosamente con UltraMsg. ID:", data.id);
         return { success: true, messageId: String(data.id) };
       } else {
-        const err = data.error || data.message || "Error al enviar con UltraMsg";
-        console.warn("⚠️ Advertencia de UltraMsg:", data);
-        return { success: false, error: String(err) };
+        console.warn("⚠️ UltraMsg falló directo, cambiando a Meta Cloud API...");
       }
     } catch (err: any) {
-      console.warn("⚠️ UltraMsg no disponible o conexión rechazada:", err?.message || err);
-      return { 
-        success: false, 
-        error: err.name === 'AbortError' 
-          ? 'Tiempo de espera agotado al conectar con UltraMsg.' 
-          : 'No se pudo conectar con la pasarela UltraMsg (verifique ID de instancia y suscripción).' 
-      };
+      console.warn("⚠️ UltraMsg directo no disponible, reintentando con Meta...");
     }
   }
 
-  // 3. Envío directo mediante Meta Cloud API Oficial
-  if (config.provider === "meta") {
-    if (!config.phoneNumberId || !config.accessToken) {
-      return {
-        success: false,
-        error: "WhatsApp Cloud API de Meta no está configurada (Falta Phone Number ID o Access Token).",
-      };
-    }
-
-    const endpoint = `https://graph.facebook.com/v19.0/${config.phoneNumberId}/messages`;
-
-    const payload = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: cleanPhone,
-      type: "text",
-      text: {
-        preview_url: false,
-        body: messageText,
-      },
-    };
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMsg = data?.error?.message || "Error en la API de Meta";
-        console.error("❌ Error de Meta WhatsApp:", data);
-        return { success: false, error: errorMsg };
-      }
-
-      const messageId = data?.messages?.[0]?.id;
-      console.log("✅ WhatsApp enviado silenciosamente con Meta. ID:", messageId);
-      return { success: true, messageId };
-    } catch (err: any) {
-      console.error("❌ Error de red con Meta:", err);
-      return { success: false, error: err.message || "Error de conexión con Meta." };
-    }
-  }
-
-  return { success: false, error: "Proveedor de WhatsApp no configurado." };
+  // 3. Fallback / Envío directo mediante Meta Cloud API Oficial
+  return await sendViaMetaCloudDirect(
+    cleanPhone,
+    messageText,
+    config.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID,
+    config.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN
+  );
 }

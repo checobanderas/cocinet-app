@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
 import { closeOutline, logoWhatsapp, qrCodeOutline } from 'ionicons/icons';
-import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage, WhatsAppProvider } from '../../utils/whatsappCloud';
+import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage, WhatsAppProvider, GLOBAL_DEFAULT_PHONE_NUMBER_ID, GLOBAL_DEFAULT_ACCESS_TOKEN } from '../../utils/whatsappCloud';
 
 interface MetaWhatsAppConfigModalProps {
   isOpen: boolean;
@@ -14,13 +14,13 @@ export const MetaWhatsAppConfigModal: React.FC<MetaWhatsAppConfigModalProps> = (
   onClose,
   triggerAppNotification,
 }) => {
-  const [provider, setProvider] = useState<WhatsAppProvider>('ultramsg');
+  const [provider, setProvider] = useState<WhatsAppProvider>('meta');
   // UltraMsg
   const [instanceId, setInstanceId] = useState('');
   const [token, setToken] = useState('');
   // Meta
-  const [phoneNumberId, setPhoneNumberId] = useState('');
-  const [accessToken, setAccessToken] = useState('');
+  const [phoneNumberId, setPhoneNumberId] = useState(GLOBAL_DEFAULT_PHONE_NUMBER_ID);
+  const [accessToken, setAccessToken] = useState(GLOBAL_DEFAULT_ACCESS_TOKEN);
   
   const [testPhone, setTestPhone] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -29,11 +29,11 @@ export const MetaWhatsAppConfigModal: React.FC<MetaWhatsAppConfigModalProps> = (
   useEffect(() => {
     if (isOpen) {
       const config = getWhatsAppCloudConfig();
-      setProvider(config.provider || 'ultramsg');
+      setProvider(config.provider || 'meta');
       setInstanceId(config.instanceId || '');
       setToken(config.token || '');
-      setPhoneNumberId(config.phoneNumberId || '');
-      setAccessToken(config.accessToken || '');
+      setPhoneNumberId(config.phoneNumberId || GLOBAL_DEFAULT_PHONE_NUMBER_ID);
+      setAccessToken(config.accessToken || GLOBAL_DEFAULT_ACCESS_TOKEN);
     }
   }, [isOpen]);
 

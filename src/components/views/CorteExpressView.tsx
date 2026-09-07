@@ -1,6 +1,8 @@
 import { ArqKeyboardModal } from '../modals/ArqKeyboardModal';
 import { ReceiptPreviewModal } from '../modals/ReceiptPreviewModal';
 import { getMexicoISOString } from '../../utils/firestore';
+import { getTenantUsers } from '../../utils/appHelpers';
+import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
@@ -1235,10 +1237,48 @@ if (currentUser?.role === "mesero") {
 
                   {/* Send via WhatsApp action */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const text = generateCorteExpressTicketText();
-                      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-                      window.open(url, "_blank");
+                      const phonesSet = new Set<string>();
+                      const recipients: Array<{ name: string; phone: string }> = [];
+                      const addRecipient = (name: string, rawPhone?: string) => {
+                        if (!rawPhone) return;
+                        const clean = rawPhone.replace(/\D/g, "");
+                        if (clean.length >= 10 && !phonesSet.has(clean)) {
+                          phonesSet.add(clean);
+                          recipients.push({ name, phone: clean });
+                        }
+                      };
+                      try {
+                        const saved = localStorage.getItem("pos_selected_tenant");
+                        const tid = saved ? JSON.parse(saved)?.id : (companyConfig?.tenantId || "tenant-1");
+                        const users = getTenantUsers(tid);
+                        users.forEach(u => {
+                          if ((u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) && u.phone) {
+                            addRecipient(u.name, u.phone);
+                          }
+                        });
+                      } catch(e) {}
+                      if (recipients.length === 0) {
+                        addRecipient("Administrador", "9511273796");
+                      }
+
+                      let anySent = false;
+                      for (const r of recipients) {
+                        if (r.phone) {
+                          const res = await sendSilentWhatsAppMessage(r.phone, text);
+                          if (res.success) anySent = true;
+                        }
+                      }
+
+                      if (anySent) {
+                        setMenuToastMessage("Corte Express enviado exitosamente por WhatsApp 🚀✅");
+                        setShowMenuToast(true);
+                        alert("Corte Express enviado exitosamente a WhatsApp ✅");
+                      } else {
+                        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+                        window.open(url, "_blank");
+                      }
                     }}
                     className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 py-2.5 px-3.5 rounded-2xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border-none outline-none"
                   >
