@@ -9836,9 +9836,9 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const totalVal = Number(account.total || (subtotalVal + tipVal - discountVal));
 
     let msg = `¡Hola! 👋 Te saludamos de *${bName}* 🌮🥤\n\n`;
-    msg += `Para generar tu factura electrónica, por favor ingresa o confirma tus datos fiscales en nuestro formulario seguro en línea:\n`;
-    msg += `🔗 ${portalUrl}\n\n`;
-    msg += `💡 *Si ya has facturado con nosotros anteriormente, al ingresar tu RFC o número celular tus datos se llenarán automáticamente.*\n\n`;
+    msg += `📄 *Para generar tu factura electrónica, haz clic en el siguiente enlace y registra tus datos fiscales:*\n\n`;
+    msg += `${portalUrl}\n\n`;
+    msg += `💡 *Si ya has facturado con nosotros, al ingresar tu RFC o celular tus datos se llenarán automáticamente.*\n\n`;
     msg += `📌 *DATOS DEL TICKET A FACTURAR:*\n`;
     msg += `🧾 *Folio:* ${folioStr}\n`;
     msg += `🪑 *Mesa:* ${tableLabel}\n`;

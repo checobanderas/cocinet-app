@@ -280,294 +280,303 @@ Tus datos fiscales han sido guardados y vinculados correctamente a tu consumo ${
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-start items-center p-3 sm:p-6 select-text overflow-y-auto">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl overflow-hidden my-auto">
-        
-        {/* Encabezado Principal */}
-        <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 p-5 sm:p-6 text-white relative">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner shrink-0">
-                🧾
-              </div>
-              <div>
-                <h1 className="text-xl font-black tracking-tight">{businessName}</h1>
-                <p className="text-xs text-amber-100 font-semibold">{branchSubtitle}</p>
-              </div>
-            </div>
-            {onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-sm font-bold transition border-none cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Ficha Resumen del Consumo (Ticket) si existe folio */}
-        {initialFolio && (
-          <div className="bg-slate-800/90 border-b border-slate-700/80 px-5 sm:px-6 py-3.5 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-slate-300">
-              <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Ticket a Facturar: <strong className="text-white font-mono font-bold">#{initialFolio}</strong></span>
-            </div>
-            {matchedAccount?.total && (
-              <div className="text-emerald-400 font-black font-mono text-sm">
-                ${Number(matchedAccount.total).toFixed(2)}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Cuerpo del Formulario */}
-        <div className="p-5 sm:p-7">
-          {saveStatus === "success" && savedDataSummary ? (
-            <div className="text-center py-6 space-y-6 animate-fadeIn">
-              <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-4xl shadow-xl shadow-emerald-500/10">
-                ✅
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-black text-white">¡Datos Fiscales Registrados!</h2>
-                <p className="text-sm text-slate-300 mt-2 max-w-md mx-auto">
-                  Tus datos han sido registrados con éxito. Tu factura electrónica CFDI 4.0 será generada y enviada a tu correo electrónico.
-                </p>
-              </div>
-
-              {/* Resumen de Datos Guardados */}
-              <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 text-left text-xs space-y-2.5 max-w-md mx-auto">
-                <div className="flex justify-between border-b border-slate-700/60 pb-2">
-                  <span className="text-slate-400 font-semibold">RFC Receptor:</span>
-                  <span className="font-mono font-bold text-amber-300">{savedDataSummary.rfc}</span>
+    <div 
+      className="fixed inset-0 z-[999999] bg-slate-950 text-slate-100 overflow-y-auto overscroll-y-contain select-text"
+      style={{
+        WebkitOverflowScrolling: "touch",
+        touchAction: "pan-y pinch-zoom"
+      }}
+    >
+      <div className="min-h-full w-full flex flex-col justify-start items-center p-3 sm:p-6 pb-36 sm:pb-48">
+        <div className="w-full max-w-xl bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl overflow-hidden my-4 sm:my-6">
+          
+          {/* Encabezado Principal */}
+          <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 p-5 sm:p-6 text-white relative">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner shrink-0">
+                  🧾
                 </div>
-                <div className="flex justify-between border-b border-slate-700/60 pb-2">
-                  <span className="text-slate-400 font-semibold">Razón Social:</span>
-                  <span className="font-bold text-white text-right">{savedDataSummary.razonSocial}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-700/60 pb-2">
-                  <span className="text-slate-400 font-semibold">Código Postal Fiscal:</span>
-                  <span className="font-mono font-bold text-white">{savedDataSummary.cp}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-700/60 pb-2">
-                  <span className="text-slate-400 font-semibold">Correo de Envío:</span>
-                  <span className="font-bold text-sky-400 truncate max-w-[220px]">{savedDataSummary.email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-semibold">Celular de Contacto:</span>
-                  <span className="font-mono font-bold text-slate-300">{savedDataSummary.phone}</span>
+                <div>
+                  <h1 className="text-xl font-black tracking-tight">{businessName}</h1>
+                  <p className="text-xs text-amber-100 font-semibold">{branchSubtitle}</p>
                 </div>
               </div>
-
-              <div className="p-4 bg-emerald-950/40 border border-emerald-800/60 rounded-2xl text-xs text-emerald-300 flex items-center gap-2.5 text-left max-w-md mx-auto">
-                <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-400" />
-                <span>Para futuros consumos, tus datos fiscales se recordarán automáticamente al ingresar tu RFC o celular.</span>
-              </div>
-
               {onClose && (
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full max-w-md mx-auto block bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition text-sm shadow-md border-none cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-sm font-bold transition border-none cursor-pointer"
                 >
-                  Cerrar
+                  ✕
                 </button>
               )}
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-              <div className="text-center mb-3">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center gap-2">
-                  <FileText className="w-5 h-5 text-amber-400" />
-                  Registro de Datos Fiscales
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Ingresa tu RFC y datos fiscales para emitir tu factura electrónica.
-                </p>
+          </div>
+
+          {/* Ficha Resumen del Consumo (Ticket) si existe folio */}
+          {initialFolio && (
+            <div className="bg-slate-800/90 border-b border-slate-700/80 px-5 sm:px-6 py-3.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-slate-300">
+                <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Ticket a Facturar: <strong className="text-white font-mono font-bold">#{initialFolio}</strong></span>
               </div>
+              {matchedAccount?.total && (
+                <div className="text-emerald-400 font-black font-mono text-sm">
+                  ${Number(matchedAccount.total).toFixed(2)}
+                </div>
+              )}
+            </div>
+          )}
 
-              {/* Badge de Reconocimiento / Autocomplete */}
-              {autoCompleted && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs text-amber-300">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>¡Cliente reconocido! <strong className="text-white">{matchedCustomerName}</strong></span>
+          {/* Cuerpo del Formulario */}
+          <div className="p-5 sm:p-7">
+            {saveStatus === "success" && savedDataSummary ? (
+              <div className="text-center py-6 space-y-6 animate-fadeIn">
+                <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-4xl shadow-xl shadow-emerald-500/10">
+                  ✅
+                </div>
+
+                <div>
+                  <h2 className="text-2xl font-black text-white">¡Datos Fiscales Registrados!</h2>
+                  <p className="text-sm text-slate-300 mt-2 max-w-md mx-auto">
+                    Tus datos han sido registrados con éxito. Tu factura electrónica CFDI 4.0 será generada y enviada a tu correo electrónico.
+                  </p>
+                </div>
+
+                {/* Resumen de Datos Guardados */}
+                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 text-left text-xs space-y-2.5 max-w-md mx-auto">
+                  <div className="flex justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-slate-400 font-semibold">RFC Receptor:</span>
+                    <span className="font-mono font-bold text-amber-300">{savedDataSummary.rfc}</span>
                   </div>
-                  <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
-                    Auto-rellenado
-                  </span>
+                  <div className="flex justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-slate-400 font-semibold">Razón Social:</span>
+                    <span className="font-bold text-white text-right">{savedDataSummary.razonSocial}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-slate-400 font-semibold">Código Postal Fiscal:</span>
+                    <span className="font-mono font-bold text-white">{savedDataSummary.cp}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-slate-400 font-semibold">Correo de Envío:</span>
+                    <span className="font-bold text-sky-400 truncate max-w-[220px]">{savedDataSummary.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Celular de Contacto:</span>
+                    <span className="font-mono font-bold text-slate-300">{savedDataSummary.phone}</span>
+                  </div>
                 </div>
-              )}
 
-              {errorMessage && (
-                <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{errorMessage}</span>
+                <div className="p-4 bg-emerald-950/40 border border-emerald-800/60 rounded-2xl text-xs text-emerald-300 flex items-center gap-2.5 text-left max-w-md mx-auto">
+                  <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-400" />
+                  <span>Para futuros consumos, tus datos fiscales se recordarán automáticamente al ingresar tu RFC o celular.</span>
                 </div>
-              )}
 
-              {/* Fila 1: Celular y RFC */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full max-w-md mx-auto block bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition text-sm shadow-md border-none cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+                <div className="text-center mb-3">
+                  <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center gap-2">
+                    <FileText className="w-5 h-5 text-amber-400" />
+                    Registro de Datos Fiscales
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Ingresa tu RFC y datos fiscales para emitir tu factura electrónica.
+                  </p>
+                </div>
+
+                {/* Badge de Reconocimiento / Autocomplete */}
+                {autoCompleted && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs text-amber-300">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>¡Cliente reconocido! <strong className="text-white">{matchedCustomerName}</strong></span>
+                    </div>
+                    <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                      Auto-rellenado
+                    </span>
+                  </div>
+                )}
+
+                {errorMessage && (
+                  <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                {/* Fila 1: Celular y RFC */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-amber-400" />
+                      Teléfono Celular *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="10 dígitos"
+                      value={phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-wider focus:outline-none transition"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">Llave para recordar tus datos</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                      RFC del Receptor *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={13}
+                      placeholder="12 o 13 caracteres"
+                      value={rfc}
+                      onChange={(e) => handleRfcChange(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-amber-300 rounded-xl px-3.5 py-2.5 text-sm font-black font-mono tracking-widest uppercase focus:outline-none transition"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">Ej. XAXX010101000</p>
+                  </div>
+                </div>
+
+                {/* Fila 2: Razón Social */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-amber-400" />
-                    Teléfono Celular *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="10 dígitos"
-                    value={phone}
-                    onChange={(e) => handlePhoneChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-wider focus:outline-none transition"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Llave para recordar tus datos</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                    RFC del Receptor *
+                    <User className="w-3.5 h-3.5 text-amber-400" />
+                    Nombre o Razón Social (Tal como aparece en tu Constancia Fiscal) *
                   </label>
                   <input
                     type="text"
                     required
-                    maxLength={13}
-                    placeholder="12 o 13 caracteres"
-                    value={rfc}
-                    onChange={(e) => handleRfcChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-amber-300 rounded-xl px-3.5 py-2.5 text-sm font-black font-mono tracking-widest uppercase focus:outline-none transition"
+                    placeholder="Ej. JUAN PEREZ LOPEZ"
+                    value={razonSocial}
+                    onChange={(e) => setRazonSocial(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold uppercase focus:outline-none transition"
                   />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Ej. XAXX010101000</p>
                 </div>
-              </div>
 
-              {/* Fila 2: Razón Social */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-amber-400" />
-                  Nombre o Razón Social (Tal como aparece en tu Constancia Fiscal) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. JUAN PEREZ LOPEZ"
-                  value={razonSocial}
-                  onChange={(e) => setRazonSocial(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold uppercase focus:outline-none transition"
-                />
-              </div>
-
-              {/* Fila 3: Régimen Fiscal */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Régimen Fiscal (SAT) *
-                </label>
-                <select
-                  value={regimenFiscal}
-                  onChange={(e) => setRegimenFiscal(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
-                >
-                  {SAT_REGIMENES_FISCALES.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.code} - {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Fila 4: Uso CFDI y Código Postal */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Fila 3: Régimen Fiscal */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Uso de CFDI *
+                    Régimen Fiscal (SAT) *
                   </label>
                   <select
-                    value={usoCfdi}
-                    onChange={(e) => setUsoCfdi(e.target.value)}
+                    value={regimenFiscal}
+                    onChange={(e) => setRegimenFiscal(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
                   >
-                    {SAT_USOS_CFDI.map((u) => (
-                      <option key={u.code} value={u.code}>
-                        {u.code} - {u.name}
+                    {SAT_REGIMENES_FISCALES.map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.code} - {r.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {/* Fila 4: Uso CFDI y Código Postal */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Uso de CFDI *
+                    </label>
+                    <select
+                      value={usoCfdi}
+                      onChange={(e) => setUsoCfdi(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
+                    >
+                      {SAT_USOS_CFDI.map((u) => (
+                        <option key={u.code} value={u.code}>
+                          {u.code} - {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      C.P. Fiscal (5 dígitos) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={5}
+                      placeholder="80000"
+                      value={cp}
+                      onChange={(e) => setCp(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-widest text-center focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Fila 5: Correo Electrónico */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
-                    C.P. Fiscal (5 dígitos) *
+                    <Mail className="w-3.5 h-3.5 text-amber-400" />
+                    Correo para Envío de Factura (XML y PDF) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="ejemplo@correo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-sky-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition"
+                  />
+                </div>
+
+                {/* Fila 6: Domicilio Fiscal */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Domicilio Fiscal (Calle, Número, Colonia, Municipio, Estado)
                   </label>
                   <input
                     type="text"
-                    required
-                    maxLength={5}
-                    placeholder="80000"
-                    value={cp}
-                    onChange={(e) => setCp(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-widest text-center focus:outline-none transition"
+                    placeholder="Opcional para tus registros fiscales"
+                    value={direccionFiscal}
+                    onChange={(e) => setDireccionFiscal(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2 text-xs focus:outline-none transition"
                   />
                 </div>
-              </div>
 
-              {/* Fila 5: Correo Electrónico */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5 text-amber-400" />
-                  Correo para Envío de Factura (XML y PDF) *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="ejemplo@correo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-sky-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition"
-                />
-              </div>
+                {/* Botón Guardar Prominente */}
+                <div className="pt-4 pb-2">
+                  <button
+                    type="submit"
+                    disabled={saveStatus === "saving"}
+                    className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black py-4 px-6 rounded-2xl shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2 transition transform active:scale-98 text-sm sm:text-base cursor-pointer border-none disabled:opacity-50"
+                  >
+                    {saveStatus === "saving" ? (
+                      <span>⏳ Guardando datos fiscales...</span>
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5" />
+                        <span>💾 GUARDAR DATOS Y GENERAR FACTURA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
 
-              {/* Fila 6: Domicilio Fiscal */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Domicilio Fiscal (Calle, Número, Colonia, Municipio, Estado)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Opcional para tus registros fiscales"
-                  value={direccionFiscal}
-                  onChange={(e) => setDireccionFiscal(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2 text-xs focus:outline-none transition"
-                />
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={saveStatus === "saving"}
-                  className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black py-3.5 px-6 rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition transform active:scale-98 text-sm cursor-pointer border-none disabled:opacity-50"
-                >
-                  {saveStatus === "saving" ? (
-                    <span>⏳ Guardando datos fiscales...</span>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      <span>💾 GUARDAR DATOS Y GENERAR FACTURA</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Pie de Página */}
-        <div className="bg-slate-950/80 border-t border-slate-800 px-6 py-4 text-center text-[11px] text-slate-500">
-          🔒 Tus datos fiscales están protegidos y son utilizados exclusivamente para la generación de tus Comprobantes Fiscales Digitales (CFDI).
+          {/* Pie de Página */}
+          <div className="bg-slate-950/80 border-t border-slate-800 px-6 py-4 text-center text-[11px] text-slate-500">
+            🔒 Tus datos fiscales están protegidos y son utilizados exclusivamente para la generación de tus Comprobantes Fiscales Digitales (CFDI).
+          </div>
         </div>
       </div>
     </div>

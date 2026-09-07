@@ -87,7 +87,7 @@ async function sendViaMetaCloudDirect(
     to: phone,
     type: "text",
     text: {
-      preview_url: false,
+      preview_url: true,
       body: text,
     },
   };
@@ -377,8 +377,9 @@ export async function sendInvoiceDataRequestWhatsApp(params: {
 ${greeting}
 Aquí tienes el comprobante de tu consumo:
 ${folio ? `🧾 *Folio:* #${folio}\n` : ''}${total ? `💰 *Total:* $${Number(total).toFixed(2)}\n` : ''}${itemsText ? `\n🛒 *Detalle del Consumo:*\n${itemsText}\n` : ''}
-📄 *Para generar tu factura, por favor registra tus datos fiscales en el siguiente formulario:*
-🔗 ${effectiveUrl}
+📄 *Para generar tu factura, haz clic en el siguiente enlace:*
+
+${effectiveUrl}
 
 💡 *Si ya has facturado con nosotros, al ingresar tu RFC o celular tus datos se llenarán automáticamente.*
 En cuanto completes tus datos, emitiremos tu factura y te llegará a tu correo. ✉️✨
