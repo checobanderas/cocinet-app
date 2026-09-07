@@ -10,6 +10,98 @@ function smsLogPlugin() {
     name: 'sms-log-plugin',
     configureServer(server: any) {
       server.middlewares.use((req: any, res: any, next: any) => {
+        if (req.url?.startsWith('/api/send-whatsapp')) {
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', (chunk: any) => { body += chunk; });
+            req.on('end', async () => {
+              try {
+                const data = JSON.parse(body || '{}');
+                const {
+                  to,
+                  message,
+                  provider = 'ultramsg',
+                  instanceId = 'instance190130',
+                  token = 'ayi9d3764t8h8t7s',
+                  phoneNumberId,
+                  accessToken
+                } = data;
+
+                if (!to || !message) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ success: false, error: 'Faltan parámetros: to o message' }));
+                  return;
+                }
+
+                const cleanDigits = String(to).replace(/\D/g, '');
+                const formattedPhone = cleanDigits.length === 10 ? `52${cleanDigits}` : cleanDigits;
+
+                if (provider === 'ultramsg' || (!provider && instanceId)) {
+                  const cleanInstance = String(instanceId).trim();
+                  const endpoint = `https://api.ultramsg.com/${cleanInstance}/messages/chat`;
+                  const bodyParams = new URLSearchParams();
+                  bodyParams.append('token', String(token).trim());
+                  bodyParams.append('to', formattedPhone);
+                  bodyParams.append('body', message);
+
+                  const apiRes = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: bodyParams.toString()
+                  });
+
+                  const resData: any = await apiRes.json().catch(() => ({}));
+                  res.setHeader('Content-Type', 'application/json');
+                  if (resData.sent === 'true' || resData.sent === true || resData.id) {
+                    res.end(JSON.stringify({ success: true, messageId: String(resData.id) }));
+                  } else {
+                    const errorMsg = resData.error || resData.message || `Error UltraMsg HTTP ${apiRes.status}`;
+                    res.end(JSON.stringify({ success: false, error: errorMsg }));
+                  }
+                  return;
+                } else if (provider === 'meta') {
+                  const endpoint = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+                  const payload = {
+                    messaging_product: 'whatsapp',
+                    recipient_type: 'individual',
+                    to: formattedPhone,
+                    type: 'text',
+                    text: { preview_url: false, body: message }
+                  };
+
+                  const apiRes = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${accessToken}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+
+                  const resData: any = await apiRes.json().catch(() => ({}));
+                  res.setHeader('Content-Type', 'application/json');
+                  if (apiRes.ok && resData?.messages?.[0]?.id) {
+                    res.end(JSON.stringify({ success: true, messageId: resData.messages[0].id }));
+                  } else {
+                    const errorMsg = resData?.error?.message || 'Error en la API de Meta';
+                    res.end(JSON.stringify({ success: false, error: errorMsg }));
+                  }
+                  return;
+                }
+
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Proveedor no soportado' }));
+              } catch (e: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: e.message }));
+              }
+            });
+            return;
+          }
+        }
         if (req.url?.startsWith('/api/sms-log') || req.url?.startsWith('/mensajes_sms.log')) {
           const logPath = path.resolve(process.cwd(), 'mensajes_sms.log');
           if (req.method === 'POST') {

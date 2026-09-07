@@ -85,7 +85,37 @@ export async function sendSilentWhatsAppMessage(
     return { success: false, error: "Número de teléfono no válido." };
   }
 
-  // 1. Envío mediante UltraMsg Gateway (QR)
+  // 1. Intentar envío a través del Proxy Backend / Cloud Function (/api/send-whatsapp)
+  // Esto elimina por completo los problemas de CORS y bloqueos del navegador en segundo plano
+  try {
+    const proxyResponse = await fetch("/api/send-whatsapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: cleanPhone,
+        message: messageText,
+        provider: config.provider,
+        instanceId: config.instanceId,
+        token: config.token,
+        phoneNumberId: config.phoneNumberId,
+        accessToken: config.accessToken,
+      }),
+    });
+
+    if (proxyResponse.ok) {
+      const proxyData = await proxyResponse.json();
+      if (proxyData.success) {
+        console.log("✅ WhatsApp enviado silenciosamente vía Backend Proxy:", proxyData);
+        return { success: true, messageId: proxyData.messageId };
+      } else {
+        return { success: false, error: proxyData.error || "Fallo en pasarela de WhatsApp" };
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy backend /api/send-whatsapp no disponible, intentando directo:", proxyErr);
+  }
+
+  // 2. Envío directo como fallback (UltraMsg)
   if (config.provider === "ultramsg" || (!config.provider && config.instanceId)) {
     if (!config.instanceId || !config.token) {
       return {
@@ -120,7 +150,7 @@ export async function sendSilentWhatsAppMessage(
         console.warn(`⚠️ UltraMsg respondió con código HTTP ${response.status} para instancia ${cleanInstance}.`);
         return {
           success: false,
-          error: `UltraMsg Error HTTP ${response.status}. Verifique que la instancia (${cleanInstance}) esté activa y configurada en UltraMsg.`
+          error: `UltraMsg Error HTTP ${response.status}. Verifique que la instancia (${cleanInstance}) esté activa y configurada.`
         };
       }
 
@@ -140,12 +170,12 @@ export async function sendSilentWhatsAppMessage(
         success: false, 
         error: err.name === 'AbortError' 
           ? 'Tiempo de espera agotado al conectar con UltraMsg.' 
-          : 'No se pudo conectar con la pasarela UltraMsg (verifique ID de instancia y conectividad).' 
+          : 'No se pudo conectar con la pasarela UltraMsg (verifique ID de instancia y suscripción).' 
       };
     }
   }
 
-  // 2. Envío mediante Meta Cloud API Oficial
+  // 3. Envío directo mediante Meta Cloud API Oficial
   if (config.provider === "meta") {
     if (!config.phoneNumberId || !config.accessToken) {
       return {

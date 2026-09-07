@@ -682,6 +682,82 @@ async function startServer() {
     }
   });
 
+  // 💬 Proxy backend para envío silencioso de WhatsApp (evita CORS y bloqueos de navegador)
+  app.post('/api/send-whatsapp', async (req, res) => {
+    try {
+      const {
+        to,
+        message,
+        provider = 'ultramsg',
+        instanceId = 'instance190130',
+        token = 'ayi9d3764t8h8t7s',
+        phoneNumberId,
+        accessToken
+      } = req.body || {};
+
+      if (!to || !message) {
+        return res.status(400).json({ success: false, error: 'Faltan parámetros: to o message' });
+      }
+
+      const cleanDigits = String(to).replace(/\D/g, '');
+      const formattedPhone = cleanDigits.length === 10 ? `52${cleanDigits}` : cleanDigits;
+
+      if (provider === 'ultramsg' || (!provider && instanceId)) {
+        const cleanInstance = String(instanceId).trim();
+        const endpoint = `https://api.ultramsg.com/${cleanInstance}/messages/chat`;
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('token', String(token).trim());
+        bodyParams.append('to', formattedPhone);
+        bodyParams.append('body', message);
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+
+        const data: any = await response.json().catch(() => ({}));
+        if (data.sent === 'true' || data.sent === true || data.id) {
+          return res.json({ success: true, messageId: String(data.id) });
+        } else {
+          const errorMsg = data.error || data.message || `Error UltraMsg HTTP ${response.status}`;
+          return res.json({ success: false, error: errorMsg });
+        }
+      } else if (provider === 'meta') {
+        const endpoint = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+        const payload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: formattedPhone,
+          type: 'text',
+          text: { preview_url: false, body: message }
+        };
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data: any = await response.json().catch(() => ({}));
+        if (response.ok && data?.messages?.[0]?.id) {
+          return res.json({ success: true, messageId: data.messages[0].id });
+        } else {
+          const errorMsg = data?.error?.message || 'Error en la API de Meta';
+          return res.json({ success: false, error: errorMsg });
+        }
+      }
+
+      return res.status(400).json({ success: false, error: 'Proveedor de WhatsApp no soportado.' });
+    } catch (err: any) {
+      console.error('Error en /api/send-whatsapp:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Error en el servidor proxy de WhatsApp' });
+    }
+  });
+
   // 📱 Registro de auditoría y trazabilidad en disco: mensajes_sms.log
   app.post('/api/sms-log', (req, res) => {
     try {

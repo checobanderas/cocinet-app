@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon } from '@ionic/react';
 import { closeOutline, settingsOutline } from 'ionicons/icons';
 import { formatMexicoPhone } from '../../utils/appHelpers';
-import { requestFCMToken, triggerDeviceNotification } from '../../utils/fcm';
+import { requestFCMToken, triggerDeviceNotification, addNotificationDeliveryLog } from '../../utils/fcm';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 
 interface TenantUsersModalProps {
@@ -136,38 +136,42 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         `💰 *EFECTIVO EN CAJA:* $0.00\n` +
         `🧾 Cuentas Cobradas: 0\n` +
         `-----------------------------------------\n` +
-        `📎 Archivo Excel: [Reporte_Diario_${(modalTenant?.name || "Cocinet").replace(/\s+/g, "_")}.xlsx]\n` +
-        `✨ _Prueba de envío automático configurada correctamente (Lada +52)._`;
+        `✨ _Prueba de envío silencioso en segundo plano configurada correctamente._`;
 
-      const metaConfig = getWhatsAppCloudConfig();
-      if ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken)) {
-        triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Enviando reporte en segundo plano a ${user.name}...`, "info");
-        const res = await sendSilentWhatsAppMessage(user.phone, text);
-        if (res.success) {
-          triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte entregado en segundo plano a +52 ${user.phone}.`, "success");
-          return;
-        } else {
-          console.warn("Fallo silent send:", res.error);
-          triggerAppNotification("Error API ⚠️", `No se pudo enviar en segundo plano: ${res.error}`, "warning");
-        }
+      triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Enviando reporte de prueba a ${user.name}...`, "info");
+      const res = await sendSilentWhatsAppMessage(user.phone, text);
+
+      addNotificationDeliveryLog({
+        tenantId: modalTenant?.id || 'tenant-1',
+        branchName: modalTenant?.name || 'Cocinet',
+        recipientName: user.name,
+        recipientRole: user.role || 'user',
+        recipientPhone: user.phone,
+        channel: 'whatsapp',
+        status: res.success ? 'success' : 'failed',
+        detail: res.success ? `WhatsApp corte de prueba enviado con éxito (ID: ${res.messageId || 'OK'})` : `Error al enviar: ${res.error || 'Fallo API'}`,
+      });
+
+      if (res.success) {
+        triggerAppNotification("WhatsApp Silencioso Entregado ✅🚀", `Reporte entregado en segundo plano a +52 ${user.phone}.`, "success");
+      } else {
+        console.warn("Fallo silent send corte:", res.error);
+        triggerAppNotification("Error al Enviar Silencioso ⚠️", `No se pudo enviar vía pasarela: ${res.error}`, "warning");
       }
-
-      const encoded = encodeURIComponent(text);
-      const waUrl = `https://wa.me/${phoneTarget}?text=${encoded}`;
-      window.open(waUrl, "_blank");
-      triggerAppNotification("WhatsApp Preparado 📲", `Corte de prueba preparado para ${user.name} (+52 ${user.phone || ""}).`, "success");
     };
 
     const handleSendDirectWA = async (user: any) => {
       const phoneTarget = formatMexicoPhone(user.phone || "");
       if (!phoneTarget) {
-        triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular.`, "warning");
+        triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular de 10 dígitos.`, "warning");
         return;
       }
       const testLink = `${window.location.origin}${window.location.pathname}?tenant=${modalTenant?.id || 'tenant-1'}&token=propietario`;
-      const msg = `Hola ${user.name}! 🔔 Alerta de prueba de Cocinet Pro:\n\nTu número está correctamente vinculado para recibir notificaciones y autorizaciones.\n🔗 Acceso Directo:\n${testLink}`;
+      const msg = `Hola ${user.name}! 🔔 Alerta de prueba de Cocinet Pro:\n\nTu número está correctamente vinculado para recibir notificaciones y autorizaciones silenciosas.\n🔗 Acceso Directo:\n${testLink}`;
 
+      triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Enviando mensaje de prueba a ${user.name}...`, "info");
       const res = await sendSilentWhatsAppMessage(user.phone, msg);
+
       addNotificationDeliveryLog({
         tenantId: modalTenant?.id || 'tenant-1',
         branchName: modalTenant?.name || 'Cocinet',
@@ -182,14 +186,40 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
 
       if (res.success) {
         triggerAppNotification("Aviso Entregado ✅", `Mensaje silencioso de prueba enviado al WhatsApp de ${user.name}.`, "success");
-        return;
       } else {
-        triggerAppNotification("Fallo Envío ⚠️", `No se pudo enviar vía API (${res.error}). Abriendo WhatsApp Web...`, "warning");
+        console.warn("Fallo silent send direct WA:", res.error);
+        triggerAppNotification("Error al Enviar Silencioso ⚠️", `No se pudo enviar vía pasarela: ${res.error}`, "warning");
       }
+    };
 
-      const encoded = encodeURIComponent(msg);
-      const waUrl = `https://wa.me/${phoneTarget}?text=${encoded}`;
-      window.open(waUrl, "_blank");
+    const handleShareAccessWA = async (user: any, accessLink: string) => {
+      const phoneTarget = formatMexicoPhone(user.phone || "");
+      if (!phoneTarget) {
+        triggerAppNotification("Teléfono Faltante 📱", `El usuario ${user.name} no tiene registrado un número celular de 10 dígitos.`, "warning");
+        return;
+      }
+      const msg = `Hola ${user.name}! 🔑 Aquí tienes tu acceso directo al sistema Cocinet Pro:\n\n🔗 ${accessLink}\n\nGuarda este enlace en tus favoritos.`;
+
+      triggerAppNotification("Enviando Acceso Silencioso 🚀", `Enviando enlace de acceso a ${user.name}...`, "info");
+      const res = await sendSilentWhatsAppMessage(user.phone, msg);
+
+      addNotificationDeliveryLog({
+        tenantId: modalTenant?.id || 'tenant-1',
+        branchName: modalTenant?.name || 'Cocinet',
+        recipientName: user.name,
+        recipientRole: user.role || 'user',
+        recipientPhone: user.phone,
+        channel: 'whatsapp',
+        status: res.success ? 'success' : 'failed',
+        detail: res.success ? `Enlace de acceso entregado silenciosamente a ${user.name}` : `Error al enviar enlace: ${res.error || 'Fallo API'}`,
+        targetUrl: accessLink,
+      });
+
+      if (res.success) {
+        triggerAppNotification("Acceso Entregado ✅", `Enlace enviado silenciosamente al WhatsApp de ${user.name}.`, "success");
+      } else {
+        triggerAppNotification("Error al Enviar Silencioso ⚠️", `No se pudo enviar vía pasarela: ${res.error}`, "warning");
+      }
     };
 
     const handleSendCloudPush = async (user: any, isCorte: boolean) => {
@@ -671,16 +701,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                               >
                                 📋 Copiar
                               </button>
-                              <button
+                               <button
                                 type="button"
-                                onClick={() => {
-                                  const rawPhone = (user.phone || "").replace(/\D/g, "");
-                                  const phoneTarget = rawPhone ? (rawPhone.length === 10 ? `52${rawPhone}` : rawPhone) : "";
-                                  const msg = encodeURIComponent(`Hola ${user.name}! Aquí tienes tu acceso directo de Cocinet Pro:\n\n${link}`);
-                                  const waUrl = phoneTarget ? `https://wa.me/${phoneTarget}?text=${msg}` : `https://wa.me/?text=${msg}`;
-                                  window.open(waUrl, "_blank");
-                                }}
+                                onClick={() => handleShareAccessWA(user, link)}
                                 className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
+                                title="Enviar enlace de acceso directo por WhatsApp Silencioso"
                               >
                                 🟢 WhatsApp
                               </button>
