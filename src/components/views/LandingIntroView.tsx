@@ -120,18 +120,19 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
       {/* ─── 🚀 HERO SECTION CON VIDEO/SHOWCASE ALEGRE ─────────────────── */}
       <section className="relative pt-10 pb-16 px-4 sm:px-8 max-w-6xl mx-auto text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-900 text-xs font-black uppercase tracking-widest shadow-xs">
-          ⚡ Diseñado para Taquerías, Restaurantes y Cadenas en México
+          ⚡ Software Punto de Venta Líder para Taquerías, Restaurantes, Cafeterías y Bares en México
         </div>
 
         <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-tight max-w-4xl mx-auto">
-          Multiplica tus Ventas, Blinda tu Caja y{" "}
+          El Software y Programa{" "}
           <span className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 bg-clip-text text-transparent">
-            Controla tu Restaurante con Alegría y Precisión
-          </span>
+            Punto de Venta Más Rápido y Completo
+          </span>{" "}
+          para tu Restaurante
         </h1>
 
         <p className="text-base sm:text-lg text-slate-700 font-medium max-w-3xl mx-auto leading-relaxed">
-          <b>COCINET</b> es el ecosistema gastronómico que acelera el servicio de meseros, automatiza comandas a cocina, controla tus inventarios con IA y timbra facturas CFDI 4.0 al instante.
+          <b>COCINET Pro</b> es el programa punto de venta gastronómico que acelera el servicio de meseros, automatiza comandas a cocina y barra, controla tus inventarios con IA, envía cortes automáticos por WhatsApp y timbra facturas CFDI 4.0 al instante.
           <span className="text-orange-800 font-bold block mt-1.5 bg-orange-100/70 py-1 px-3 rounded-xl border border-orange-300/80 inline-block shadow-xs">
             ✨ Disponible en RENTA MENSUAL flexible o VENTA DE LICENCIA definitiva.
           </span>
