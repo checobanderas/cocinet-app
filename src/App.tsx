@@ -9858,18 +9858,28 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     return msg;
   };
 
-  const handleSendWhatsAppInvoice = (account: any, e?: React.MouseEvent) => {
+  const handleSendWhatsAppInvoice = async (account: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const rawPhone = (account.invoicePhone || invoicePhone || "").replace(/\D/g, "");
     if (!rawPhone || rawPhone.length < 10) {
-      alert("⚠️ No hay un número de teléfono celular válido capturado para esta factura.");
+      triggerAppNotification("⚠️ Error", "No hay un número de teléfono celular válido capturado para esta factura.", "warning");
       return;
     }
-    const cleanPhone = rawPhone.length === 10 ? `52${rawPhone}` : rawPhone;
+    const cleanPhone = rawPhone.slice(-10);
     const msg = buildWhatsAppInvoiceMessage(account);
-    const encoded = encodeURIComponent(msg);
-    const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`;
-    window.open(waUrl, "_blank");
+
+    try {
+      triggerAppNotification("📲 ENVIANDO WHATSAPP", `Enviando solicitud y ticket silencioso a ${cleanPhone}...`, "info");
+      const res = await sendSilentWhatsAppMessage(cleanPhone, msg);
+      if (res.success) {
+        triggerAppNotification("✅ WHATSAPP ENVIADO", `Se envió silenciosamente el ticket y formulario fiscal al cliente (${cleanPhone}).`, "success");
+      } else {
+        triggerAppNotification("⚠️ Error WhatsApp", res.error || "No se pudo entregar el mensaje por WhatsApp.", "warning");
+      }
+    } catch (err) {
+      console.error("Error enviando WhatsApp silencioso:", err);
+      triggerAppNotification("⚠️ Error", "Error al enviar mensaje por WhatsApp.", "warning");
+    }
   };
 
   const handleQuickChangeAccountStatus = async (

@@ -360,10 +360,11 @@ export async function sendInvoiceDataRequestWhatsApp(params: {
   branchName: string;
   folio?: number | string;
   total?: number;
+  itemsText?: string;
   portalUrl?: string;
   tenantId?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { phone, clientName, branchName, folio, total, portalUrl, tenantId } = params;
+  const { phone, clientName, branchName, folio, total, itemsText, portalUrl, tenantId } = params;
 
   const effectiveUrl = portalUrl || generateInvoicePortalUrl({ phone, tenantId, folio });
 
@@ -374,14 +375,15 @@ export async function sendInvoiceDataRequestWhatsApp(params: {
 🏢 *${branchName}*
 
 ${greeting}
-Para poder emitir tu factura electrónica correspondiente a tu consumo ${folio ? `*(Folio #${folio})*` : ''}, por favor ingresa o confirma tus datos fiscales en el siguiente formulario seguro:
-
+Aquí tienes el comprobante de tu consumo:
+${folio ? `🧾 *Folio:* #${folio}\n` : ''}${total ? `💰 *Total:* $${Number(total).toFixed(2)}\n` : ''}${itemsText ? `\n🛒 *Detalle del Consumo:*\n${itemsText}\n` : ''}
+📄 *Para generar tu factura, por favor registra tus datos fiscales en el siguiente formulario:*
 🔗 ${effectiveUrl}
 
-💡 *Si ya has facturado con nosotros anteriormente, sólo ingresa tu RFC o celular y tus datos se completarán automáticamente.*
-${total ? `\n💰 *Total del Consumo:* $${Number(total).toFixed(2)}` : ''}
+💡 *Si ya has facturado con nosotros, al ingresar tu RFC o celular tus datos se llenarán automáticamente.*
+En cuanto completes tus datos, emitiremos tu factura y te llegará a tu correo. ✉️✨
 
-¡Muchas gracias por tu preferencia! 📄✨`;
+¡Muchas gracias por tu preferencia! 😊🙏`;
 
   return await sendSilentWhatsAppMessage(phone, text);
 }
