@@ -275,9 +275,12 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
   }, [pin, isProcessed, isSubmitting, notif]);
 
   return (
-    <div className="min-h-screen bg-slate-100 bg-gradient-to-br from-slate-50 via-rose-50/30 to-indigo-50/40 text-slate-800 flex flex-col items-center justify-start p-3 sm:p-6 font-sans">
+    <div
+      className="fixed inset-0 z-50 bg-slate-100 bg-gradient-to-br from-slate-50 via-rose-50/30 to-indigo-50/40 text-slate-800 flex flex-col items-center justify-start p-3 sm:p-6 pb-24 font-sans overflow-y-auto"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       {/* Barra Superior */}
-      <div className="w-full max-w-lg flex items-center justify-between py-2 border-b border-slate-200/80 mb-3 sm:mb-4">
+      <div className="w-full max-w-lg flex items-center justify-between py-2 border-b border-slate-200/80 mb-3 sm:mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-2xl bg-rose-600 flex items-center justify-center text-white font-black shadow-md shadow-rose-500/20 text-lg">
             🔔

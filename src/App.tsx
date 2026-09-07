@@ -1073,36 +1073,38 @@ export default function App() {
               localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
             }
 
-            if (loggedUser.role === "admin" || loggedUser.id.endsWith("-sistemas")) {
-              setAppMode("corte-tabla");
-            } else {
-              setAppMode(getPreferredTablesMode());
-            }
-            setLoginSubStep("tenant");
-            
-            // Set URL token flag
-            setIsUrlTokenSession(true);
-            localStorage.setItem("cocinet_is_url_token", "true");
-            
-            const hasCustom = () => {
-              try {
-                const customPinsStr = localStorage.getItem("cocinet_custom_pins");
-                if (customPinsStr) {
-                  const customPins = JSON.parse(customPinsStr);
-                  return !!customPins[loggedUser!.id];
-                }
-              } catch (e) {}
-              return false;
-            };
-            if (!hasCustom()) {
-              setShowChangePinModal(true);
-            }
+            if (!reqParam) {
+              if (loggedUser.role === "admin" || loggedUser.id.endsWith("-sistemas")) {
+                setAppMode("corte-tabla");
+              } else {
+                setAppMode(getPreferredTablesMode());
+              }
+              setLoginSubStep("tenant");
+              
+              // Set URL token flag
+              setIsUrlTokenSession(true);
+              localStorage.setItem("cocinet_is_url_token", "true");
+              
+              const hasCustom = () => {
+                try {
+                  const customPinsStr = localStorage.getItem("cocinet_custom_pins");
+                  if (customPinsStr) {
+                    const customPins = JSON.parse(customPinsStr);
+                    return !!customPins[loggedUser!.id];
+                  }
+                } catch (e) {}
+                return false;
+              };
+              if (!hasCustom()) {
+                setShowChangePinModal(true);
+              }
 
-            triggerAppNotification(
-              "🚀 Acceso Autorizado por Token",
-              `Bienvenido de vuelta, ${loggedUser.name}.`,
-              "success"
-            );
+              triggerAppNotification(
+                "🚀 Acceso Autorizado por Token",
+                `Bienvenido de vuelta, ${loggedUser.name}.`,
+                "success"
+              );
+            }
           } else {
             // No token or invalid token: just pre-configure device to this sucursal
             setCurrentUser(null);
@@ -5747,8 +5749,27 @@ export default function App() {
     },
   ]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
-  const [targetCancellationFolio, setTargetCancellationFolio] = useState<string | null>(null);
-  const [excelDownloadDay, setExcelDownloadDay] = useState<string | null>(null);
+  const [targetCancellationFolio, setTargetCancellationFolio] = useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const p = new URLSearchParams(window.location.search);
+        return (p.get("req") || p.get("cancellation") || p.get("folio") || "").trim() || null;
+      }
+    } catch (e) {}
+    return null;
+  });
+  const [excelDownloadDay, setExcelDownloadDay] = useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const p = new URLSearchParams(window.location.search);
+        const downloadParam = (p.get("download") || p.get("export") || "").trim().toLowerCase();
+        if (downloadParam === "excel" || downloadParam === "xlsx") {
+          return (p.get("date") || p.get("day") || p.get("fecha") || "").trim() || "today";
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
 
   // Reloj en tiempo real de México 🇲🇽
   const [mexicoTime, setMexicoTime] = useState<string>("");
@@ -13659,7 +13680,7 @@ Instrucciones:
     <IonApp>
       {currentUser && <InstallPWA />}
       <NotificationsModal 
-        isOpen={showNotificationModal}
+        isOpen={showNotificationModal && !targetCancellationFolio}
         onClose={() => {
           setShowNotificationModal(false);
           setTargetCancellationFolio(null);
