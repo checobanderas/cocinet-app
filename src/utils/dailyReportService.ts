@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, getTenantUsers, SUBCATEGORY_ORDER } from './appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from './whatsappCloud';
+import { storage } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export function getFriendlyTitleDate(todayOperatingDay: string): string {
   if (!todayOperatingDay) return "";
@@ -556,6 +558,200 @@ export function exportDailyReportExcel(
   XLSX.writeFile(wb, filename);
 }
 
+export async function generateAndSendExcelDailyReportToWhatsApp(
+  history: any[],
+  products: any[] = [],
+  targetDate?: string,
+  tenant?: any,
+  ticketBusinessName?: string
+): Promise<{ success: boolean; url?: string; filename?: string; error?: string }> {
+  try {
+    const todayOperatingDay = targetDate || getOperatingDay(new Date());
+    const friendlyTitleDate = getFriendlyTitleDate(todayOperatingDay);
+    const companyName = ticketBusinessName || tenant?.name || "Cocinet App";
+    const cleanCompany = (companyName || "Cocinet").replace(/[^a-zA-Z0-9]/g, "_");
+    const filename = `ReporteDiario_${cleanCompany}_${todayOperatingDay}.xlsx`;
+
+    const processed = processDailyReportData(history || [], products || [], targetDate);
+    const {
+      dailyHistory,
+      dailyCancellations,
+      paymentBreakdown,
+      totalProducts,
+      totalAccounts,
+      totalCancellations,
+      totalSoldPieces,
+      sortedDirectCatalog,
+      soldMap,
+      soldCatalogCount,
+      unsoldCatalogCount,
+    } = processed;
+
+    const wb = XLSX.utils.book_new();
+
+    // 1. DASHBOARD
+    let rIdx = 13;
+    const ws1Data: any[][] = [
+      [`📊 REPORTE DIARIO DE OPERACIÓN Y VENTAS - ${companyName.toUpperCase()}`],
+      [`Fecha de Operación: ${friendlyTitleDate} (Día Contable: ${todayOperatingDay}) | Generado: ${new Date().toLocaleString()}`],
+      [''],
+      ['1. RESUMEN FINANCIERO Y FORMAS DE PAGO'],
+      ['Concepto / Canal', '', 'Monto Recaudado ($)', '', '% Participación', '', 'Notas / Detalle', ''],
+      ['💵 Efectivo en Caja', '', Number(paymentBreakdown.cash.toFixed(2)), '', totalAccounts > 0 ? `${((paymentBreakdown.cash / totalAccounts) * 100).toFixed(1)}%` : '0%', '', 'Cobros en efectivo', ''],
+      ['💳 Tarjetas Bancarias', '', Number(paymentBreakdown.card.toFixed(2)), '', totalAccounts > 0 ? `${((paymentBreakdown.card / totalAccounts) * 100).toFixed(1)}%` : '0%', '', 'Terminal TPV', ''],
+      ['📲 Transferencias', '', Number(paymentBreakdown.transfer.toFixed(2)), '', totalAccounts > 0 ? `${((paymentBreakdown.transfer / totalAccounts) * 100).toFixed(1)}%` : '0%', '', 'SPEI / QR', ''],
+      ['🏷️ Descuentos', '', Number((-paymentBreakdown.discount).toFixed(2)), '', '', '', 'Deducciones', ''],
+      ['TOTAL GENERAL NETO:', '', Number((totalProducts - paymentBreakdown.discount).toFixed(2)), '', '100%', '', 'Arqueo Cuadrado', ''],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Dashboard');
+
+    // 2. CUENTAS
+    const ws2Data: any[][] = [
+      [`2. LISTADO DETALLADO DE CUENTAS COBRADAS (${dailyHistory.length} CUENTAS)`],
+      [`Orden Cronológico | Cuentas Registradas: ${dailyHistory.length} | Filtros Excel Activados`],
+      ['# Consec.', 'Folio Cuenta', 'Folio Interno Comandas', 'Fecha / Hora Cierre', 'Mesa', 'Método de Pago', 'Factura', 'Total Cobrado ($)']
+    ];
+    dailyHistory.forEach((h, idx) => {
+      const consecutive = dailyHistory.length - idx;
+      const foliosInternos = formatAccountComandaFolios(h);
+      const timeStr = h.timestamp instanceof Date ? h.timestamp.toLocaleString() : (typeof h.timestamp === 'string' ? h.timestamp : new Date(h.timestamp).toLocaleString());
+      const invStr = h.requiresInvoice ? (h.invoicePhone ? `Sí (${h.invoicePhone})` : "Sí") : "No";
+      ws2Data.push([
+        `#${consecutive}`,
+        h.folio || `CUT-${consecutive}`,
+        foliosInternos,
+        timeStr,
+        h.tableLabel || "N/A",
+        h.paymentMethod || "Efectivo",
+        invStr,
+        Number(Number(h.total || 0).toFixed(2))
+      ]);
+    });
+    ws2Data.push([`TOTAL DE CUENTAS (${dailyHistory.length}):`, '', '', '', '', '', '', Number(totalAccounts.toFixed(2))]);
+    const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Cuentas');
+
+    // 3. PRODUCTOS
+    const ws3Data: any[][] = [
+      [`3. CATÁLOGO GENERAL DE PRODUCTOS Y RENDIMIENTO (${soldCatalogCount} Con Venta / ${unsoldCatalogCount} Sin Venta)`],
+      [`Orden de Catálogo | Total Productos: ${sortedDirectCatalog.length} | Filtros Excel Activados`],
+      ['# Orden', 'Producto / Platillo', 'Categoría / Subgrupo', 'Precio Lista ($)', 'Estado en Ventas', 'Cant. Vendida', 'Total Recaudado ($)']
+    ];
+    sortedDirectCatalog.forEach((prod, idx) => {
+      const orderNum = prod.sortOrder !== undefined && prod.sortOrder !== null && prod.sortOrder !== 9999 
+        ? prod.sortOrder 
+        : (prod.consecutive || (idx + 1));
+      const liveName = getProductReportName(prod);
+      const category = (prod.subgroup || prod.subcategory || "OTROS").toUpperCase().trim();
+      const sold = soldMap[String(prod.id)] || soldMap[liveName.toLowerCase().trim()] || soldMap[(prod.name || "").toLowerCase().trim()] || { quantity: 0, total: 0 };
+      const priceVal = Number(prod.price || 0);
+
+      ws3Data.push([
+        orderNum,
+        liveName,
+        category,
+        Number(priceVal.toFixed(2)),
+        sold.quantity > 0 ? `🟢 SÍ VENDIDO (${sold.quantity})` : '⚪ SIN VENTAS (0)',
+        sold.quantity,
+        Number(sold.total.toFixed(2))
+      ]);
+    });
+    ws3Data.push([`TOTAL GENERAL PRODUCTOS (${totalSoldPieces} PIEZAS VENDIDAS):`, '', '', '', '', totalSoldPieces, Number(totalProducts.toFixed(2))]);
+    const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
+    XLSX.utils.book_append_sheet(wb, ws3, 'Productos');
+
+    // 4. CANCELACIONES
+    const ws4Data: any[][] = [
+      [`4. REGISTRO DETALLADO DE CANCELACIONES Y ANULACIONES (${dailyCancellations.length} REGISTROS)`],
+      [`Total de Cancelaciones: ${dailyCancellations.length} registros | Monto Cancelado: $${totalCancellations.toFixed(2)} | Filtros Excel Activados`],
+      ['# Consec.', 'Folio', 'Tipo', 'Fecha / Hora', 'Mesa', 'Producto / Concepto', 'Cantidad', 'Motivo de Cancelación', 'Autorizado Por', 'Total Cancelado ($)']
+    ];
+    dailyCancellations.forEach((item, index) => {
+      const consecutive = dailyCancellations.length - index;
+      const timeStr = item.timestamp instanceof Date ? item.timestamp.toLocaleString() : (typeof item.timestamp === 'string' ? item.timestamp : new Date(item.timestamp).toLocaleString());
+      ws4Data.push([
+        `#${consecutive}`,
+        item.folio,
+        item.type === 'cuenta' ? 'Cuenta Completa' : 'Producto',
+        timeStr,
+        item.tableLabel,
+        item.description,
+        item.quantity,
+        item.reason,
+        item.user,
+        Number(Number(item.total || 0).toFixed(2))
+      ]);
+    });
+    ws4Data.push([`TOTAL CANCELACIONES (${dailyCancellations.length} REGISTROS):`, '', '', '', '', '', '', '', '', Number(totalCancellations.toFixed(2))]);
+    const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
+    XLSX.utils.book_append_sheet(wb, ws4, 'Cancelaciones');
+
+    // 5. Convertir a Blob y Subir a Firebase Storage
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const excelBlob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    let storageDownloadUrl = "";
+    try {
+      const storageRef = ref(storage, `reportes_excel/${cleanCompany}/${filename}`);
+      const snapshot = await uploadBytes(storageRef, excelBlob, {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      storageDownloadUrl = await getDownloadURL(snapshot.ref);
+      console.log("✅ Excel subido a Firebase Storage:", storageDownloadUrl);
+    } catch (sErr) {
+      console.warn("No se pudo subir el archivo Excel a Firebase Storage:", sErr);
+    }
+
+    // 6. Construir mensaje de WhatsApp con enlace clickeable
+    let excelMsg = `📊 *REPORTE DIARIO EN EXCEL (.XLSX)*\n`;
+    excelMsg += `🏢 *${companyName.toUpperCase()}*\n`;
+    excelMsg += `📅 *Fecha:* ${friendlyTitleDate}\n`;
+    excelMsg += `📁 *Archivo:* ${filename}\n`;
+    excelMsg += `💰 *Venta Neta:* $${(totalProducts - paymentBreakdown.discount).toFixed(2)}\n`;
+    excelMsg += `💵 *Efectivo:* $${paymentBreakdown.cash.toFixed(2)} | 💳 *Tarjetas:* $${paymentBreakdown.card.toFixed(2)} | 📲 *Transf:* $${paymentBreakdown.transfer.toFixed(2)}\n`;
+    if (dailyCancellations.length > 0) {
+      excelMsg += `❌ *Cancelaciones (${dailyCancellations.length}):* $${totalCancellations.toFixed(2)}\n`;
+    }
+    excelMsg += `📦 *Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
+
+    if (storageDownloadUrl) {
+      excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${storageDownloadUrl}\n\n`;
+    } else {
+      excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._\n\n`;
+    }
+    excelMsg += `_Enviado silenciosamente por Cocinet POS._`;
+
+    // 7. Enviar a destinatarios
+    const tenantUsers = getTenantUsers(tenant?.id || "tenant-1");
+    const recipients = tenantUsers.filter(
+      (u) =>
+        (u.isReportRecipient ||
+          u.id.endsWith("-admin") ||
+          u.id.endsWith("-manager") ||
+          u.id.endsWith("-sistemas") ||
+          u.role === "admin" ||
+          u.role === "owner") &&
+        u.phone
+    );
+
+    if (recipients.length > 0) {
+      for (const r of recipients) {
+        if (r.phone) {
+          sendSilentWhatsAppMessage(r.phone, excelMsg).catch((e) =>
+            console.warn("Error enviando Excel por WhatsApp:", e)
+          );
+        }
+      }
+    }
+
+    return { success: true, url: storageDownloadUrl, filename };
+  } catch (err: any) {
+    console.error("Error generando/enviando Excel:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
 export async function sendAutomated5AMDailyReport(
   history: any[],
   products: any[],
@@ -592,6 +788,12 @@ export async function sendAutomated5AMDailyReport(
             console.error("Error auto 5am silent report:", e)
           );
         }, 1500);
+        // Enviar 3: Archivo Excel en Firebase Storage
+        setTimeout(() => {
+          generateAndSendExcelDailyReportToWhatsApp(history, products, operatingDay, tenant, ticketBusinessName).catch((e) =>
+            console.error("Error auto 5am silent excel:", e)
+          );
+        }, 3000);
       });
     }
   }

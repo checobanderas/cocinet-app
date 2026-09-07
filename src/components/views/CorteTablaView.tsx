@@ -8,7 +8,7 @@ import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exp
 import { getCompanyCatalog, getTenantUsers, getOperatingDay } from '../../utils/appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import { formatTableName } from '../../utils/formatters';
-import { generateDailyReportText, exportDailyReportExcel } from '../../utils/dailyReportService';
+import { generateDailyReportText, exportDailyReportExcel, generateAndSendExcelDailyReportToWhatsApp } from '../../utils/dailyReportService';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
@@ -1504,6 +1504,11 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                   setTimeout(() => {
                     sendSilentWhatsAppMessage(r.phone, textDailyReport).catch((e) => console.error("Error daily report silent send:", e));
                   }, 1200);
+                  setTimeout(() => {
+                    generateAndSendExcelDailyReportToWhatsApp(history || [], products || [], targetOpDay, selectedTenant, companyName).catch((e) =>
+                      console.warn("Error enviando Excel a WhatsApp:", e)
+                    );
+                  }, 2800);
                 } else {
                   silentErrors.push(`${r.name}: ${resCorte.error || "Error de pasarela"}`);
                 }

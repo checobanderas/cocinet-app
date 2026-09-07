@@ -864,7 +864,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       excelMsg += `📦 *Piezas Vendidas:* ${totalSoldPieces} piezas\n\n`;
 
       if (storageDownloadUrl) {
-        excelMsg += `📥 *Descargar Excel Oficial desde Firebase Storage:*\n${storageDownloadUrl}\n\n`;
+        excelMsg += `📥 *Descargar Archivo Excel Oficial (.xlsx):*\n\n${storageDownloadUrl}\n\n`;
       } else {
         excelMsg += `_El archivo Excel con sus 4 hojas (Dashboard, Cuentas, Productos, Cancelaciones) ha sido generado exitosamente._\n\n`;
       }

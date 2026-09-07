@@ -28,6 +28,24 @@ interface DirectCancellationPortalViewProps {
   onClose: () => void;
 }
 
+const formatNotificationDate = (createdAt?: string) => {
+  if (!createdAt) return "Hace un momento";
+  try {
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return "Hace un momento";
+    const day = d.getDate();
+    const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const month = months[d.getMonth()];
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${day} ${month}, ${hours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return "Hace un momento";
+  }
+};
+
 export const DirectCancellationPortalView: React.FC<DirectCancellationPortalViewProps> = ({
   folio,
   selectedTenant,
@@ -43,8 +61,9 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [liveNotif, setLiveNotif] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showTimeline, setShowTimeline] = useState(false);
 
-  // 1. Localizar notificación en memoria o consultar Firebase directamente
+  // 1. Cargar notificación desde memoria o Firebase
   useEffect(() => {
     let isMounted = true;
 
@@ -59,14 +78,12 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
         return nFolio === cleanFolio || nId === cleanFolio;
       });
 
-      if (inMemory) {
-        if (isMounted) {
-          setLiveNotif(inMemory);
-          setIsLoading(false);
-        }
+      if (inMemory && isMounted) {
+        setLiveNotif(inMemory);
+        setIsLoading(false);
       }
 
-      // Consultar en vivo en Firestore para tener el estado más fresco
+      // Consultar Firestore en tiempo real para obtener datos más frescos
       try {
         const liveDoc = await getNotificationFromFirebase(folio);
         if (isMounted && liveDoc) {
@@ -91,7 +108,7 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
 
   const handleKeyPress = (digit: string) => {
     if (isProcessed || isSubmitting) return;
-    if (pin.length < 6) {
+    if (pin.length < 4) {
       setPin((prev) => prev + digit);
       setStatusMessage(null);
     }
@@ -110,7 +127,7 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
   };
 
   const handleAuthorize = async () => {
-    if (!pin) {
+    if (!pin || pin.length < 4) {
       setStatusMessage({ type: "error", text: "Introduce tu PIN de 4 dígitos para autorizar." });
       return;
     }
@@ -225,57 +242,74 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
     }
   };
 
-  const branchDisplay = notif?.branchName || selectedTenant?.name || "Cocinet";
+  // 2. Enlace automático con el Teclado Físico
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "textarea" || tag === "select" || target?.isContentEditable) {
+        return;
+      }
+
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        handleKeyPress(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === "Delete" || e.key === "Escape" || e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        handleClear();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (pin.length >= 4) {
+          handleAuthorize();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pin, isProcessed, isSubmitting, notif]);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950 text-slate-100 flex flex-col items-center justify-start overflow-y-auto p-4 sm:p-6 font-sans">
-      {/* Barra superior de encabezado seguro */}
-      <div className="w-full max-w-lg flex items-center justify-between py-2 border-b border-slate-800 mb-4">
+    <div className="min-h-screen bg-slate-100 bg-gradient-to-br from-slate-50 via-rose-50/30 to-indigo-50/40 text-slate-800 flex flex-col items-center justify-start p-3 sm:p-6 font-sans">
+      {/* Barra Superior */}
+      <div className="w-full max-w-lg flex items-center justify-between py-2 border-b border-slate-200/80 mb-3 sm:mb-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-rose-600 flex items-center justify-center text-white font-black shadow-md shadow-rose-600/30">
-            🛡️
+          <div className="w-9 h-9 rounded-2xl bg-rose-600 flex items-center justify-center text-white font-black shadow-md shadow-rose-500/20 text-lg">
+            🔔
           </div>
           <div>
-            <h1 className="text-sm font-black text-white tracking-wide uppercase">Cocinet Seguro</h1>
-            <p className="text-[11px] text-slate-400 font-medium">Portal de Autorizaciones</p>
+            <h1 className="text-sm font-black text-slate-900 tracking-tight">Cocinet POS</h1>
+            <p className="text-[11px] text-slate-500 font-semibold">Autorización de Solicitudes</p>
           </div>
         </div>
 
         <button
           onClick={onClose}
-          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all border border-slate-700 cursor-pointer flex items-center gap-1.5"
+          className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all border border-slate-200 shadow-xs cursor-pointer flex items-center gap-1.5"
         >
-          <span>🔒</span>
-          <span>Salir</span>
+          <span>✕</span>
+          <span>Cerrar</span>
         </button>
       </div>
 
-      {/* Tarjeta principal */}
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl shadow-black/60 relative">
-        {/* Badge de Sucursal y Folio */}
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="bg-slate-800/90 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold text-slate-300 flex items-center gap-1.5">
-            <span>📍</span>
-            <span className="truncate max-w-[200px]">{branchDisplay}</span>
-          </div>
-
-          <div className="bg-rose-950/80 border border-rose-700/60 text-rose-300 font-black px-3 py-1 rounded-full text-xs tracking-wider">
-            Folio #{notif?.cancellationFolio || folio}
-          </div>
-        </div>
-
-        {/* Estado de Carga */}
+      {/* Tarjeta idéntica a NotificationCard */}
+      <div className="w-full max-w-lg">
         {isLoading ? (
-          <div className="py-12 text-center text-slate-400 space-y-3">
-            <div className="inline-block w-8 h-8 border-3 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm font-bold">Localizando datos de la cancelación...</p>
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
+            <div className="inline-block w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm font-bold text-slate-600">Cargando datos de la cancelación...</p>
           </div>
         ) : !notif ? (
-          <div className="py-8 text-center space-y-3">
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
             <div className="text-4xl">⚠️</div>
-            <h2 className="text-base font-bold text-slate-200">Cancelación no encontrada</h2>
-            <p className="text-xs text-slate-400">
-              No se localizó la solicitud con folio <span className="font-mono text-rose-400">#{folio}</span>. Es posible que ya haya sido eliminada o que el folio sea incorrecto.
+            <h2 className="text-base font-black text-slate-800">Cancelación no encontrada</h2>
+            <p className="text-xs text-slate-500">
+              No se localizó la solicitud con folio <span className="font-mono text-rose-600 font-bold">#{folio}</span>.
             </p>
             <button
               onClick={onClose}
@@ -285,192 +319,284 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Banner si ya fue procesada */}
-            {isProcessed && (
-              <div
-                className={`p-4 rounded-2xl border text-center space-y-1.5 ${
-                  notif.status === "approved"
-                    ? "bg-emerald-950/60 border-emerald-600/50 text-emerald-200"
-                    : "bg-rose-950/60 border-rose-600/50 text-rose-200"
-                }`}
-              >
-                <div className="text-2xl">{notif.status === "approved" ? "✅" : "❌"}</div>
-                <h3 className="font-black text-sm uppercase tracking-wide">
-                  {notif.status === "approved" ? "Cancelación Autorizada" : "Cancelación Rechazada"}
-                </h3>
-                {notif.authorizedBy && (
-                  <p className="text-xs text-slate-300">
-                    Atendida por: <strong className="text-white font-bold">{notif.authorizedBy}</strong>
-                  </p>
-                )}
-                <div className="pt-2">
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-black rounded-xl border border-slate-600 transition-all cursor-pointer"
-                  >
-                    🔒 Salir del Sistema
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Resumen del Contenido a Cancelar */}
-            <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 space-y-2.5">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>{isClosedAccount ? "💳 Cuenta Cerrada" : "🍽️ Mesa / Comanda"}</span>
-                <span className="font-bold text-slate-200">
-                  {notif.tableLabel || (notif.tableId ? `Mesa ${notif.tableId}` : "Caja")}
+          <div
+            style={{
+              background: "#fff1f2",
+              border: "2px solid #e11d48",
+              borderRadius: "24px",
+              padding: "18px sm:22px",
+              boxShadow: "0 0 0 4px rgba(225, 29, 72, 0.15), 0 10px 30px rgba(225, 29, 72, 0.12)",
+              transition: "all 0.2s ease",
+            }}
+            className="font-sans text-slate-800"
+          >
+            {/* Cabecera de la Tarjeta */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <h4 style={{ margin: "0 0 4px 0", fontSize: "1rem", fontWeight: "900", color: "#be123c" }}>
+                {notif.title || `🚨 Solicitud de Cancelación #${notif.cancellationFolio || folio}`}
+              </h4>
+              <div className="flex gap-1.5 items-center flex-wrap justify-end">
+                <span className="bg-indigo-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full animate-pulse uppercase tracking-tight shadow-xs">
+                  🎯 ENLACE DIRECTO
+                </span>
+                <span className="bg-rose-500 text-white font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase">
+                  REQUERIDO
                 </span>
               </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>👤 Solicitó:</span>
-                <span className="font-bold text-slate-200">{notif.waiterName || "Cajero / Mesero"}</span>
-              </div>
-
-              {notif.reason && (
-                <div className="bg-amber-950/40 border border-amber-800/40 p-2.5 rounded-xl text-xs text-amber-200">
-                  <span className="font-bold text-amber-300">Motivo: </span>
-                  {notif.reason}
-                </div>
-              )}
-
-              {/* Lista de productos si es por ítem */}
-              {Array.isArray(notif.itemsToCancel) && notif.itemsToCancel.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Productos solicitados:</span>
-                  <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 max-h-36 overflow-y-auto space-y-1 text-xs">
-                    {notif.itemsToCancel.map((item: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center text-slate-200 py-0.5 border-b border-slate-800/50 last:border-0">
-                        <span className="font-medium">
-                          <strong className="text-rose-400 font-black mr-1.5">
-                            {item.quantity || 1}x
-                          </strong>
-                          {item.name || item.productId || "Producto"}
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          Plato #{item.plate || 1}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Total */}
-              {typeof notif.total === "number" && (
-                <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                  <span className="text-xs font-bold text-slate-400">Total Solicitado:</span>
-                  <span className="text-lg font-black text-emerald-400">${notif.total.toFixed(2)}</span>
-                </div>
-              )}
             </div>
 
-            {/* Mensajes de Estado / Error */}
-            {statusMessage && (
-              <div
-                className={`p-3 rounded-xl text-xs font-bold text-center border ${
-                  statusMessage.type === "success"
-                    ? "bg-emerald-950/80 border-emerald-500 text-emerald-300"
-                    : statusMessage.type === "error"
-                    ? "bg-rose-950/80 border-rose-500 text-rose-300"
-                    : "bg-blue-950/80 border-blue-500 text-blue-300"
-                }`}
-              >
-                {statusMessage.text}
-              </div>
+            {/* Texto del cuerpo */}
+            {notif.body && (
+              <p style={{ margin: "6px 0 10px 0", fontSize: "0.85rem", color: "#334155", lineHeight: "1.45", whiteSpace: "pre-line" }}>
+                {notif.body}
+              </p>
             )}
 
-            {/* Teclado PIN interactivo si está pendiente */}
-            {!isProcessed && (
-              <div className="space-y-3 pt-1">
-                <div className="text-center">
-                  <p className="text-xs text-slate-400 font-bold mb-2">Ingresa tu PIN de Dueño / Administrador:</p>
-                  {/* Puntos del PIN */}
-                  <div className="flex justify-center gap-3 py-1">
-                    {[0, 1, 2, 3].map((idx) => {
-                      const hasVal = pin.length > idx;
-                      return (
-                        <div
-                          key={idx}
-                          className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-lg transition-all ${
-                            hasVal
-                              ? "bg-rose-600 text-white shadow-lg shadow-rose-600/40 scale-105 border border-rose-400"
-                              : "bg-slate-800 border border-slate-700 text-slate-500"
-                          }`}
-                        >
-                          {hasVal ? "●" : ""}
-                        </div>
-                      );
-                    })}
+            {/* Metadatos y Folio */}
+            <div className="mt-2 p-4 bg-white/90 border border-rose-200/80 rounded-2xl space-y-2.5 text-xs shadow-xs">
+              {notif.cancellationFolio && (
+                <div className="bg-rose-100 text-rose-950 px-3 py-1.5 rounded-xl font-black tracking-tight flex items-center justify-between text-xs border border-rose-200">
+                  <div className="flex items-center gap-1.5">
+                    <span>🎫</span> Folio de Cancelación: <span className="text-sm font-black text-rose-700">{notif.cancellationFolio}</span>
                   </div>
+                  {notif.escalatedToSystems && (
+                    <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase shadow-xs">
+                      ⚡ Escalado Sistemas
+                    </span>
+                  )}
                 </div>
+              )}
 
-                {/* Teclado numérico */}
-                <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 grid grid-cols-3 gap-2">
-                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => handleKeyPress(num)}
-                      className="bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-white font-black h-12 rounded-xl text-lg shadow-sm border border-slate-700 cursor-pointer transition-all flex items-center justify-center"
-                    >
-                      {num}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-rose-400 font-bold h-12 rounded-xl text-xs border border-slate-800 cursor-pointer transition-all flex items-center justify-center"
-                  >
-                    Limpiar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleKeyPress("0")}
-                    className="bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-white font-black h-12 rounded-xl text-lg shadow-sm border border-slate-700 cursor-pointer transition-all flex items-center justify-center"
-                  >
-                    0
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleBackspace}
-                    className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 font-bold h-12 rounded-xl text-xs border border-slate-800 cursor-pointer transition-all flex items-center justify-center"
-                  >
-                    Borrar ⌫
-                  </button>
-                </div>
-
-                {/* Botones de Acción */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    disabled={isSubmitting || pin.length < 4}
-                    onClick={handleAuthorize}
-                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm rounded-2xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>{isSubmitting ? "Autorizando..." : "✅ Autorizar Cancelación"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={handleReject}
-                    className="w-full py-3.5 bg-slate-800 hover:bg-rose-950/80 hover:border-rose-700 text-slate-300 hover:text-rose-200 border border-slate-700 font-bold text-xs rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <span>✕ Rechazar Solicitud</span>
-                  </button>
-                </div>
+              <div className="grid grid-cols-2 gap-2 text-rose-950">
+                <div>🏢 <span className="font-bold">Sucursal:</span> {notif.branchName || selectedTenant?.name || "Cocinet"}</div>
+                <div>📍 <span className="font-bold">Mesa/Cuenta:</span> {notif.tableLabel || (notif.tableId ? `Mesa ${notif.tableId}` : "Caja")}</div>
+                <div>🤵 <span className="font-bold">Solicitó:</span> {notif.waiterName || "Cajero / Mesero"}</div>
+                <div>💰 <span className="font-bold">Total:</span> <span className="font-extrabold text-rose-700 text-sm">${typeof notif.total === 'number' ? notif.total.toFixed(2) : notif.total || "0.00"}</span></div>
               </div>
-            )}
+
+              {/* Lista de Productos si es cancelación de ítems */}
+              {Array.isArray(notif.itemsToCancel) && notif.itemsToCancel.length > 0 && (
+                <div className="text-rose-950 font-semibold border-t border-rose-100 pt-2">
+                  📦 <span className="font-black">Productos a Cancelar ({notif.itemsToCancel.length}):</span>
+                  <ul className="list-disc pl-5 mt-1 space-y-1 font-normal">
+                    {notif.itemsToCancel.map((it: any, idx: number) => (
+                      <li key={idx}>
+                        <span className="font-bold text-slate-800">{it.name || it.productId}</span>{" "}
+                        <span className="font-black text-rose-600">(x{it.quantity || 1})</span>{" "}
+                        {it.folio !== undefined ? `- Plato #${it.plate || 1}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {notif.reason && (
+                <div className="text-rose-950 border-t border-rose-100 pt-2">
+                  📝 <span className="font-bold">Motivo:</span> <span className="font-semibold text-rose-800">{notif.reason}</span>
+                </div>
+              )}
+
+              {/* Estado de Autorización */}
+              <div className="border-t border-rose-200/80 pt-3">
+                {notif.status === "approved" ? (
+                  <div className="bg-emerald-600 text-white font-black text-center py-3 px-4 rounded-2xl text-xs flex flex-col items-center justify-center gap-1 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <span>✓</span> <span>¡Cancelación Autorizada!</span>
+                    </div>
+                    <div className="text-[11px] font-medium text-emerald-100">
+                      Atendida por <strong className="text-white font-bold">{notif.authorizedBy || "Administrador"}</strong>
+                    </div>
+                    <div className="pt-2">
+                      <button
+                        onClick={onClose}
+                        className="px-4 py-1.5 bg-white text-emerald-900 rounded-xl text-xs font-black shadow-xs hover:bg-emerald-50 transition-all cursor-pointer"
+                      >
+                        🔒 Salir del Sistema
+                      </button>
+                    </div>
+                  </div>
+                ) : notif.status === "rejected" ? (
+                  <div className="bg-slate-700 text-white font-black text-center py-3 px-4 rounded-2xl text-xs flex flex-col items-center justify-center gap-1 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <span>✕</span> <span>Solicitud Rechazada / Revertida</span>
+                    </div>
+                    {notif.authorizedBy && (
+                      <div className="text-[11px] font-medium text-slate-200">
+                        Atendida por <strong className="text-white font-bold">{notif.authorizedBy}</strong>
+                      </div>
+                    )}
+                    <div className="pt-2">
+                      <button
+                        onClick={onClose}
+                        className="px-4 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-black shadow-xs hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        🔒 Salir del Sistema
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-rose-900 font-extrabold text-xs uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1">🔒 Escribe aquí tu PIN para autorizar:</span>
+                      <span className="text-[10px] text-slate-500 font-medium lowercase">o teclea en físico</span>
+                    </div>
+
+                    {/* Puntos visuales del PIN */}
+                    <div className="flex justify-center gap-2.5 py-1">
+                      {[0, 1, 2, 3].map((idx) => {
+                        const hasVal = pin.length > idx;
+                        return (
+                          <div
+                            key={idx}
+                            className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-lg transition-all ${
+                              hasVal
+                                ? "bg-rose-600 text-white shadow-md shadow-rose-500/30 scale-105 border-2 border-rose-500"
+                                : "bg-white border-2 border-rose-200 text-slate-400"
+                            }`}
+                          >
+                            {hasVal ? "●" : ""}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Teclado numérico táctil interactivo */}
+                    <div className="bg-slate-100/90 p-2.5 rounded-2xl border border-rose-200/80 grid grid-cols-3 gap-1.5">
+                      {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => handleKeyPress(num)}
+                          className="bg-white hover:bg-rose-50 active:scale-95 text-slate-800 font-black h-11 rounded-xl text-base shadow-xs border border-slate-200/80 cursor-pointer transition-all flex items-center justify-center"
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="bg-red-50 hover:bg-red-100 active:scale-95 text-rose-700 font-bold h-11 rounded-xl text-xs border border-red-200 cursor-pointer transition-all flex items-center justify-center"
+                      >
+                        Limpiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleKeyPress("0")}
+                        className="bg-white hover:bg-rose-50 active:scale-95 text-slate-800 font-black h-11 rounded-xl text-base shadow-xs border border-slate-200/80 cursor-pointer transition-all flex items-center justify-center"
+                      >
+                        0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBackspace}
+                        className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 font-bold h-11 rounded-xl text-xs border border-slate-300 cursor-pointer transition-all flex items-center justify-center"
+                      >
+                        Borrar ⌫
+                      </button>
+                    </div>
+
+                    {/* Mensaje de error o éxito */}
+                    {statusMessage && (
+                      <div
+                        className={`p-2.5 rounded-xl text-xs font-bold text-center border ${
+                          statusMessage.type === "success"
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                            : statusMessage.type === "error"
+                            ? "bg-rose-100 border-rose-300 text-rose-900"
+                            : "bg-blue-50 border-blue-300 text-blue-900"
+                        }`}
+                      >
+                        {statusMessage.text}
+                      </div>
+                    )}
+
+                    {/* Botones de Acción */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleAuthorize}
+                        disabled={isSubmitting || pin.length < 4}
+                        className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black py-3 px-3 rounded-2xl transition-all shadow-md shadow-rose-600/30 text-xs cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <span>{isSubmitting ? "Autorizando..." : "Autorizar Cancelación ✓"}</span>
+                      </button>
+                      <button
+                        onClick={handleReject}
+                        disabled={isSubmitting}
+                        className="bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 font-bold py-3 px-3.5 rounded-2xl transition-all text-xs cursor-pointer"
+                      >
+                        Rechazar ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Trazabilidad */}
+              <div className="border-t border-rose-100/80 pt-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowTimeline(!showTimeline)}
+                    className="text-[11px] font-extrabold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border-none"
+                  >
+                    <span>📊</span> <span>{showTimeline ? "Ocultar Trazabilidad" : "Ver Trazabilidad Bidireccional"}</span>
+                    <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.2 rounded-full font-black">
+                      {(notif.timeline || []).length + (notif.openedCount ? 1 : 0) + 2}
+                    </span>
+                  </button>
+
+                  {notif.openedCount ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>👁️</span> Abierto ({notif.openedCount}x)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>⏳</span> En línea
+                    </span>
+                  )}
+                </div>
+
+                {showTimeline && (
+                  <div className="mt-2 p-3 bg-slate-900 text-slate-100 rounded-2xl space-y-2 text-[11px] shadow-inner">
+                    <div className="font-black text-amber-400 border-b border-slate-700 pb-1 flex items-center justify-between">
+                      <span>Línea de Vida de la Solicitud (#{notif.cancellationFolio || notif.id})</span>
+                      <span className="text-[10px] font-mono text-slate-400 font-normal">Auditoría en Vivo</span>
+                    </div>
+
+                    <div className="space-y-2 relative pl-2 border-l-2 border-slate-700">
+                      <div className="relative pl-3">
+                        <span className="absolute -left-[11px] top-0.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <div className="font-bold text-slate-200">1. Solicitud Registrada</div>
+                        <div className="text-[10px] text-slate-400">
+                          Por: <b>{notif.waiterName || 'Mesero/Cajero'}</b> • {formatNotificationDate(notif.createdAt)}
+                        </div>
+                      </div>
+
+                      <div className="relative pl-3">
+                        <span className="absolute -left-[11px] top-0.5 w-2 h-2 rounded-full bg-indigo-500"></span>
+                        <div className="font-bold text-slate-200">2. Notificaciones Despachadas</div>
+                        <div className="text-[10px] text-slate-400">
+                          WhatsApp enviado a administradores de sucursal con enlace directo de autorización.
+                        </div>
+                      </div>
+
+                      <div className="relative pl-3">
+                        <span className="absolute -left-[11px] top-0.5 w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <div className="font-bold text-slate-200">
+                          3. Acceso al Portal: ✅ Abierto en navegador
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Pie de página */}
-      <div className="mt-6 text-center text-slate-500 text-xs">
-        <p>Cocinet Cloud POS &bull; Control y Auditoría de Operaciones</p>
+      <div className="mt-6 text-center text-slate-400 text-xs font-medium">
+        <p>Cocinet Cloud POS &bull; Sistema de Gestión de Sucursales</p>
       </div>
     </div>
   );
