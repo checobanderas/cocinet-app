@@ -61,7 +61,14 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [liveNotif, setLiveNotif] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showTimeline, setShowTimeline] = useState(false);
+  const [nowTime, setNowTime] = useState(Date.now());
+  const [showRejectModal, setShowRejectModal] = useState(false);
+
+  // Intervalo en vivo para actualizar el contador de minutos transcurridos cada 10 segundos
+  useEffect(() => {
+    const timer = setInterval(() => setNowTime(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 1. Cargar notificación desde memoria o Firebase
   useEffect(() => {
@@ -105,6 +112,19 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
   const notif = liveNotif;
   const isClosedAccount = notif?.isClosedAccountCancellationRequest;
   const isProcessed = notif?.status === "approved" || notif?.status === "rejected";
+
+  const createdTimestamp = notif?.createdAt ? new Date(notif.createdAt).getTime() : (notif?.timestamp ? new Date(notif.timestamp).getTime() : null);
+  const elapsedMinutes = createdTimestamp ? Math.max(0, Math.floor((nowTime - createdTimestamp) / 60000)) : null;
+  const timeoutLimit = Number(selectedTenant?.cancellationTimeoutMinutes) || 7;
+  const isExpired = elapsedMinutes !== null && elapsedMinutes >= timeoutLimit && notif?.status === "pending";
+
+  const getElapsedBadgeInfo = (mins: number | null) => {
+    if (mins === null) return { text: "Reciente", color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: "🟢" };
+    if (mins < 1) return { text: "Hace menos de 1 min", color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: "🟢" };
+    if (mins < 4) return { text: `Hace ${mins} min`, color: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: "🟢" };
+    if (mins < timeoutLimit) return { text: `Hace ${mins} min`, color: "bg-amber-100 text-amber-900 border-amber-300", icon: "🟡" };
+    return { text: `Hace ${mins} min (Expirada tras ${timeoutLimit} min)`, color: "bg-rose-100 text-rose-900 border-rose-300 animate-pulse", icon: "🔴" };
+  };
 
   const handleKeyPress = (digit: string) => {
     if (isProcessed || isSubmitting) return;
@@ -370,6 +390,35 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                 </div>
               )}
 
+              {/* Banner de Expiración tras timeout */}
+              {isExpired && (
+                <div className="bg-rose-50 border-2 border-rose-400 text-rose-950 p-3 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-black text-rose-700">
+                    <span>⏰</span> TIEMPO LÍMITE DE ESPERA AGOTADO ({timeoutLimit} MINUTOS)
+                  </div>
+                  <p className="text-[11px] text-rose-800 leading-snug">
+                    Han transcurrido <b>{elapsedMinutes} minutos</b> desde la solicitud. El cajero en sucursal puede haber procedido con la anulación local de contingencia.
+                  </p>
+                </div>
+              )}
+
+              {/* Fecha y Hora de la Solicitud */}
+              <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📅</span>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Fecha y Hora</p>
+                    <p className="text-xs font-black text-slate-800">
+                      {formatNotificationDate(notif.createdAt || notif.timestamp)}
+                    </p>
+                  </div>
+                </div>
+                <div className={`px-2.5 py-1 rounded-lg border text-[11px] font-black flex items-center gap-1 ${getElapsedBadgeInfo(elapsedMinutes).color}`}>
+                  <span>{getElapsedBadgeInfo(elapsedMinutes).icon}</span>
+                  <span>{getElapsedBadgeInfo(elapsedMinutes).text}</span>
+                </div>
+              </div>
+
               {/* Bloque de Sucursal, Mesa, Solicitó y Monto en tarjetas visuales */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 flex items-center gap-2.5">
@@ -449,16 +498,14 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                             <td className="py-2 px-2.5 text-center font-bold text-slate-400 text-[11px]">
                               {idx + 1}
                             </td>
-                            <td className="py-2 px-2.5 font-extrabold text-slate-900 text-xs sm:text-sm">
-                              {it.name || it.productId}
+                            <td className="py-2 px-2.5 font-extrabold text-slate-900">
+                              {it.name || it.productName || (it.product && it.product.name) || "Producto"}
                             </td>
-                            <td className="py-2 px-2.5 text-center">
-                              <span className="inline-block bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-md text-xs">
-                                x{it.quantity || 1}
-                              </span>
+                            <td className="py-2 px-2.5 text-center font-black text-rose-700 bg-rose-50/30">
+                              x{it.quantity || 1}
                             </td>
-                            <td className="py-2 px-2.5 text-right text-[11px] text-slate-500 font-medium">
-                              {it.folio !== undefined ? `Plato #${it.plate || 1}` : "Directo"}
+                            <td className="py-2 px-2.5 text-right font-medium text-slate-500 text-[11px]">
+                              {it.plate ? `Plato #${it.plate}` : "Comanda"}
                             </td>
                           </tr>
                         ))}
@@ -468,85 +515,63 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                 </div>
               )}
 
+              {/* Motivo de Cancelación */}
               {notif.reason && (
-                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5 text-xs sm:text-sm">
-                  <span className="text-amber-700 font-bold text-base leading-none">📝</span>
-                  <div>
-                    <span className="font-bold text-amber-900 block text-[11px] uppercase tracking-wider">Motivo de Cancelación:</span>
-                    <span className="font-extrabold text-amber-950 mt-0.5 block">{notif.reason}</span>
-                  </div>
+                <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3">
+                  <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                    <span>📝</span> Motivo de Cancelación:
+                  </p>
+                  <p className="text-xs font-black text-amber-950 italic">
+                    "{notif.reason}"
+                  </p>
                 </div>
               )}
 
-              {/* Estado de Autorización */}
-              <div className="border-t border-rose-200/80 pt-3">
-                {notif.status === "approved" ? (
-                  <div className="bg-emerald-600 text-white font-black text-center py-3 px-4 rounded-2xl text-xs flex flex-col items-center justify-center gap-1 shadow-sm">
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <span>✓</span> <span>¡Cancelación Autorizada!</span>
+              {/* Entrada de PIN y Botón de Autorización */}
+              <div className="border-t-2 border-rose-200 pt-3 space-y-3">
+                {isProcessed ? (
+                  <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 text-center space-y-2">
+                    <div className="text-3xl">
+                      {notif.status === "approved" ? "✅" : "✕"}
                     </div>
-                    <div className="text-[11px] font-medium text-emerald-100">
-                      Atendida por <strong className="text-white font-bold">{notif.authorizedBy || "Administrador"}</strong>
-                    </div>
-                    <div className="pt-2">
-                      <button
-                        onClick={onClose}
-                        className="px-4 py-1.5 bg-white text-emerald-900 rounded-xl text-xs font-black shadow-xs hover:bg-emerald-50 transition-all cursor-pointer"
-                      >
-                        🔒 Salir del Sistema
-                      </button>
-                    </div>
-                  </div>
-                ) : notif.status === "rejected" ? (
-                  <div className="bg-slate-700 text-white font-black text-center py-3 px-4 rounded-2xl text-xs flex flex-col items-center justify-center gap-1 shadow-sm">
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <span>✕</span> <span>Solicitud Rechazada / Revertida</span>
-                    </div>
-                    {notif.authorizedBy && (
-                      <div className="text-[11px] font-medium text-slate-200">
-                        Atendida por <strong className="text-white font-bold">{notif.authorizedBy}</strong>
-                      </div>
-                    )}
-                    <div className="pt-2">
-                      <button
-                        onClick={onClose}
-                        className="px-4 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-black shadow-xs hover:bg-slate-100 transition-all cursor-pointer"
-                      >
-                        🔒 Salir del Sistema
-                      </button>
-                    </div>
+                    <h3 className="text-sm font-black text-slate-900 m-0">
+                      {notif.status === "approved"
+                        ? "Cancelación Autorizada"
+                        : "Cancelación Rechazada"}
+                    </h3>
+                    <p className="text-xs text-slate-600 m-0">
+                      {notif.status === "approved"
+                        ? `Esta solicitud fue autorizada exitosamente por ${notif.authorizedBy || "un Administrador"}.`
+                        : "Esta solicitud fue rechazada. La cuenta o comanda permanece activa."}
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 pt-1">
-                    <div className="text-rose-900 font-black text-sm uppercase tracking-wide flex items-center justify-between border-b border-rose-200/80 pb-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-base">🔒</span>
-                        <span>Escribe aquí tu PIN para autorizar:</span>
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-semibold lowercase">o teclea en físico</span>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                        <span>🔒</span> Escribe aquí tu PIN para autorizar:
+                      </label>
+                      <span className="text-[11px] font-bold text-slate-400">o teclea en físico</span>
                     </div>
 
-                    {/* Puntos visuales del PIN */}
-                    <div className="flex justify-center gap-2.5 py-1">
-                      {[0, 1, 2, 3].map((idx) => {
-                        const hasVal = pin.length > idx;
-                        return (
-                          <div
-                            key={idx}
-                            className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-lg transition-all ${
-                              hasVal
-                                ? "bg-rose-600 text-white shadow-md shadow-rose-500/30 scale-105 border-2 border-rose-500"
-                                : "bg-white border-2 border-rose-200 text-slate-400"
-                            }`}
-                          >
-                            {hasVal ? "●" : ""}
-                          </div>
-                        );
-                      })}
+                    {/* Visor de PIN */}
+                    <div className="flex justify-center items-center gap-2.5 py-1">
+                      {[0, 1, 2, 3].map((idx) => (
+                        <div
+                          key={idx}
+                          className={`w-11 h-12 rounded-2xl border-2 flex items-center justify-center text-xl font-black transition-all ${
+                            pin.length > idx
+                              ? "bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-600/30 scale-105"
+                              : "bg-white border-slate-300 text-transparent"
+                          }`}
+                        >
+                          {pin.length > idx ? "•" : ""}
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Teclado numérico táctil interactivo */}
-                    <div className="bg-slate-100/90 p-2.5 rounded-2xl border border-rose-200/80 grid grid-cols-3 gap-1.5">
+                    {/* Teclado Numérico Táctil */}
+                    <div className="grid grid-cols-3 gap-1.5 max-w-xs mx-auto pt-1">
                       {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
                         <button
                           key={num}
@@ -560,7 +585,7 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                       <button
                         type="button"
                         onClick={handleClear}
-                        className="bg-red-50 hover:bg-red-100 active:scale-95 text-rose-700 font-bold h-11 rounded-xl text-xs border border-red-200 cursor-pointer transition-all flex items-center justify-center"
+                        className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 font-bold h-11 rounded-xl text-xs border border-slate-300 cursor-pointer transition-all flex items-center justify-center"
                       >
                         Limpiar
                       </button>
@@ -596,20 +621,22 @@ export const DirectCancellationPortalView: React.FC<DirectCancellationPortalView
                     )}
 
                     {/* Botones de Acción */}
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
                       <button
                         onClick={handleAuthorize}
                         disabled={isSubmitting || pin.length < 4}
-                        className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black py-3 px-3 rounded-2xl transition-all shadow-md shadow-rose-600/30 text-xs cursor-pointer flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3.5 px-3 rounded-2xl transition-all shadow-md shadow-emerald-600/30 text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        <span>{isSubmitting ? "Autorizando..." : "Autorizar Cancelación ✓"}</span>
+                        <span>✓</span>
+                        <span>{isSubmitting ? "Autorizando..." : "AUTORIZAR CON PIN"}</span>
                       </button>
                       <button
                         onClick={handleReject}
                         disabled={isSubmitting}
-                        className="bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 font-bold py-3 px-3.5 rounded-2xl transition-all text-xs cursor-pointer"
+                        className="bg-white hover:bg-rose-50 border-2 border-rose-300 text-rose-700 font-black py-3.5 px-4 rounded-2xl transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        Rechazar ✕
+                        <span>✕</span>
+                        <span>RECHAZAR</span>
                       </button>
                     </div>
                   </div>

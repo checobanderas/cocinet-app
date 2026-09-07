@@ -1,4 +1,4 @@
-import { numeroALetras, formatReceiptItemLines, formatComandaItemLines } from './utils/formatters';
+import { numeroALetras, formatReceiptItemLines, formatComandaItemLines, formatNotificationDate } from './utils/formatters';
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
@@ -2810,6 +2810,7 @@ export default function App() {
   const [formTenantAllowTransferencia, setFormTenantAllowTransferencia] = useState<boolean>(true);
   const [formTenantAllowLupay, setFormTenantAllowLupay] = useState<boolean>(true);
   const [formTenantRequireCardDigits, setFormTenantRequireCardDigits] = useState<boolean>(true);
+  const [formTenantCancellationTimeoutMinutes, setFormTenantCancellationTimeoutMinutes] = useState<number>(7);
 
   // Tenant Transfer States (Traspaso de Inquilino inline)
   const [transferStep, setTransferStep] = useState<0 | 1 | 2>(0);
@@ -2839,6 +2840,7 @@ export default function App() {
     setFormTenantAllowTransferencia(true);
     setFormTenantAllowLupay(true);
     setFormTenantRequireCardDigits(true);
+    setFormTenantCancellationTimeoutMinutes(7);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(true);
@@ -2865,6 +2867,7 @@ export default function App() {
     setFormTenantAllowTransferencia(tenant.allowTransferencia !== false);
     setFormTenantAllowLupay(tenant.allowLupay !== false);
     setFormTenantRequireCardDigits(tenant.requireCardDigits !== false);
+    setFormTenantCancellationTimeoutMinutes(Number(tenant.cancellationTimeoutMinutes) || 7);
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(tenant.type === "Matriz");
@@ -2900,6 +2903,7 @@ export default function App() {
       allowTransferencia: formTenantAllowTransferencia,
       allowLupay: formTenantAllowLupay,
       requireCardDigits: formTenantRequireCardDigits,
+      cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
       updatedAt: getMexicoISOString(),
     };
 
@@ -3024,6 +3028,7 @@ export default function App() {
         allowTransferencia: formTenantAllowTransferencia,
         allowLupay: formTenantAllowLupay,
         requireCardDigits: formTenantRequireCardDigits,
+        cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
         createdAt: editingTenant?.createdAt || getMexicoISOString(),
         updatedAt: getMexicoISOString(),
       };
@@ -8323,6 +8328,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       setFormTenantAllowLupay={setFormTenantAllowLupay}
       formTenantRequireCardDigits={formTenantRequireCardDigits}
       setFormTenantRequireCardDigits={setFormTenantRequireCardDigits}
+      formTenantCancellationTimeoutMinutes={formTenantCancellationTimeoutMinutes}
+      setFormTenantCancellationTimeoutMinutes={setFormTenantCancellationTimeoutMinutes}
       formTenantRfc={formTenantRfc}
       formTenantSucursal={formTenantSucursal}
       formTenantType={formTenantType}
@@ -9990,7 +9997,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const cancellationFolio = "CAN-" + String(Date.now()).slice(-5);
       const tableLabel = selectedTable.label || "No especificada";
       const notifTitle = `⏳ Solicitud de Cancelación #${cancellationFolio}`;
-      const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${currentUser?.name || "No registrado"}\nSe solicitó la cancelación de ${itemQty}x ${itemName}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
+      const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nFecha y Hora: ${formatNotificationDate(new Date().toISOString())}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${currentUser?.name || "No registrado"}\nSe solicitó la cancelación de ${itemQty}x ${itemName}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
 
       triggerAppNotification(notifTitle, notifBody, "success", {
         isCancellationRequest: true,
@@ -10159,7 +10166,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       const cancellationFolio = "CAN-" + String(Date.now()).slice(-5);
       const tableLabel = account?.tableLabel || "No especificada";
       const notifTitle = `⏳ Cancelación de Cuenta Cerrada #${cancellationFolio}`;
-      const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${waiterNameStr}\nSe solicitó la cancelación de la cuenta por $${account?.total || 0}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
+      const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nFecha y Hora: ${formatNotificationDate(new Date().toISOString())}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${waiterNameStr}\nSe solicitó la cancelación de la cuenta por $${account?.total || 0}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
 
       triggerAppNotification(notifTitle, notifBody, "success", {
         isClosedAccountCancellationRequest: true,
@@ -10179,7 +10186,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
   };
 
-  const handleAuthorizeAccountCancellation = async (accountId: string, adminUser: User) => {
+  const handleAuthorizeAccountCancellation = async (accountId: string, adminUser: User, customReasonOrAuditNote?: string) => {
     try {
       const account = history.find(a => a.id === accountId);
       const matchingNotif = notificationsList.find(n => 
@@ -10198,20 +10205,22 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         isClosedAccount: true,
       } : undefined;
 
-      const reason = matchingNotif?.reason || account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
+      const baseReason = matchingNotif?.reason || account?.pendingCancellationReason || account?.cancellationReason || "Autorizado por Administrador";
+      const reason = customReasonOrAuditNote ? `${baseReason} [${customReasonOrAuditNote}]` : baseReason;
       await cancelClosedAccountInFirebase(accountId, reason, adminUser, fallbackAccountData);
 
       if (matchingNotif) {
         await updateNotificationInFirebase(matchingNotif.id, {
           status: "approved",
           authorizedBy: adminUser.name,
-          authorizedAt: new Date().toISOString()
+          authorizedAt: new Date().toISOString(),
+          ...(customReasonOrAuditNote ? { cashierTimeoutAuthorized: true, cancellationAuditNote: customReasonOrAuditNote } : {})
         });
 
         recordCancellationTimelineEvent(matchingNotif.id, {
           stage: "resolved",
-          title: "Cancelación de Cuenta Autorizada ✅",
-          description: `Autorizada por ${adminUser.name} (${adminUser.role}).`,
+          title: (adminUser as any)?.isCashierOverride ? "Cancelación Autorizada por Cajero (Timeout) ⏱️" : "Cancelación de Cuenta Autorizada ✅",
+          description: customReasonOrAuditNote || `Autorizada por ${adminUser.name} (${adminUser.role}).`,
           actor: adminUser.name,
           deviceInfo: getSimplifiedDeviceInfo(),
           status: "ok",
@@ -10318,7 +10327,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         const cancellationFolio = "CAN-" + String(Date.now()).slice(-5);
         const tableLabel = selectedTable.label || "No especificada";
         const notifTitle = `⏳ Solicitud de Cancelación de Comanda #${cancellationFolio}`;
-        const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${currentUser?.name || "No registrado"}\nSe solicitó la cancelación de la comanda entera #${folio}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
+        const notifBody = `Solicitud enviada.\nFolio: ${cancellationFolio}\nFecha y Hora: ${formatNotificationDate(new Date().toISOString())}\nMesa: ${tableLabel}\nSucursal: ${selectedTenant?.name || "No especificada"}\nMesero: ${currentUser?.name || "No registrado"}\nSe solicitó la cancelación de la comanda entera #${folio}.\nMotivo: ${reason}\nEscribe aquí tu PIN para autorizar.`;
 
         triggerAppNotification(notifTitle, notifBody, "success", {
           isCancellationRequest: true,
@@ -14112,6 +14121,12 @@ Instrucciones:
           setPendingCancellationTarget={setPendingCancellationTarget}
           triggerAppNotification={triggerAppNotification}
           validateAdminPin={validateAdminPin}
+          selectedTenant={selectedTenant}
+          notificationsList={notificationsList}
+          setNotificationsList={setNotificationsList}
+          users={users}
+          currentUser={currentUser}
+          notifyAdminsCancellationResolved={notifyAdminsCancellationResolved}
         />
 
           {/* Recipe Add Modal */}

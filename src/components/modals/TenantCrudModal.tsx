@@ -55,6 +55,8 @@ interface TenantCrudModalProps {
   setFormTenantAllowLupay: (v: boolean) => void;
   formTenantRequireCardDigits: boolean;
   setFormTenantRequireCardDigits: (v: boolean) => void;
+  formTenantCancellationTimeoutMinutes?: number;
+  setFormTenantCancellationTimeoutMinutes?: (v: number) => void;
   transferStep: number;
   setTransferStep: (v: number) => void;
   transferTargetOwnerKey: string;
@@ -116,6 +118,8 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   setFormTenantAllowLupay,
   formTenantRequireCardDigits,
   setFormTenantRequireCardDigits,
+  formTenantCancellationTimeoutMinutes,
+  setFormTenantCancellationTimeoutMinutes,
   transferStep,
   setTransferStep,
   transferTargetOwnerKey,
@@ -635,6 +639,34 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                   onChange={(e) => setFormTenantRequireInternalFolio(e.target.checked)}
                   className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
                 />
+              </div>
+
+              {/* Tiempo Límite de Espera para Cancelaciones */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 flex items-center justify-between gap-4">
+                <div className="pr-2 flex-1">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer">
+                    <span>⏱️</span> Tiempo Límite de Espera para Cancelaciones
+                  </label>
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5 leading-snug">
+                    Si ningún administrador atiende la solicitud en este lapso, el cajero podrá cancelarla en terminal con su PIN de 4 dígitos. (Por defecto: 7 min).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={formTenantCancellationTimeoutMinutes ?? 7}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (setFormTenantCancellationTimeoutMinutes) {
+                        setFormTenantCancellationTimeoutMinutes(isNaN(val) ? 7 : Math.max(1, Math.min(60, val)));
+                      }
+                    }}
+                    className="w-16 px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-center text-sm font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  />
+                  <span className="text-xs font-bold text-slate-600">min</span>
+                </div>
               </div>
 
               {/* Sección Terminal Windows & Instalación PWA (Aislamiento de Sucursal) */}

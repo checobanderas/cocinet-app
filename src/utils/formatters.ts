@@ -26,6 +26,24 @@ export const formatTableName = (zone: string, label: string): string => {
   return label;
 };
 
+export const formatNotificationDate = (createdAt?: string): string => {
+  if (!createdAt) return "Hace un momento";
+  try {
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return "Hace un momento";
+    const day = d.getDate();
+    const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const month = months[d.getMonth()];
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${day} ${month}, ${hours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return "Hace un momento";
+  }
+};
+
 export const numeroALetras = (num: number): string => {
   const unidades = ["", "UN ", "DOS ", "TRES ", "CUATRO ", "CINCO ", "SEIS ", "SIETE ", "OCHO ", "NUEVE "];
   const decenas = ["DIEZ ", "ONCE ", "DOCE ", "TRECE ", "CATORCE ", "QUINCE ", "DIECISEIS ", "DIECISIETE ", "DIECIOCHO ", "DIECINUEVE ", "VEINTE ", "TREINTA ", "CUARENTA ", "CINCUENTA ", "SESENTA ", "SETENTA ", "OCHENTA ", "NOVENTA "];
