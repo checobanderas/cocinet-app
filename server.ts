@@ -746,7 +746,10 @@ async function startServer() {
         if (response.ok && data?.messages?.[0]?.id) {
           return res.json({ success: true, messageId: data.messages[0].id });
         } else {
-          const errorMsg = data?.error?.message || 'Error en la API de Meta';
+          let errorMsg = data?.error?.message || 'Error en la API de Meta';
+          if (data?.error?.code === 131030 || String(errorMsg).includes('allowed list')) {
+            errorMsg = `El número ${formattedPhone} aún no está en la lista de destinatarios de Meta for Developers. En Meta > Destinatario, haz clic en "Administrar lista de números de teléfono" y agrega tu celular con el código de 6 dígitos.`;
+          }
           return res.json({ success: false, error: errorMsg });
         }
       }

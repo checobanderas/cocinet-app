@@ -84,7 +84,10 @@ function smsLogPlugin() {
                   if (apiRes.ok && resData?.messages?.[0]?.id) {
                     res.end(JSON.stringify({ success: true, messageId: resData.messages[0].id }));
                   } else {
-                    const errorMsg = resData?.error?.message || 'Error en la API de Meta';
+                    let errorMsg = resData?.error?.message || 'Error en la API de Meta';
+                    if (resData?.error?.code === 131030 || String(errorMsg).includes('allowed list')) {
+                      errorMsg = `El número ${formattedPhone} aún no está en la lista de destinatarios de Meta for Developers. En Meta > Destinatario, haz clic en "Administrar lista de números de teléfono" y agrega tu celular con el código de 6 dígitos.`;
+                    }
                     res.end(JSON.stringify({ success: false, error: errorMsg }));
                   }
                   return;
