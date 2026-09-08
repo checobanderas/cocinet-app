@@ -2004,6 +2004,7 @@ export default function App() {
         const lug = data?.lugarExpedicion ?? selectedTenant.lugarExpedicion ?? "";
         const tel = data?.telefono ?? selectedTenant.telefono ?? "";
         const eml = sanitizeEmail(data?.email ?? selectedTenant.email ?? "");
+        const showFiscalVal = (data?.showFiscalData ?? selectedTenant?.showFiscalData) !== false;
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
@@ -2031,6 +2032,7 @@ export default function App() {
           lugarExpedicion: lug,
           telefono: tel,
           email: eml,
+          showFiscalData: showFiscalVal,
         }));
 
         setSystemUseRawBt(u);
@@ -2044,6 +2046,7 @@ export default function App() {
         setTicketLugarExpedicion(lug);
         setTicketTelefono(tel);
         setTicketEmail(eml);
+        setTicketShowFiscalData(showFiscalVal);
 
         try {
           localStorage.setItem(
@@ -2060,6 +2063,7 @@ export default function App() {
               lugarExpedicion: lug,
               telefono: tel,
               email: eml,
+              showFiscalData: showFiscalVal,
             }),
           );
           localStorage.setItem("system_use_rawbt", u ? "true" : "false");
@@ -5023,13 +5027,13 @@ export default function App() {
         const emlVal = sanitizeEmail(pedido.email || companyConfig.email || selectedTenant?.email || "");
         const sucVal = (pedido.sucursal || companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase();
 
-        const showFiscal = selectedTenant?.showFiscalData !== false;
+        const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
         if (showFiscal && rfcVal) job.printLine(`RFC: ${rfcVal}`);
         if (showFiscal && regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
-        if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
+        if (showFiscal && lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
         if (dirVal) job.printLine(`DIR: ${dirVal}`);
-        if (sucVal) job.printLine(`SUC: ${sucVal}`);
-        if (telVal) job.printLine(`📞 TEL. SUCURSAL: ${formatPhone(telVal) || telVal}`);
+        if (showFiscal && sucVal) job.printLine(`SUC: ${sucVal}`);
+        if (telVal) job.printLine(`📞 TEL: ${formatPhone(telVal) || telVal}`);
         if (emlVal) job.printLine(`✉️ ${emlVal.toLowerCase()}`);
         
         job.printLine("--------------------------------");
@@ -5701,6 +5705,7 @@ export default function App() {
   const [ticketLugarExpedicion, setTicketLugarExpedicion] = useState<string>("");
   const [ticketTelefono, setTicketTelefono] = useState<string>("");
   const [ticketEmail, setTicketEmail] = useState<string>("");
+  const [ticketShowFiscalData, setTicketShowFiscalData] = useState<boolean>(true);
 
   const [companyConfig, setCompanyConfig] = useState<{
     businessName: string;
@@ -5715,6 +5720,7 @@ export default function App() {
     email?: string;
     logoUrl?: string;
     useRawBt?: boolean;
+    showFiscalData?: boolean;
   }>(() => {
     try {
       const cached = localStorage.getItem("company_config");
@@ -5728,6 +5734,7 @@ export default function App() {
             lugarExpedicion: "",
             telefono: "",
             email: "",
+            showFiscalData: true,
             ...JSON.parse(cached),
           }
         : {
@@ -7722,12 +7729,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const bNameStr = (companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase();
 
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    const showFiscal = selectedTenant?.showFiscalData !== false;
+    const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
     if (showFiscal && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
     if (showFiscal && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (showFiscal && companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (showFiscal && companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
     if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
     if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "      CORTE DE CAJA DIARIO       \n";
@@ -7787,12 +7794,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
     let t = "";
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    const showFiscal = selectedTenant?.showFiscalData !== false;
+    const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
     if (showFiscal && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
     if (showFiscal && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (showFiscal && companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (showFiscal && companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
     if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
     if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "    *** PRECORTE INFORMATIVO ***\n";
@@ -7847,12 +7854,12 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
     let t = "";
     t += `   ${bNameStr.substring(0, 26)}   \n`;
-    const showFiscalExpress = selectedTenant?.showFiscalData !== false;
+    const showFiscalExpress = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
     if (showFiscalExpress && companyConfig?.rfc) t += `RFC: ${companyConfig.rfc.toUpperCase()}\n`;
     if (showFiscalExpress && companyConfig?.regimenFiscal) t += `REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}\n`;
-    if (companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
+    if (showFiscalExpress && companyConfig?.lugarExpedicion) t += `LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}\n`;
     if (companyConfig?.direccionFiscal) t += `DIR: ${companyConfig.direccionFiscal.toUpperCase()}\n`;
-    if (companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
+    if (showFiscalExpress && companyConfig?.sucursal) t += `SUCURSAL: ${companyConfig.sucursal.toUpperCase().substring(0, 24)}\n`;
     if (companyConfig?.telefono) t += `TEL: ${companyConfig.telefono}\n`;
     if (companyConfig?.email) t += `EMAIL: ${companyConfig.email.toLowerCase()}\n`;
     t += "SISTEMA POS - TICKET DE CORTE EXPRESS\n";
@@ -7970,21 +7977,19 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         transSales,
         topSold,
       } = corteData;
-      const now = new Date();
-
+      const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
       job
         .initialize()
         .center()
         .bold(true)
-        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
-        .printLine(
-          selectedTenant?.showFiscalData !== false && companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
-        )
-        .printLine(
-          companyConfig.sucursal
-            ? `SUC: ${companyConfig.sucursal.toUpperCase()}`
-            : "",
-        )
+        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase());
+      if (showFiscal && companyConfig.rfc) {
+        job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
+      }
+      if (showFiscal && companyConfig.sucursal) {
+        job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
+      }
+      job
         .printLine("*** PRECORTE INFORMATIVO ***")
         .printLine(" (NO CIERRA EL TURNO) ")
         .bold(false)
@@ -8086,19 +8091,19 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       } = corteData;
       const now = new Date();
 
+      const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
       job
         .initialize()
         .center()
         .bold(true)
-        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase())
-        .printLine(
-          selectedTenant?.showFiscalData !== false && companyConfig.rfc ? `RFC: ${companyConfig.rfc.toUpperCase()}` : "",
-        )
-        .printLine(
-          companyConfig.sucursal
-            ? `SUC: ${companyConfig.sucursal.toUpperCase()}`
-            : "",
-        )
+        .printLine((companyConfig?.businessName || selectedTenant?.name || "TAQUERIA").toUpperCase());
+      if (showFiscal && companyConfig.rfc) {
+        job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
+      }
+      if (showFiscal && companyConfig.sucursal) {
+        job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
+      }
+      job
         .printLine("CORTE DE CAJA DIARIO")
         .bold(false)
         .printLine("================================")
@@ -10570,13 +10575,13 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         .setPrintMode(job.FONT_SIZE_NORMAL)
         .bold(false);
       job.printLine("--------------------------------");
-      const showFiscal = selectedTenant?.showFiscalData !== false;
+      const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
       if (showFiscal && rfcVal) job.printLine(`RFC: ${rfcVal}`);
       if (showFiscal && regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
-      if (lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
+      if (showFiscal && lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
       if (dirVal) job.printLine(`DIR: ${dirVal}`);
-      if (sucVal) job.printLine(`SUC: ${sucVal}`);
-      if (telVal) job.printLine(`📞 TEL. SUCURSAL: ${formatPhone(telVal) || telVal}`);
+      if (showFiscal && sucVal) job.printLine(`SUC: ${sucVal}`);
+      if (telVal) job.printLine(`📞 TEL: ${formatPhone(telVal) || telVal}`);
       if (emlVal) job.printLine(`✉️ ${emlVal.toLowerCase()}`);
       
       job.printLine("--------------------------------");
@@ -11906,6 +11911,7 @@ Instrucciones:
       setTicketRfc={setTicketRfc}
       setTicketSucursal={setTicketSucursal}
       setTicketTelefono={setTicketTelefono}
+      setTicketShowFiscalData={setTicketShowFiscalData}
       setWebsocketSyncLog={setWebsocketSyncLog}
       showCorteModal={showCorteModal}
       showResetSalesConfirm={showResetSalesConfirm}
@@ -11924,6 +11930,7 @@ Instrucciones:
       ticketRfc={ticketRfc}
       ticketSucursal={ticketSucursal}
       ticketTelefono={ticketTelefono}
+      ticketShowFiscalData={ticketShowFiscalData}
       triggerAppNotification={triggerAppNotification}
       users={users}
       websocketSyncLog={websocketSyncLog}

@@ -67,6 +67,7 @@ interface AdminPanelViewProps {
   setTicketRfc: any;
   setTicketSucursal: any;
   setTicketTelefono: any;
+  setTicketShowFiscalData?: any;
   setWebsocketSyncLog: any;
   showCorteModal: any;
   showResetSalesConfirm: any;
@@ -85,6 +86,7 @@ interface AdminPanelViewProps {
   ticketRfc: any;
   ticketSucursal: any;
   ticketTelefono: any;
+  ticketShowFiscalData?: any;
   triggerAppNotification: any;
   users: any;
   websocketSyncLog: any;
@@ -162,6 +164,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   setTicketRfc,
   setTicketSucursal,
   setTicketTelefono,
+  setTicketShowFiscalData,
   setWebsocketSyncLog,
   showCorteModal,
   showResetSalesConfirm,
@@ -180,6 +183,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   ticketRfc,
   ticketSucursal,
   ticketTelefono,
+  ticketShowFiscalData,
   triggerAppNotification,
   users,
   websocketSyncLog,
@@ -711,6 +715,23 @@ setCheckoutReturnMode(null);
                         className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
                       />
                     </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mt-3 flex items-center justify-between">
+                      <div className="pr-4">
+                        <label className="text-xs font-black text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                          <span>📜</span> Mostrar Datos Fiscales y Sucursal en Tickets (RFC, Régimen, Sucursal)
+                        </label>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                          Si está activado, se imprimirán el RFC, Régimen Fiscal, Sucursal y Lugar de Expedición en tickets y precuenta. Si está desactivado, se omitirán estos datos.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={ticketShowFiscalData ?? true}
+                        onChange={(e) => setTicketShowFiscalData && setTicketShowFiscalData(e.target.checked)}
+                        className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 mt-2">
@@ -725,6 +746,9 @@ setCheckoutReturnMode(null);
                         );
                         setTicketGeminiApiKey(companyConfig.geminiApiKey || "");
                         setTicketRequireInternalFolio(selectedTenant.requireInternalFolio ?? true);
+                        if (setTicketShowFiscalData) {
+                          setTicketShowFiscalData(selectedTenant.showFiscalData !== false);
+                        }
                         triggerAppNotification(
                           "⚡ Valores Sugeridos",
                           `Se han autocompletado los campos con los valores por defecto de: ${selectedTenant.name}`,
@@ -755,6 +779,7 @@ setCheckoutReturnMode(null);
                             useRawBt: systemUseRawBt,
                             printerConfig: tenantPrinterConfig,
                             productCategories: productCategories,
+                            showFiscalData: ticketShowFiscalData !== false,
                           };
 
                           await saveCompanyConfigInFirebase(selectedTenant.id, updatedCfg);
@@ -778,6 +803,7 @@ setCheckoutReturnMode(null);
                               lugarExpedicion: ticketLugarExpedicion.trim(),
                               telefono: ticketTelefono.trim(),
                               email: ticketEmail.trim(),
+                              showFiscalData: ticketShowFiscalData !== false,
                             };
                             await addTenantToFirebase(updatedTenant);
                             setSelectedTenant(updatedTenant);
