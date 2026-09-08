@@ -40,6 +40,41 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
     const [showToken, setShowToken] = useState(false);
     const [isSendingTest, setIsSendingTest] = useState(false);
 
+    // Estados para Selección Múltiple y Envío de Mensajes Personalizados 📢💬
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [showCustomMessageModal, setShowCustomMessageModal] = useState(false);
+    const [targetUsersForMessage, setTargetUsersForMessage] = useState<any[]>([]);
+    const [customMessageTitle, setCustomMessageTitle] = useState('📢 Actualización de Sistema');
+    const [customMessageBody, setCustomMessageBody] = useState('');
+    const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+
+    const MESSAGE_TEMPLATES = [
+      {
+        id: 'update',
+        name: '🚀 Actualización del Sistema',
+        title: '🚀 Actualización de Cocinet Pro',
+        body: `Hola {nombre}! 👋\n\nTe informamos que hemos implementado una nueva actualización en Cocinet Pro para la sucursal {sucursal} con mejoras importantes para tu turno.\n\nPor favor actualiza la página o reinicia tu turno para ver los cambios aplicados.\n\n¡Gracias por tu excelente labor! ✨`
+      },
+      {
+        id: 'cajeros',
+        name: '💵 Aviso a Cajeros',
+        title: '💵 Aviso Importante para Cajeros',
+        body: `Hola {nombre}! 💵\n\nRecordatorio operativo para caja en {sucursal}:\n• Registrar todas las compras y gastos antes del corte.\n• Verificar que el arqueo de efectivo coincida con el sistema.\n• Emitir el corte al finalizar tu jornada.\n\n¡Cualquier duda consulta a gerencia!`
+      },
+      {
+        id: 'meseros',
+        name: '🏃 Aviso a Meseros',
+        title: '🏃 Aviso para Meseros / Servicio',
+        body: `Hola {nombre}! 🏃\n\nRecordatorio de servicio en {sucursal}:\n• Confirmar el folio de comanda en cada pedido.\n• Notificar a tiempo cualquier cambio o aclaración de mesa.\n\n¡Excelente turno y buen servicio! 🍽️`
+      },
+      {
+        id: 'credenciales',
+        name: '🔑 Recordatorio de PIN y Acceso',
+        title: '🔑 Acceso y PIN de Cocinet Pro',
+        body: `Hola {nombre}! 👋\n\nTe compartimos tus credenciales de acceso a Cocinet Pro:\n🏪 *Sucursal:* {sucursal}\n👤 *Rol:* {rol}\n🔢 *Tu PIN de acceso:* *{pin}*\n\n🔗 *Enlace directo:*\n{enlace}\n\n⚠️ _No compartas tu contraseña por seguridad._`
+      }
+    ];
+
     React.useEffect(() => {
       const cfg = getWhatsAppCloudConfig();
       if (cfg) {
@@ -281,6 +316,159 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       );
     };
 
+    const handleToggleUser = (userId: string) => {
+      setSelectedUserIds((prev) =>
+        prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      );
+    };
+
+    const handleSelectAll = () => {
+      if (selectedUserIds.length === modalUsers.length) {
+        setSelectedUserIds([]);
+      } else {
+        setSelectedUserIds(modalUsers.map((u) => u.id));
+      }
+    };
+
+    const handleSelectByRole = (role: string) => {
+      const matchIds = modalUsers
+        .filter((u) => {
+          if (role === 'admin') {
+            return u.role === 'admin' || u.id.endsWith('-admin') || u.id.endsWith('-manager') || u.id.endsWith('-sistemas');
+          }
+          return u.role === role;
+        })
+        .map((u) => u.id);
+
+      setSelectedUserIds(matchIds);
+      triggerAppNotification(
+        'Filtro Aplicado 🎯',
+        `Se seleccionaron ${matchIds.length} usuario(s) con rol ${role.toUpperCase()}.`,
+        'info'
+      );
+    };
+
+    const handleOpenMessageForSingle = (user: any) => {
+      setTargetUsersForMessage([user]);
+      setCustomMessageTitle(`📢 Aviso a ${user.name}`);
+      setCustomMessageBody(`Hola ${user.name}! 👋\n\nTe escribo desde la administración de ${modalTenant?.name || 'la sucursal'} para informarte lo siguiente:\n\n[Escribe tu mensaje aquí...]`);
+      setShowCustomMessageModal(true);
+    };
+
+    const handleOpenMessageForSelected = () => {
+      const targets = modalUsers.filter((u) => selectedUserIds.includes(u.id));
+      if (targets.length === 0) {
+        triggerAppNotification(
+          'Selecciona Destinatarios ⚠️',
+          'Marca la casilla de al menos un empleado para redactar y enviar el mensaje.',
+          'warning'
+        );
+        return;
+      }
+      setTargetUsersForMessage(targets);
+      setCustomMessageTitle('📢 Aviso a Empleados');
+      setCustomMessageBody(`Hola {nombre}! 👋\n\nTe informamos lo siguiente para tu turno en {sucursal}:\n\n[Escribe tu mensaje aquí...]`);
+      setShowCustomMessageModal(true);
+    };
+
+    const handleApplyTemplate = (tmpl: any) => {
+      setCustomMessageTitle(tmpl.title);
+      setCustomMessageBody(tmpl.body);
+    };
+
+    const handleInsertVariable = (variableKey: string) => {
+      setCustomMessageBody((prev) => `${prev} {${variableKey}}`);
+    };
+
+    const handleSendBroadcastWhatsApp = async () => {
+      if (!customMessageBody.trim()) {
+        triggerAppNotification('Mensaje Vacío ⚠️', 'Por favor redacta el texto del mensaje antes de enviar.', 'warning');
+        return;
+      }
+
+      const validTargets = targetUsersForMessage.filter((u) => {
+        const p = formatMexicoPhone(u.phone || '');
+        return Boolean(p);
+      });
+
+      if (validTargets.length === 0) {
+        triggerAppNotification(
+          'Sin Celulares Registrados 📱⚠️',
+          'Ninguno de los empleados seleccionados tiene configurado un número celular válido de 10 dígitos.',
+          'warning'
+        );
+        return;
+      }
+
+      setIsSendingBroadcast(true);
+      let successCount = 0;
+      let failCount = 0;
+
+      const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+        ? window.location.origin
+        : "https://cocinet-prueba.web.app";
+      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+      const accessLink = `${publicBase}${cleanPath}?tenant=${modalTenant?.id || 'tenant-1'}`;
+
+      triggerAppNotification(
+        'Enviando WhatsApps 🚀',
+        `Disparando mensajes silenciosos a ${validTargets.length} empleado(s)...`,
+        'info'
+      );
+
+      for (const u of validTargets) {
+        const parsedText = customMessageBody
+          .replace(/\{nombre\}/gi, u.name || 'Empleado')
+          .replace(/\{sucursal\}/gi, modalTenant?.name || 'Cocinet')
+          .replace(/\{rol\}/gi, (u.role || 'personal').toUpperCase())
+          .replace(/\{pin\}/gi, u.pin || '****')
+          .replace(/\{enlace\}/gi, accessLink);
+
+        const fullMessage = `${customMessageTitle.trim() ? `*${customMessageTitle.trim().toUpperCase()}*\n\n` : ''}${parsedText}\n\n_Enviado desde Cocinet Pro • ${modalTenant?.name || 'Sucursal'}_`;
+
+        try {
+          const res = await sendSilentWhatsAppMessage(u.phone, fullMessage);
+          if (res.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+
+          addNotificationDeliveryLog({
+            tenantId: modalTenant?.id || 'tenant-1',
+            branchName: modalTenant?.name || 'Cocinet',
+            recipientName: u.name,
+            recipientRole: u.role || 'user',
+            recipientPhone: u.phone,
+            channel: 'whatsapp',
+            status: res.success ? 'success' : 'failed',
+            detail: res.success ? `WhatsApp de aviso entregado silenciosamente (ID: ${res.messageId || 'OK'})` : `Error: ${res.error || 'Fallo API'}`,
+            targetUrl: accessLink,
+          });
+        } catch (err: any) {
+          failCount++;
+        }
+      }
+
+      setIsSendingBroadcast(false);
+      setShowCustomMessageModal(false);
+
+      if (successCount > 0) {
+        triggerAppNotification(
+          '¡Mensajes Entregados! ✅🚀',
+          `Se enviaron exitosamente ${successCount} mensaje(s) de WhatsApp silencioso a los empleados.${failCount > 0 ? ` (${failCount} no se pudieron entregar).` : ''}`,
+          'success'
+        );
+      } else {
+        triggerAppNotification(
+          'Error al Enviar ❌',
+          'No se pudieron entregar los mensajes. Revisa tu conexión y credenciales de WhatsApp.',
+          'error'
+        );
+      }
+    };
+
     return (
       <IonModal
         isOpen={showTenantUsersModal}
@@ -442,11 +630,90 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
               </div>
             )}
 
+            {/* Barra de Selección Rápida y Envío de WhatsApp a Grupos */}
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl p-3.5 text-white flex flex-col md:flex-row items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                <span className="text-[11px] font-black text-indigo-200 uppercase tracking-wider flex items-center gap-1.5 mr-1">
+                  <span>🎯</span> Filtrar Grupo:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border-none cursor-pointer flex items-center gap-1 ${
+                    selectedUserIds.length === modalUsers.length && modalUsers.length > 0
+                      ? 'bg-indigo-500 text-white shadow-xs'
+                      : 'bg-white/10 hover:bg-white/20 text-indigo-100'
+                  }`}
+                >
+                  <span>👥 Todos ({modalUsers.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectByRole('cajero')}
+                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-emerald-300 rounded-lg text-xs font-bold transition border-none cursor-pointer flex items-center gap-1"
+                >
+                  <span>💵 Cajeros ({modalUsers.filter((u) => u.role === 'cajero').length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectByRole('mesero')}
+                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-amber-300 rounded-lg text-xs font-bold transition border-none cursor-pointer flex items-center gap-1"
+                >
+                  <span>🏃 Meseros ({modalUsers.filter((u) => u.role === 'mesero').length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectByRole('admin')}
+                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-sky-300 rounded-lg text-xs font-bold transition border-none cursor-pointer flex items-center gap-1"
+                >
+                  <span>👔 Admins ({modalUsers.filter((u) => u.role === 'admin' || u.id.endsWith('-admin') || u.id.endsWith('-manager') || u.id.endsWith('-sistemas')).length})</span>
+                </button>
+                {selectedUserIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUserIds([])}
+                    className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded-lg text-xs font-bold transition border-none cursor-pointer"
+                  >
+                    ✕ Deseleccionar ({selectedUserIds.length})
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleOpenMessageForSelected}
+                  className={`py-2 px-4 rounded-xl text-xs font-black transition duration-200 flex items-center gap-2 shadow-md border-none cursor-pointer ${
+                    selectedUserIds.length > 0
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-900/50 animate-pulse'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                  title="Redactar y enviar mensaje personalizado a los usuarios seleccionados"
+                >
+                  <i className="fa-brands fa-whatsapp text-sm" />
+                  <span>
+                    {selectedUserIds.length > 0
+                      ? `📢 Enviar WhatsApp a ${selectedUserIds.length} Seleccionado(s)`
+                      : '📢 Enviar WhatsApp Grupal'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[1100px]">
+                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[1150px]">
                   <thead>
                     <tr className="bg-slate-900 text-white border-b border-slate-200 font-bold text-[11px]">
+                      <th className="py-2.5 px-2.5 w-[40px] text-center">
+                        <input
+                          type="checkbox"
+                          checked={modalUsers.length > 0 && selectedUserIds.length === modalUsers.length}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                          title="Seleccionar / Deseleccionar Todos"
+                        />
+                      </th>
                       <th className="py-2.5 px-2.5 w-[50px] text-center">Avatar</th>
                       <th className="py-2.5 px-2.5 w-[85px]">ID Acceso</th>
                       <th className="py-2.5 px-2.5">Nombre Completo</th>
@@ -454,14 +721,15 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       <th className="py-2.5 px-2.5 w-[100px]">PIN Acceso 🔑</th>
                       <th className="py-2.5 px-2.5 w-[125px]">Teléfono 📱</th>
                       <th className="py-2.5 px-2.5 w-[135px]">Horario Reporte ⏰</th>
-                      <th className="py-2.5 px-2.5 w-[185px] text-center">Prueba de Envío 🚀</th>
-                      <th className="py-2.5 px-2.5 w-[160px] text-center">Compartir Acceso</th>
+                      <th className="py-2.5 px-2.5 w-[220px] text-center">Mensajes y Pruebas 🚀</th>
+                      <th className="py-2.5 px-2.5 w-[140px] text-center">Compartir Acceso</th>
                       <th className="py-2.5 px-2.5 w-[65px] text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {modalUsers.map((user) => {
                       const isProtected = user.id.endsWith("-admin") || user.id.endsWith("-sistemas") || user.id.endsWith("-manager");
+                      const isSelected = selectedUserIds.includes(user.id);
                       
                       const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
                         ? window.location.origin
@@ -471,7 +739,17 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       const link = `${publicBase}${cleanPath}?tenant=${modalTenant.id}`;
                       
                       return (
-                        <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                        <tr key={user.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50/50'}`}>
+                          {/* Checkbox de Selección */}
+                          <td className="py-2 px-2.5 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleUser(user.id)}
+                              className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+                            />
+                          </td>
+
                           {/* Avatar */}
                           <td className="py-2 px-2.5 text-center">
                             <button
@@ -595,47 +873,60 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                             )}
                           </td>
 
-                          {/* Prueba de Envío */}
+                          {/* Mensajes y Pruebas */}
                           <td className="py-2 px-2.5 text-center">
-                            {isProtected ? (
-                              <div className="flex justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendTestCorteWA(user)}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-black flex items-center gap-1 cursor-pointer transition border-none shadow-xs"
-                                  title="Enviar Corte por WhatsApp a este usuario"
-                                >
-                                  <span>📊💬 WA Corte</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendCloudPush(user, true)}
-                                  className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded text-[10px] font-black flex items-center gap-1 cursor-pointer transition border-none shadow-xs"
-                                  title="Enviar Notificación Cloud de Corte"
-                                >
-                                  <span>🔔📲 Cloud</span>
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendDirectWA(user)}
-                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
-                                  title="Enviar WhatsApp directo a este empleado"
-                                >
-                                  <span>💬 WA</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendCloudPush(user, false)}
-                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
-                                  title="Enviar Notificación Cloud directa a este empleado"
-                                >
-                                  <span>🔔 Push</span>
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                              {/* Botón de Mensaje Personalizado */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenMessageForSingle(user)}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-black flex items-center gap-1 cursor-pointer transition border-none shadow-xs"
+                                title={`Enviar mensaje personalizado de WhatsApp a ${user.name}`}
+                              >
+                                <i className="fa-brands fa-whatsapp text-[11px]" />
+                                <span>Mensaje</span>
+                              </button>
+
+                              {isProtected ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendTestCorteWA(user)}
+                                    className="px-1.5 py-1 bg-slate-100 hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition"
+                                    title="Enviar Corte de Prueba por WhatsApp a este usuario"
+                                  >
+                                    <span>📊 Corte</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendCloudPush(user, true)}
+                                    className="px-1.5 py-1 bg-slate-100 hover:bg-violet-50 text-violet-800 border border-violet-200 rounded text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition"
+                                    title="Enviar Notificación Cloud de Corte"
+                                  >
+                                    <span>🔔 Cloud</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendDirectWA(user)}
+                                    className="px-1.5 py-1 bg-slate-100 hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition"
+                                    title="Enviar WhatsApp de prueba a este empleado"
+                                  >
+                                    <span>🔔 Prueba</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSendCloudPush(user, false)}
+                                    className="px-1.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition"
+                                    title="Enviar Notificación Cloud directa a este empleado"
+                                  >
+                                    <span>🔔 Push</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
 
                           {/* Enviar / Compartir Acceso */}
@@ -670,9 +961,9 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                                 type="button"
                                 onClick={() => handleShareAccessWA(user, link)}
                                 className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
-                                title="Enviar enlace de acceso directo por WhatsApp Silencioso"
+                                title="Enviar credenciales de acceso por WhatsApp Silencioso"
                               >
-                                🟢 WhatsApp
+                                🟢 Acceso
                               </button>
                             </div>
                           </td>
@@ -702,6 +993,186 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
             </div>
           </div>
         </IonContent>
+
+        {/* Modal de Redacción y Envío de WhatsApp Personalizado / Grupal */}
+        <IonModal
+          isOpen={showCustomMessageModal}
+          onDidDismiss={() => setShowCustomMessageModal(false)}
+          style={{
+            "--height": "auto",
+            "--width": "100%",
+            "--max-width": "680px",
+            "--border-radius": "24px",
+          }}
+        >
+          <div className="bg-white p-6 rounded-3xl shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shadow-xs">
+                  <i className="fa-brands fa-whatsapp" />
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 m-0">
+                    Enviar WhatsApp a Empleados 📲
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium m-0">
+                    {targetUsersForMessage.length === 1
+                      ? `Destinatario: ${targetUsersForMessage[0]?.name} (${targetUsersForMessage[0]?.role?.toUpperCase()})`
+                      : `Difusión a ${targetUsersForMessage.length} empleado(s) seleccionados`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCustomMessageModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center border-none cursor-pointer transition"
+              >
+                <IonIcon icon={closeOutline} />
+              </button>
+            </div>
+
+            {/* Chips de Destinatarios */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Destinatarios ({targetUsersForMessage.length}):
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                {targetUsersForMessage.map((u) => {
+                  const hasPhone = Boolean(formatMexicoPhone(u.phone || ''));
+                  return (
+                    <span
+                      key={u.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                        hasPhone
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border border-rose-200'
+                      }`}
+                    >
+                      <i className={hasPhone ? 'fa-solid fa-phone text-[10px]' : 'fa-solid fa-triangle-exclamation text-[10px]'} />
+                      <span>{u.name}</span>
+                      <span className="text-[10px] font-mono opacity-80">
+                        {hasPhone ? `(+52 ${u.phone})` : '(Sin celular)'}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Plantillas Rápidas */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                Plantillas Rápidas:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {MESSAGE_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => handleApplyTemplate(tmpl)}
+                    className="p-2 text-left bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 hover:text-indigo-700 transition cursor-pointer"
+                  >
+                    {tmpl.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Título / Asunto */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Título / Asunto del Mensaje:
+              </label>
+              <input
+                type="text"
+                value={customMessageTitle}
+                onChange={(e) => setCustomMessageTitle(e.target.value)}
+                placeholder="Ej. 🚀 Actualización de Cocinet Pro / 💵 Aviso a Caja"
+                className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none transition"
+              />
+            </div>
+
+            {/* Cuerpo del Mensaje */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Contenido del Mensaje de WhatsApp:
+                </label>
+                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
+                  <span>Variables:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertVariable('nombre')}
+                    className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 cursor-pointer"
+                    title="Inserta el nombre del empleado"
+                  >
+                    {'{nombre}'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertVariable('sucursal')}
+                    className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 cursor-pointer"
+                    title="Inserta el nombre de la sucursal"
+                  >
+                    {'{sucursal}'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertVariable('rol')}
+                    className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 cursor-pointer"
+                    title="Inserta el rol del empleado"
+                  >
+                    {'{rol}'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertVariable('pin')}
+                    className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 cursor-pointer"
+                    title="Inserta el PIN del empleado"
+                  >
+                    {'{pin}'}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                rows={5}
+                value={customMessageBody}
+                onChange={(e) => setCustomMessageBody(e.target.value)}
+                placeholder="Escribe el mensaje que deseas enviar a los empleados..."
+                className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:bg-white rounded-xl p-3 text-xs font-medium text-slate-800 outline-none transition leading-relaxed"
+              />
+              <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                💡 Tip: Puedes usar etiquetas como <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-600">{'{nombre}'}</code> o <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-600">{'{sucursal}'}</code> para personalizar el mensaje de cada empleado automáticamente.
+              </p>
+            </div>
+
+            {/* Botones de Acción */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowCustomMessageModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition border-none cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSendBroadcastWhatsApp}
+                disabled={isSendingBroadcast}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-200 transition border-none cursor-pointer"
+              >
+                <i className="fa-brands fa-whatsapp text-sm" />
+                <span>
+                  {isSendingBroadcast
+                    ? 'Enviando WhatsApps...'
+                    : `Enviar WhatsApp Silencioso (${targetUsersForMessage.filter((u) => Boolean(formatMexicoPhone(u.phone || ''))).length} teléfonos)`}
+                </span>
+              </button>
+            </div>
+          </div>
+        </IonModal>
       </IonModal>
     );
 };
+
