@@ -1232,6 +1232,7 @@ export default function App() {
         showFiscalData: selectedTenant.showFiscalData !== false,
       }));
 
+      setTicketShowFiscalData(selectedTenant.showFiscalData !== false);
       setTicketRequireInternalFolio(selectedTenant.requireInternalFolio === true);
 
       const tenantUsers = getTenantUsers(selectedTenant.id);
@@ -2005,7 +2006,7 @@ export default function App() {
         const lug = data?.lugarExpedicion ?? selectedTenant.lugarExpedicion ?? "";
         const tel = data?.telefono ?? selectedTenant.telefono ?? "";
         const eml = sanitizeEmail(data?.email ?? selectedTenant.email ?? "");
-        const showFiscalVal = (data?.showFiscalData ?? selectedTenant?.showFiscalData) !== false;
+        const showFiscalVal = (data?.showFiscalData !== undefined ? data.showFiscalData : selectedTenant?.showFiscalData) !== false;
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
@@ -3074,6 +3075,14 @@ export default function App() {
       localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
       if (selectedTenant && selectedTenant.id === tenantData.id) {
         setSelectedTenant(tenantData);
+        setTicketShowFiscalData(tenantData.showFiscalData !== false);
+        setCompanyConfig(prev => ({
+          ...prev,
+          businessName: tenantData.name,
+          rfc: tenantData.rfc,
+          sucursal: tenantData.sucursalDefault,
+          showFiscalData: tenantData.showFiscalData !== false,
+        }));
         try {
           localStorage.setItem("pos_selected_tenant", JSON.stringify(tenantData));
         } catch (e) {}
