@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 
 interface LandingIntroViewProps {
   onEnterLogin: () => void;
@@ -14,9 +15,11 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
 }) => {
   const phoneNumber = "9511273796";
   const [showQuoteModal, setShowQuoteModal] = React.useState(false);
+  const [clientContactName, setClientContactName] = React.useState("");
+  const [clientPhone, setClientPhone] = React.useState("");
   const [businessName, setBusinessName] = React.useState("");
   const [locationCity, setLocationCity] = React.useState("");
-  const [acquisitionType, setAcquisitionType] = React.useState("Renta Mensual");
+  const [acquisitionType, setAcquisitionType] = React.useState("Renta Mensual Todo Incluido");
   const [tableCount, setTableCount] = React.useState("11 a 25 Mesas");
   const [selectedAreas, setSelectedAreas] = React.useState<string[]>([
     "Cocina Caliente",
@@ -29,6 +32,8 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
   ]);
   const [trainingCount, setTrainingCount] = React.useState("4 a 10 Personas");
   const [installationType, setInstallationType] = React.useState("En Sitio (Red + Impresoras)");
+  const [isSendingQuote, setIsSendingQuote] = React.useState(false);
+  const [quoteSubmitted, setQuoteSubmitted] = React.useState(false);
 
   const handleToggleArea = (area: string) => {
     setSelectedAreas((prev) =>
@@ -40,6 +45,55 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
     setSelectedModules((prev) =>
       prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
     );
+  };
+
+  const handleSendQuote = async () => {
+    if (isSendingQuote) return;
+    setIsSendingQuote(true);
+
+    const cleanClientPhone = clientPhone.replace(/\D/g, "").slice(-10);
+
+    const leadSummary =
+`🛎️ *NUEVA SOLICITUD DE COTIZACIÓN - COCINET POS*
+
+👤 *Contacto:* ${clientContactName.trim() || "Posible Cliente"}
+📱 *WhatsApp Cliente:* ${cleanClientPhone || clientPhone.trim() || "No proporcionado"}
+🏢 *Negocio:* ${businessName.trim() || "Restaurante/Taquería"}
+📍 *Ciudad / Estado:* ${locationCity.trim() || "México"}
+💎 *Modalidad:* ${acquisitionType}
+🪑 *Capacidad / Mesas:* ${tableCount}
+🍳 *Áreas:* ${selectedAreas.length > 0 ? selectedAreas.join(", ") : "Caja general"}
+📱 *Comanderos Móviles:* ${waiterDevices}
+✨ *Módulos:* ${selectedModules.length > 0 ? selectedModules.join(", ") : "Básicos"}
+🧑‍🏫 *Capacitación:* ${trainingCount}
+🛠️ *Instalación:* ${installationType}
+⏰ *Fecha:* ${new Date().toLocaleString("es-MX")}`;
+
+    // 1. Enviar silenciosamente al teléfono del administrador (9511273796)
+    try {
+      await sendSilentWhatsAppMessage("9511273796", leadSummary);
+    } catch (err) {
+      console.warn("Error enviando WhatsApp silencioso a 9511273796:", err);
+    }
+
+    // 2. Si el cliente colocó su teléfono celular, responderle silenciosamente
+    if (cleanClientPhone.length === 10) {
+      const clientConfirmation =
+`¡Hola${clientContactName.trim() ? ` ${clientContactName.trim()}` : ""}! 👋
+
+Hemos recibido tu solicitud de cotización para *${businessName.trim() || "tu negocio"}* en COCINET POS.
+
+✨ *En breve nos comunicaremos contigo* para brindarte una propuesta personalizada con el mejor precio y promociones.
+
+¡Muchas gracias por tu interés! 🌮🚀`;
+
+      sendSilentWhatsAppMessage(cleanClientPhone, clientConfirmation).catch((e) => {
+        console.warn("Error enviando acuse a cliente:", e);
+      });
+    }
+
+    setIsSendingQuote(false);
+    setQuoteSubmitted(true);
   };
 
   const getFormattedWhatsAppUrl = () => {
@@ -530,223 +584,287 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
               </button>
             </div>
 
-            {/* Paso 1: Datos del Negocio y Modalidad */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-amber-500 pl-2 m-0">
-                1. Datos de tu Restaurante y Modalidad
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Nombre del Restaurante / Negocio:</label>
-                  <input
-                    type="text"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="Ej. Tacos Roy / Mariscos El Puerto"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
-                  />
+            {quoteSubmitted ? (
+              <div className="text-center py-8 space-y-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-md">
+                  ✅
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Ciudad / Estado (México):</label>
-                  <input
-                    type="text"
-                    value={locationCity}
-                    onChange={(e) => setLocationCity(e.target.value)}
-                    placeholder="Ej. Oaxaca, Oax. / CDMX / Puebla"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
-                  />
+                <h3 className="text-2xl font-black text-slate-900 m-0">
+                  ¡Solicitud Enviada con Éxito!
+                </h3>
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 py-3 px-5 rounded-2xl max-w-md mx-auto font-black text-sm shadow-xs">
+                  ✨ En breve nos comunicaremos contigo.
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Esquema que te interesa:</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {[
-                    { key: "Renta Mensual Todo Incluido", label: "💳 Renta Mensual" },
-                    { key: "Venta de Licencia Definitiva", label: "🏆 Compra Definitiva" },
-                    { key: "Ambas / Deseo Asesoría", label: "🤝 Deseo Asesoría" },
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => setAcquisitionType(item.key)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer text-center ${
-                        acquisitionType === item.key
-                          ? "bg-amber-500 text-slate-950 border-amber-600 shadow-xs"
-                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Paso 2: Capacidad y Áreas de Impresión */}
-            <div className="space-y-4 pt-2 border-t border-slate-100">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-orange-500 pl-2 m-0">
-                2. Capacidad, Mesas y Áreas a Atender
-              </h4>
-              
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Número de Mesas / Comensales:</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {["1 a 10 Mesas", "11 a 25 Mesas", "26 a 50+ Mesas", "Solo Para Llevar / Mostrador"].map((opt) => (
-                    <button
-                      key={opt}
-                      type="button"
-                      onClick={() => setTableCount(opt)}
-                      className={`py-2 px-2.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
-                        tableCount === opt
-                          ? "bg-orange-500 text-white border-orange-600 shadow-xs"
-                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Áreas de Producción / Impresoras Requeridas:</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    "🍳 Cocina Caliente",
-                    "🌮 Trompo / Taquería / Parrilla",
-                    "🍹 Barra / Bebidas",
-                    "💵 Caja Principal",
-                    "🛵 Despacho Domicilio",
-                  ].map((area) => {
-                    const isChecked = selectedAreas.includes(area);
-                    return (
-                      <button
-                        key={area}
-                        type="button"
-                        onClick={() => handleToggleArea(area)}
-                        className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
-                          isChecked
-                            ? "bg-amber-50 border-amber-400 text-amber-900 shadow-2xs"
-                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-amber-500 text-slate-950 border-amber-600" : "bg-white border-slate-300"}`}>
-                          {isChecked ? "✓" : ""}
-                        </span>
-                        <span>{area}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Dispositivos para Meseros (Comanderos Móviles):</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {["1 a 2 Celulares", "3 a 5 Celulares", "6 a 10 Celulares", "Ninguno (Solo Caja)"].map((opt) => (
-                    <button
-                      key={opt}
-                      type="button"
-                      onClick={() => setWaiterDevices(opt)}
-                      className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
-                        waiterDevices === opt
-                          ? "bg-blue-600 text-white border-blue-700 shadow-xs"
-                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Paso 3: Módulos y Servicios Profesionales */}
-            <div className="space-y-4 pt-2 border-t border-slate-100">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-emerald-500 pl-2 m-0">
-                3. Módulos, Capacitación e Instalación
-              </h4>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Módulos Especiales:</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    "🧾 Facturación CFDI 4.0 con QR",
-                    "📦 Inventarios con Receta IA y Costeo",
-                    "🛵 Módulo de Servicio a Domicilio / Reparto",
-                    "🏢 Multi-Sucursal en Tiempo Real",
-                  ].map((mod) => {
-                    const isChecked = selectedModules.includes(mod);
-                    return (
-                      <button
-                        key={mod}
-                        type="button"
-                        onClick={() => handleToggleModule(mod)}
-                        className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
-                          isChecked
-                            ? "bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs"
-                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-emerald-600 text-white border-emerald-700" : "bg-white border-slate-300"}`}>
-                          {isChecked ? "✓" : ""}
-                        </span>
-                        <span>{mod}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">🧑‍🏫 Capacitación de Personal:</label>
-                  <select
-                    value={trainingCount}
-                    onChange={(e) => setTrainingCount(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
+                  Hemos enviado los detalles de tu cotización a nuestro equipo de atención comercial para prepararte la mejor propuesta.
+                </p>
+                <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuoteModal(false);
+                      setQuoteSubmitted(false);
+                    }}
+                    className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition border-none cursor-pointer"
                   >
-                    <option value="Básica (1 a 3 Personas)">Básica (1 a 3 Personas)</option>
-                    <option value="4 a 10 Personas (Cajeros y Meseros)">4 a 10 Personas (Cajeros y Meseros)</option>
-                    <option value="Intensiva Multi-Turno (10+ Personas)">Intensiva Multi-Turno (10+ Personas)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">🛠️ Instalación y Configuración:</label>
-                  <select
-                    value={installationType}
-                    onChange={(e) => setInstallationType(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                    Cerrar
+                  </button>
+                  <a
+                    href={getFormattedWhatsAppUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl transition flex items-center justify-center gap-2 no-underline shadow-md shadow-emerald-200"
                   >
-                    <option value="En Sitio (Red + Impresoras Térmicas)">En Sitio (Red + Impresoras Térmicas)</option>
-                    <option value="Configuración Remota Guiada">Configuración Remota Guiada</option>
-                  </select>
+                    <span>💬 Abrir Chat en WhatsApp</span>
+                  </a>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Paso 1: Datos del Negocio y Modalidad */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-amber-500 pl-2 m-0">
+                    1. Datos de tu Restaurante y Contacto
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Nombre del Restaurante / Negocio:</label>
+                      <input
+                        type="text"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        placeholder="Ej. Tacos Roy / Mariscos El Puerto"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Ciudad / Estado (México):</label>
+                      <input
+                        type="text"
+                        value={locationCity}
+                        onChange={(e) => setLocationCity(e.target.value)}
+                        placeholder="Ej. Oaxaca, Oax. / CDMX / Puebla"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Tu Nombre o Responsable:</label>
+                      <input
+                        type="text"
+                        value={clientContactName}
+                        onChange={(e) => setClientContactName(e.target.value)}
+                        placeholder="Ej. Ing. Roberto Mendoza"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-medium transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Tu Celular / WhatsApp (10 dígitos):</label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={clientPhone}
+                        onChange={(e) => setClientPhone(e.target.value.replace(/\D/g, ""))}
+                        placeholder="Ej. 9511234567"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none font-mono font-medium transition-all"
+                      />
+                    </div>
+                  </div>
 
-            {/* Footer de Acciones del Modal */}
-            <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={() => setShowQuoteModal(false)}
-                className="w-full sm:w-1/3 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all border-none cursor-pointer"
-              >
-                Cerrar
-              </button>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Esquema que te interesa:</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {[
+                        { key: "Renta Mensual Todo Incluido", label: "💳 Renta Mensual" },
+                        { key: "Venta de Licencia Definitiva", label: "🏆 Compra Definitiva" },
+                        { key: "Ambas / Deseo Asesoría", label: "🤝 Deseo Asesoría" },
+                      ].map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setAcquisitionType(item.key)}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer text-center ${
+                            acquisitionType === item.key
+                              ? "bg-amber-500 text-slate-950 border-amber-600 shadow-xs"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-              <a
-                href={getFormattedWhatsAppUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setShowQuoteModal(false)}
-                className="w-full sm:w-2/3 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider text-center flex items-center justify-center gap-2 no-underline shadow-lg shadow-emerald-600/30 transition-all hover:scale-102 active:scale-98"
-              >
-                <span>📲 Enviar Cotización por WhatsApp (951-127-3796)</span>
-              </a>
-            </div>
+                {/* Paso 2: Capacidad y Áreas de Impresión */}
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-orange-500 pl-2 m-0">
+                    2. Capacidad, Mesas y Áreas a Atender
+                  </h4>
+                  
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Número de Mesas / Comensales:</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {["1 a 10 Mesas", "11 a 25 Mesas", "26 a 50+ Mesas", "Solo Para Llevar / Mostrador"].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setTableCount(opt)}
+                          className={`py-2 px-2.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
+                            tableCount === opt
+                              ? "bg-orange-500 text-white border-orange-600 shadow-xs"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Áreas de Producción / Impresoras Requeridas:</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        "🍳 Cocina Caliente",
+                        "🌮 Trompo / Taquería / Parrilla",
+                        "🍹 Barra / Bebidas",
+                        "💵 Caja Principal",
+                        "🛵 Despacho Domicilio",
+                      ].map((area) => {
+                        const isChecked = selectedAreas.includes(area);
+                        return (
+                          <button
+                            key={area}
+                            type="button"
+                            onClick={() => handleToggleArea(area)}
+                            className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
+                              isChecked
+                                ? "bg-amber-50 border-amber-400 text-amber-900 shadow-2xs"
+                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-amber-500 text-slate-950 border-amber-600" : "bg-white border-slate-300"}`}>
+                              {isChecked ? "✓" : ""}
+                            </span>
+                            <span>{area}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Dispositivos para Meseros (Comanderos Móviles):</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {["1 a 2 Celulares", "3 a 5 Celulares", "6 a 10 Celulares", "Ninguno (Solo Caja)"].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setWaiterDevices(opt)}
+                          className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center ${
+                            waiterDevices === opt
+                              ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Paso 3: Módulos y Servicios Profesionales */}
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 border-l-4 border-emerald-500 pl-2 m-0">
+                    3. Módulos, Capacitación e Instalación
+                  </h4>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Módulos Especiales:</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        "🧾 Facturación CFDI 4.0 con QR",
+                        "📦 Inventarios con Receta IA y Costeo",
+                        "🛵 Módulo de Servicio a Domicilio / Reparto",
+                        "🏢 Multi-Sucursal en Tiempo Real",
+                      ].map((mod) => {
+                        const isChecked = selectedModules.includes(mod);
+                        return (
+                          <button
+                            key={mod}
+                            type="button"
+                            onClick={() => handleToggleModule(mod)}
+                            className={`p-2 rounded-xl text-[11px] font-bold text-left transition-all border cursor-pointer flex items-center gap-2 ${
+                              isChecked
+                                ? "bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs"
+                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border ${isChecked ? "bg-emerald-600 text-white border-emerald-700" : "bg-white border-slate-300"}`}>
+                              {isChecked ? "✓" : ""}
+                            </span>
+                            <span>{mod}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">🧑‍🏫 Capacitación de Personal:</label>
+                      <select
+                        value={trainingCount}
+                        onChange={(e) => setTrainingCount(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                      >
+                        <option value="Básica (1 a 3 Personas)">Básica (1 a 3 Personas)</option>
+                        <option value="4 a 10 Personas (Cajeros y Meseros)">4 a 10 Personas (Cajeros y Meseros)</option>
+                        <option value="Intensiva Multi-Turno (10+ Personas)">Intensiva Multi-Turno (10+ Personas)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">🛠️ Instalación y Configuración:</label>
+                      <select
+                        value={installationType}
+                        onChange={(e) => setInstallationType(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50 font-medium outline-none"
+                      >
+                        <option value="En Sitio (Red + Impresoras Térmicas)">En Sitio (Red + Impresoras Térmicas)</option>
+                        <option value="Configuración Remota Guiada">Configuración Remota Guiada</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer de Acciones del Modal */}
+                <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuoteModal(false)}
+                    className="w-full sm:w-1/3 py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all border-none cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendQuote}
+                    disabled={isSendingQuote}
+                    className="w-full sm:w-2/3 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider text-center flex items-center justify-center gap-2 border-none cursor-pointer shadow-lg shadow-emerald-600/30 transition-all hover:scale-102 active:scale-98"
+                  >
+                    <i className="fa-brands fa-whatsapp text-base" />
+                    <span>
+                      {isSendingQuote
+                        ? "Enviando Solicitud..."
+                        : "📲 Enviar Cotización por WhatsApp"}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
