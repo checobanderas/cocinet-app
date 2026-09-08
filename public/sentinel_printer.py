@@ -990,6 +990,18 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y += 2
                 continue
             
+            if text.upper().startswith("MESA:") or text.upper().startswith("FOLIO:") or text.upper().startswith("CMD #") or "FOLIO INTERNO" in text.upper():
+                f_mesa = get_font(FONT_NAME, base_pt * 1.30, True, use_emoji_font=line_has_emoji)
+                hDC.SelectObject(f_mesa)
+                y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
+                continue
+
+            if any(text.upper().startswith(k) for k in ["MESERO:", "ATENDIO:", "ATENDIÓ:", "ATENDIDO:", "ATENDIDO POR:"]):
+                f_mesero = get_font(FONT_NAME, base_pt * 1.15, True, use_emoji_font=line_has_emoji)
+                hDC.SelectObject(f_mesero)
+                y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
+                continue
+
             if text.upper().startswith("FECHA:") or text.upper().startswith("HORA:") or "FECHA:" in text.upper():
                 clean_date_text = text
                 if "FECHA:" in clean_date_text.upper():
@@ -1007,7 +1019,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 else:
                     formatted_dt = text
 
-                f_dt = get_font(FONT_NAME, pt * 0.92, True, use_emoji_font=True)
+                f_dt = get_font(FONT_NAME, base_pt * 1.05, True, use_emoji_font=True)
                 hDC.SelectObject(f_dt)
                 y = wrap_and_draw_text(hDC, formatted_dt, margin_left, margin_right, printable_width, y, align=0, line_spacing=4)
                 continue
@@ -1127,6 +1139,14 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                 y = wrap_and_draw_text(hDC, text, indent_x, margin_right, printable_width - 15, y, align=0, line_spacing=2)
                 continue
                 
+            if any(k in clean_upper for k in ["GRACIAS POR SU VISITA", "VUELVA PRONTO", "GRACIAS POR SU PREFERENCIA", "¡GRACIAS"]):
+                clean_footer = re.sub(r'\s*\([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\)[a-zA-Z]*', '', text).strip()
+                if clean_footer:
+                    f_footer = get_font(FONT_NAME, base_pt * 1.05, True, is_italic=True, use_emoji_font=line_has_emoji)
+                    hDC.SelectObject(f_footer)
+                    y = wrap_and_draw_text(hDC, clean_footer, margin_left, margin_right, printable_width, y, align=1, line_spacing=4)
+                    continue
+
             f_line = get_font(FONT_NAME, pt, bold_to_use, use_emoji_font=line_has_emoji)
             hDC.SelectObject(f_line)
             y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)

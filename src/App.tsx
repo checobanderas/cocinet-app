@@ -1221,7 +1221,7 @@ export default function App() {
         businessName: selectedTenant.name,
         rfc: selectedTenant.rfc,
         sucursal: selectedTenant.sucursalDefault,
-        footerMessage: prev.footerMessage || `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`,
+        footerMessage: prev.footerMessage || selectedTenant.footerMessage || "¡Gracias por su visita! Vuelva pronto 🌮",
         logoUrl: selectedTenant.logoUrl || ownerLogo || "",
         geminiApiKey: prev.geminiApiKey || "",
         regimenFiscal: selectedTenant.regimenFiscal || prev.regimenFiscal || "601 - General de Ley Personas Morales",
@@ -1998,7 +1998,8 @@ export default function App() {
           data?.sucursal || selectedTenant.sucursalDefault || "Sucursal Centro";
         const f =
           data?.footerMessage ||
-          `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`;
+          selectedTenant.footerMessage ||
+          "¡Gracias por su visita! Vuelva pronto 🌮";
         const g = data?.geminiApiKey || "";
         const u = data?.useRawBt ?? false;
         const reg = data?.regimenFiscal ?? selectedTenant.regimenFiscal ?? "";
@@ -3095,7 +3096,7 @@ export default function App() {
           businessName: tenantData.name,
           rfc: tenantData.rfc,
           sucursal: tenantData.sucursalDefault,
-          footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${tenantData.ownerEmail})`,
+          footerMessage: tenantData.footerMessage || "¡Gracias por su visita! Vuelva pronto 🌮",
           logoUrl: tenantData.logoUrl || "",
           showFiscalData: tenantData.showFiscalData !== false,
         });

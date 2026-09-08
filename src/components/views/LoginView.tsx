@@ -1534,7 +1534,7 @@ return (
                                                                     businessName: company.name,
                                                                     rfc: company.rfc,
                                                                     sucursal: company.sucursalDefault,
-                                                                    footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${company.ownerEmail})`,
+                                                                    footerMessage: company.footerMessage || "¡Gracias por su visita! Vuelva pronto 🌮",
                                                                     logoUrl: base64,
                                                                   });
                                                                   triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizó el logo de "${company.name}" en Firebase.`, "success");
@@ -1701,7 +1701,7 @@ return (
                                                                     businessName: company.name,
                                                                     rfc: company.rfc,
                                                                     sucursal: company.sucursalDefault,
-                                                                    footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${company.ownerEmail})`,
+                                                                    footerMessage: company.footerMessage || "¡Gracias por su visita! Vuelva pronto 🌮",
                                                                     logoUrl: base64,
                                                                   });
                                                                   triggerAppNotification("🖼️ Logotipo Sincronizado", `Se actualizó el logo de "${company.name}" en Firebase.`, "success");
