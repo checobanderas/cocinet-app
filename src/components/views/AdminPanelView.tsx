@@ -359,37 +359,7 @@ setCheckoutReturnMode(null);
                   </button>
                 </div>
 
-                {/* Card 2: Safe Reset */}
-                <div className="bg-white border border-rose-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between">
-                  <div>
-                    <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
-                      <IonIcon
-                        icon={closeCircleOutline}
-                        style={{ fontSize: "24px" }}
-                      />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-800 mb-1">
-                      Restablecimiento Total
-                    </h3>
-                    <p className="text-sm text-slate-500 mb-4">
-                      Limpia toda la base de datos local y del servidor. Ideal
-                      para abrir un nuevo restaurante con mesas vacías y menú
-                      semilla reestablecido.
-                    </p>
 
-                    <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 px-3 py-2 rounded-xl font-medium mb-6">
-                      <strong>Advertencia:</strong> Esta acción borrará todas
-                      las comandas, historial de ventas y productos creados por
-                      fotos permanentemente.
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleResetAllSystems}
-                    className="w-full bg-rose-500 hover:bg-rose-600 text-white font-semibold py-3 px-4 rounded-2xl transition duration-200 cursor-pointer text-center"
-                  >
-                    Reiniciar de Fábrica
-                  </button>
-                </div>
 
                 {/* Card 3: Reset Sales Mode */}
                 <div className="bg-white border border-amber-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between">

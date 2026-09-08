@@ -6,30 +6,36 @@ import { requestFCMToken, triggerDeviceNotification, addNotificationDeliveryLog 
 import { getWhatsAppCloudConfig, saveWhatsAppCloudConfig, sendSilentWhatsAppMessage, GLOBAL_DEFAULT_PHONE_NUMBER_ID, GLOBAL_DEFAULT_ACCESS_TOKEN } from '../../utils/whatsappCloud';
 
 interface TenantUsersModalProps {
-  showTenantUsersModal: boolean;
-  setShowTenantUsersModal: (v: boolean) => void;
+  isInline?: boolean;
+  showTenantUsersModal?: boolean;
+  setShowTenantUsersModal?: (v: boolean) => void;
   modalTenant: any;
   modalUsers: any[];
-  handleAddRow: () => void;
-  handleCellChange: (index: number, field: string, value: string) => void;
-  handleDeleteRow: (index: number) => void;
-  revealedPins: Record<number, boolean>;
-  setRevealedPins: (v: Record<number, boolean> | ((prev: Record<number, boolean>) => Record<number, boolean>)) => void;
+  handleAddRow?: (tenantId?: string) => void;
+  handleCellChange?: (userId: string, field: string, value: any, tenantId?: string) => void;
+  handleDeleteRow?: (userId: string, tenantId?: string) => void;
+  revealedPins?: Record<string, boolean>;
+  setRevealedPins?: React.Dispatch<React.SetStateAction<Record<string, boolean>>> | ((v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void);
   triggerAppNotification: (title: string, msg: string, type: 'success'|'warning'|'error'|'info') => void;
 }
 
 export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
-  showTenantUsersModal,
+  isInline = false,
+  showTenantUsersModal = true,
   setShowTenantUsersModal,
   modalTenant,
   modalUsers,
   handleAddRow,
   handleCellChange,
   handleDeleteRow,
-  revealedPins,
-  setRevealedPins,
+  revealedPins: externalRevealedPins,
+  setRevealedPins: externalSetRevealedPins,
   triggerAppNotification
 }) => {
+    const [localRevealedPins, setLocalRevealedPins] = useState<Record<string, boolean>>({});
+    const revealedPins = externalRevealedPins || localRevealedPins;
+    const setRevealedPins = externalSetRevealedPins || setLocalRevealedPins;
+
     const [showWhatsAppPanel, setShowWhatsAppPanel] = useState(false);
     const [provider, setProvider] = useState<any>('meta');
     const [instanceId, setInstanceId] = useState('');
@@ -469,35 +475,11 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       }
     };
 
-    return (
-      <IonModal
-        isOpen={showTenantUsersModal}
-        onDidDismiss={() => setShowTenantUsersModal(false)}
-        style={{
-          "--height": "100%",
-          "--width": "100%",
-          "--max-height": "92vh",
-          "--max-width": "1250px",
-          "--border-radius": "24px",
-        }}
-      >
-        <IonHeader className="ion-no-border">
-          <IonToolbar style={{ "--background": "#fff", padding: "8px 16px" }}>
-            <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1e293b", paddingLeft: "0" }}>
-              👥 Accesos, PINs y Reportes: {modalTenant?.name || ''}
-            </IonTitle>
-            <IonButtons slot="end">
-              <IonButton onClick={() => setShowTenantUsersModal(false)} color="dark">
-                <IonIcon icon={closeOutline} />
-              </IonButton>
-            </IonButtons>
-          </IonToolbar>
-        </IonHeader>
-        <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-          <div className="space-y-6 max-w-6xl mx-auto pb-12 text-left">
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-              <div>
-                <h4 className="text-sm font-black text-slate-800 m-0">Gestión de Empleados, Teléfonos y Reportes</h4>
+    const mainBody = (
+      <div className="space-y-6 max-w-6xl mx-auto pb-12 text-left">
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div>
+            <h4 className="text-sm font-black text-slate-800 m-0">Gestión de Empleados, Teléfonos y Reportes</h4>
                 <p className="text-[11px] text-slate-500 font-bold m-0">
                   Configura PINs de acceso, teléfonos celulares (Lada +52 automática), horarios de envío y pruebas Push.
                 </p>
@@ -991,8 +973,6 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                 </table>
               </div>
             </div>
-          </div>
-        </IonContent>
 
         {/* Modal de Redacción y Envío de WhatsApp Personalizado / Grupal */}
         <IonModal
@@ -1172,6 +1152,44 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
             </div>
           </div>
         </IonModal>
+      </div>
+    );
+
+    if (isInline) {
+      return (
+        <div className="bg-transparent">
+          {mainBody}
+        </div>
+      );
+    }
+
+    return (
+      <IonModal
+        isOpen={showTenantUsersModal}
+        onDidDismiss={() => setShowTenantUsersModal && setShowTenantUsersModal(false)}
+        style={{
+          "--height": "100%",
+          "--width": "100%",
+          "--max-height": "92vh",
+          "--max-width": "1250px",
+          "--border-radius": "24px",
+        }}
+      >
+        <IonHeader className="ion-no-border">
+          <IonToolbar style={{ "--background": "#fff", padding: "8px 16px" }}>
+            <IonTitle style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1e293b", paddingLeft: "0" }}>
+              👥 Accesos, PINs y Reportes: {modalTenant?.name || ''}
+            </IonTitle>
+            <IonButtons slot="end">
+              <IonButton onClick={() => setShowTenantUsersModal && setShowTenantUsersModal(false)} color="dark">
+                <IonIcon icon={closeOutline} />
+              </IonButton>
+            </IonButtons>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+          {mainBody}
+        </IonContent>
       </IonModal>
     );
 };
