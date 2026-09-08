@@ -1229,6 +1229,7 @@ export default function App() {
         lugarExpedicion: selectedTenant.lugarExpedicion || prev.lugarExpedicion || "",
         telefono: selectedTenant.telefono || prev.telefono || "",
         email: selectedTenant.email || prev.email || "",
+        showFiscalData: selectedTenant.showFiscalData !== false,
       }));
 
       setTicketRequireInternalFolio(selectedTenant.requireInternalFolio === true);
@@ -2424,7 +2425,15 @@ export default function App() {
         if (!currentTenant) return merged[0];
         const updated = merged.find((t) => t.id === currentTenant.id);
         if (!updated) return currentTenant;
-        if (currentTenant.id === updated.id && currentTenant.name === updated.name && currentTenant.sucursalDefault === updated.sucursalDefault) {
+        if (
+          currentTenant.id === updated.id &&
+          currentTenant.name === updated.name &&
+          currentTenant.sucursalDefault === updated.sucursalDefault &&
+          currentTenant.showFiscalData === updated.showFiscalData &&
+          currentTenant.rfc === updated.rfc &&
+          currentTenant.ownerKey === updated.ownerKey &&
+          currentTenant.direccion === updated.direccion
+        ) {
           return currentTenant;
         }
         return updated;
@@ -3063,6 +3072,12 @@ export default function App() {
       }
 
       localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
+      if (selectedTenant && selectedTenant.id === tenantData.id) {
+        setSelectedTenant(tenantData);
+        try {
+          localStorage.setItem("pos_selected_tenant", JSON.stringify(tenantData));
+        } catch (e) {}
+      }
       setTenantsVersion(prev => prev + 1);
 
       // Persist company configuration in Firebase database (Firestore settings collection) 🏢🔥
@@ -3073,6 +3088,7 @@ export default function App() {
           sucursal: tenantData.sucursalDefault,
           footerMessage: `¡Gracias por su visita! Vuelva pronto 🌮 (${tenantData.ownerEmail})`,
           logoUrl: tenantData.logoUrl || "",
+          showFiscalData: tenantData.showFiscalData !== false,
         });
       } catch (err) {
         console.warn("Could not save to Firebase, will try again later:", err);
@@ -5027,7 +5043,7 @@ export default function App() {
         const emlVal = sanitizeEmail(pedido.email || companyConfig.email || selectedTenant?.email || "");
         const sucVal = (pedido.sucursal || companyConfig.sucursal || selectedTenant?.sucursalDefault || "").toUpperCase();
 
-        const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
+        const showFiscal = (pedido?.showFiscalData !== false) && (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
         if (showFiscal && rfcVal) job.printLine(`RFC: ${rfcVal}`);
         if (showFiscal && regVal) job.printLine(`REGIMEN FISCAL: ${regVal}`);
         if (showFiscal && lugVal) job.printLine(`LUGAR EXPEDICION: ${lugVal}`);

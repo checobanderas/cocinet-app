@@ -82,6 +82,8 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
       const dAddr = selectedDeliveryAddress || (table as any).deliveryAddress || null;
       const dNotes = deliveryNotes || (table as any).deliveryNotes || null;
 
+      const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
+
       addPedidoToPrinter(selectedTenant.id, {
         folio: preFolio,
         mesa: table.label,
@@ -111,13 +113,14 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
         deliveryAddress: dAddr,
         deliveryNotes: dNotes,
         businessName: bName,
-        rfc: rfcVal,
-        regimenFiscal: regVal,
-        lugarExpedicion: lugVal,
+        rfc: showFiscal ? rfcVal : "",
+        regimenFiscal: showFiscal ? regVal : "",
+        lugarExpedicion: showFiscal ? lugVal : "",
         direccionFiscal: dirVal,
         telefono: telVal,
         email: emlVal,
-        sucursal: sucVal,
+        sucursal: showFiscal ? sucVal : "",
+        showFiscalData: showFiscal,
       }).catch((err) => console.warn("Centinela Ticket Error:", err));
 
       let deliverySubStr = "";
@@ -190,20 +193,20 @@ export async function executePrintTicket(options: ReceiptPrintOptions): Promise<
       .bold(false);
     job.printLine("--------------------------------");
     const showFiscal = (selectedTenant?.showFiscalData !== false) && (companyConfig?.showFiscalData !== false);
-    if (showFiscal && companyConfig.rfc)
-      job.printLine(`RFC: ${companyConfig.rfc.toUpperCase()}`);
-    if (showFiscal && companyConfig.regimenFiscal)
-      job.printLine(`REGIMEN FISCAL: ${companyConfig.regimenFiscal.toUpperCase()}`);
-    if (showFiscal && companyConfig.lugarExpedicion)
-      job.printLine(`LUGAR EXPEDICION: ${companyConfig.lugarExpedicion.toUpperCase()}`);
-    if (companyConfig.direccionFiscal)
-      job.printLine(`DIR: ${companyConfig.direccionFiscal.toUpperCase()}`);
-    if (showFiscal && companyConfig.sucursal)
-      job.printLine(`SUC: ${companyConfig.sucursal.toUpperCase()}`);
+    if (showFiscal && rfcVal)
+      job.printLine(`RFC: ${rfcVal}`);
+    if (showFiscal && regVal)
+      job.printLine(`REGIMEN FISCAL: ${regVal}`);
+    if (showFiscal && lugVal)
+      job.printLine(`LUGAR EXPEDICION: ${lugVal}`);
+    if (dirVal)
+      job.printLine(`DIR: ${dirVal}`);
+    if (showFiscal && sucVal)
+      job.printLine(`SUC: ${sucVal}`);
     if (telVal)
       job.printLine(`📞 TEL: ${formatPhone(telVal) || telVal}`);
-    if (companyConfig.email)
-      job.printLine(`✉️ ${companyConfig.email.toLowerCase()}`);
+    if (emlVal)
+      job.printLine(`✉️ ${emlVal.toLowerCase()}`);
 
     job.printLine("--------------------------------");
     job.printLine(`MESA: ${table.label}`);
