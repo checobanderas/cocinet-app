@@ -119,6 +119,14 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const [ingredientSearchQuery, setIngredientSearchQuery] = useState("");
   const [ingredientCategoryFilter, setIngredientCategoryFilter] = useState("TODOS");
 
+  // Excel Table Selection & Bulk Insumo Assignment States ⚡
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [bulkInsumoId, setBulkInsumoId] = useState<string>("");
+  const [bulkInsumoQty, setBulkInsumoQty] = useState<string>("1");
+  const [bulkTargetInventoryType, setBulkTargetInventoryType] = useState<string>("receta");
+  const [isApplyingBulk, setIsApplyingBulk] = useState<boolean>(false);
+  const [showBulkPanel, setShowBulkPanel] = useState<boolean>(true);
+
   // --- Sub-states for Compras / Proveedores Tab ---
   const [purchasesTabSubView, setPurchasesTabSubView] = useState<"suppliers" | "purchases">("suppliers");
   const [supplierModal, setSupplierModal] = useState<{ isOpen: boolean; supplier: any | null }>({
@@ -323,6 +331,138 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
     } catch (err) {
       console.error(err);
       triggerAppNotification("Error", "No se pudo actualizar el modo de inventario.", "error");
+    }
+  };
+
+  const handleInlinePriceChange = async (prod: any, newPriceStr: string) => {
+    const val = parseFloat(newPriceStr);
+    if (isNaN(val) || val < 0) return;
+    if (val === Number(prod.price)) return;
+    try {
+      await updateProductInFirebase(prod.id, { ...prod, price: val });
+      triggerAppNotification(
+        "Precio Actualizado ⚡",
+        `"${prod.name}": $${val.toFixed(2)}`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "No se pudo actualizar el precio.", "error");
+    }
+  };
+
+  const handleBulkApplyInsumo = async (targetProducts: any[]) => {
+    if (!bulkInsumoId) {
+      triggerAppNotification("Atención ⚠️", "Selecciona un insumo para aplicar a los platillos.", "warning");
+      return;
+    }
+    const qty = parseFloat(bulkInsumoQty);
+    if (isNaN(qty) || qty <= 0) {
+      triggerAppNotification("Atención ⚠️", "Ingresa una cantidad o porción válida mayor a cero.", "warning");
+      return;
+    }
+    if (targetProducts.length === 0) {
+      triggerAppNotification("Atención ⚠️", "No hay productos en el filtro o selección actual.", "warning");
+      return;
+    }
+
+    const insumo = inventory.find((i) => i.id === bulkInsumoId);
+    const insumoName = insumo?.name || "Insumo";
+    const insumoUnit = insumo?.unit || "unidad";
+
+    setIsApplyingBulk(true);
+    try {
+      for (const prod of targetProducts) {
+        const currentRecipe = [...(prod.recipe || [])];
+        const existingIdx = currentRecipe.findIndex((r: any) => r.inventoryItemId === bulkInsumoId);
+        if (existingIdx >= 0) {
+          currentRecipe[existingIdx] = {
+            ...currentRecipe[existingIdx],
+            quantity: qty,
+          };
+        } else {
+          currentRecipe.push({
+            inventoryItemId: bulkInsumoId,
+            quantity: qty,
+          });
+        }
+        await updateProductInFirebase(prod.id, {
+          ...prod,
+          recipe: currentRecipe,
+          inventoryType: "receta",
+        });
+      }
+      triggerAppNotification(
+        "¡Insumo Asignado en Lote! ⚡🍲",
+        `Se agregó "${qty} ${insumoUnit} de ${insumoName}" a ${targetProducts.length} platillos con éxito.`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "Ocurrió un error al aplicar el insumo en lote.", "error");
+    } finally {
+      setIsApplyingBulk(false);
+    }
+  };
+
+  const handleBulkRemoveInsumo = async (targetProducts: any[]) => {
+    if (!bulkInsumoId) {
+      triggerAppNotification("Atención ⚠️", "Selecciona el insumo que deseas retirar de los platillos.", "warning");
+      return;
+    }
+    const insumo = inventory.find((i) => i.id === bulkInsumoId);
+    const insumoName = insumo?.name || "Insumo";
+
+    if (!window.confirm(`¿Seguro que deseas retirar el insumo "${insumoName}" de los ${targetProducts.length} platillos filtrados?`)) {
+      return;
+    }
+
+    setIsApplyingBulk(true);
+    try {
+      for (const prod of targetProducts) {
+        const currentRecipe = (prod.recipe || []).filter((r: any) => r.inventoryItemId !== bulkInsumoId);
+        await updateProductInFirebase(prod.id, { ...prod, recipe: currentRecipe });
+      }
+      triggerAppNotification(
+        "Insumo Retirado en Lote 🗑️",
+        `Se retiró "${insumoName}" de ${targetProducts.length} platillos.`,
+        "info"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "Error al retirar insumo en lote.", "error");
+    } finally {
+      setIsApplyingBulk(false);
+    }
+  };
+
+  const handleBulkChangeInventoryType = async (targetProducts: any[], newType: string) => {
+    if (targetProducts.length === 0) return;
+    setIsApplyingBulk(true);
+    try {
+      for (const prod of targetProducts) {
+        await updateProductInFirebase(prod.id, { ...prod, inventoryType: newType });
+      }
+      const label =
+        newType === "receta"
+          ? "Por Receta (Insumos)"
+          : newType === "pieza"
+          ? "Por Pieza"
+          : newType === "bulto"
+          ? "Por Bulto"
+          : newType === "caja"
+          ? "Por Caja"
+          : "Sin Inventario";
+      triggerAppNotification(
+        "Modo de Inventario en Lote ⚡",
+        `Se configuraron ${targetProducts.length} platillos como "${label}".`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "Error al actualizar modo en lote.", "error");
+    } finally {
+      setIsApplyingBulk(false);
     }
   };
 
@@ -1277,9 +1417,9 @@ Devuelve un JSON estructurado con:
                     </div>
                   </div>
 
-                  {/* Products Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {products
+                  {/* Computed Filtered Products List */}
+                  {(() => {
+                    const filteredRecipeProducts = products
                       .filter((p) => !p.isDeleted)
                       .filter((p) => isProductInCategory(p, recipeActiveCategory))
                       .filter((p) => {
@@ -1305,172 +1445,390 @@ Devuelve un JSON estructurado con:
                         if (recipeInventoryTypeFilter === "caja") return invType === "caja";
                         if (recipeInventoryTypeFilter === "none") return invType === "none" && (!p.recipe || p.recipe.length === 0);
                         return true;
-                      })
-                      .map((prod) => {
-                        const currentType = prod.inventoryType || (prod.recipe && prod.recipe.length > 0 ? "receta" : "none");
-                        const recipeCost = calculateProductCost(prod);
-                        const price = Number(prod.price) || 0;
-                        const profit = price - recipeCost;
-                        const marginPercent = price > 0 ? (profit / price) * 100 : 0;
-                        const hasRecipeItems = prod.recipe && Array.isArray(prod.recipe) && prod.recipe.length > 0;
+                      });
 
-                        return (
-                          <div
-                            key={prod.id}
-                            className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm hover:border-indigo-300 transition-all flex flex-col justify-between space-y-4"
-                          >
-                            {/* Product Header */}
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                    {prod.subcategory || "General"}
-                                  </span>
-                                  <h3 className="text-sm font-black text-slate-900 leading-snug">
-                                    {prod.name}
-                                  </h3>
-                                </div>
-                                <span className="text-base font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl">
-                                  ${price.toFixed(2)}
+                    const targetBulkProducts = selectedProductIds.length > 0
+                      ? filteredRecipeProducts.filter((p) => selectedProductIds.includes(p.id))
+                      : filteredRecipeProducts;
+
+                    return (
+                      <div className="space-y-4">
+                        {/* ========================================================= */}
+                        {/* BARRA DE ASIGNACIÓN MASIVA PARA PRODUCTOS FILTRADOS ⚡ */}
+                        {/* ========================================================= */}
+                        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-slate-800 space-y-3">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-base font-black text-white flex items-center gap-1.5">
+                                <span>⚡</span> Acciones Masivas al Vuelo:
+                              </span>
+                              <span className="bg-indigo-600/80 text-white font-black text-xs px-2.5 py-0.5 rounded-full border border-indigo-400/30">
+                                {targetBulkProducts.length} {selectedProductIds.length > 0 ? "Seleccionados" : "Filtrados"}
+                              </span>
+                              {recipeActiveSubcategory !== "Todos" && (
+                                <span className="bg-slate-800 text-indigo-200 text-xs font-semibold px-2 py-0.5 rounded-md">
+                                  📂 {recipeActiveSubcategory}
                                 </span>
-                              </div>
-
-                              {/* Inventory Type Selector Control */}
-                              <div className="mt-3 pt-3 border-t border-slate-100">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                                  Tipo de Inventario / Descuento:
-                                </label>
-                                <select
-                                  value={currentType}
-                                  onChange={(e) => handleUpdateProductInventoryType(prod, e.target.value)}
-                                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border transition outline-none cursor-pointer ${
-                                    currentType === "receta"
-                                      ? "bg-emerald-50 border-emerald-400 text-emerald-800"
-                                      : currentType === "pieza" || currentType === "bulto" || currentType === "caja"
-                                      ? "bg-blue-50 border-blue-400 text-blue-800"
-                                      : "bg-slate-50 border-slate-300 text-slate-700"
-                                  }`}
-                                >
-                                  <option value="none">⚪ Sin Control de Inventario</option>
-                                  <option value="pieza">📦 Por Pieza (Directo)</option>
-                                  <option value="bulto">📦 Por Bulto</option>
-                                  <option value="caja">📦 Por Caja</option>
-                                  <option value="receta">🍲 Por Receta (Escandallo de Insumos)</option>
-                                </select>
-                              </div>
+                              )}
                             </div>
 
-                            {/* Mode Specific Body */}
-                            <div className="space-y-3">
-                              {/* WHEN RECIPE MODE IS SELECTED */}
-                              {currentType === "receta" && (
-                                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-2.5">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-black text-emerald-900 flex items-center gap-1.5">
-                                      <span>🍲</span>
-                                      <span>
-                                        {hasRecipeItems
-                                          ? `${prod.recipe.length} Insumo(s) en Receta`
-                                          : "Sin Insumos Asignados"}
-                                      </span>
-                                    </span>
-                                    {hasRecipeItems && (
-                                      <span
-                                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                                          marginPercent >= 65
-                                            ? "bg-emerald-200 text-emerald-900"
-                                            : marginPercent >= 45
-                                            ? "bg-amber-200 text-amber-900"
-                                            : "bg-rose-200 text-rose-900"
-                                        }`}
-                                      >
-                                        {marginPercent.toFixed(0)}% Margen
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* List of current ingredients chips */}
-                                  {hasRecipeItems ? (
-                                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                                      {prod.recipe.map((ing: any) => {
-                                        const inv = inventory.find((i) => i.id === ing.inventoryItemId);
-                                        return (
-                                          <span
-                                            key={ing.inventoryItemId}
-                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200 text-[11px] font-bold text-slate-800 shadow-2xs"
-                                          >
-                                            <span>🥩</span>
-                                            <span>{inv?.name || "Insumo"}:</span>
-                                            <strong className="text-emerald-700 font-black">
-                                              {ing.quantity} {inv?.unit || "pza"}
-                                            </strong>
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    <p className="text-[11px] text-emerald-700 italic">
-                                      Asocia los insumos (tortillas, carne, queso, etc.) que se descontarán automáticamente al vender este platillo.
-                                    </p>
-                                  )}
-
-                                  {hasRecipeItems && (
-                                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-200/60 font-bold">
-                                      <span className="text-slate-600">Costo Teórico:</span>
-                                      <span className="font-black text-emerald-800">
-                                        ${recipeCost.toFixed(2)}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {/* Button to open Modal and edit/add ingredients */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedRecipeProduct(prod);
-                                      setSelectedIngredientId("");
-                                      setSelectedIngredientQty("");
-                                      setIngredientSearchQuery("");
-                                      setShowAddIngredientModal(true);
-                                    }}
-                                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs py-2.5 rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer border-none active:scale-95"
-                                  >
-                                    <IonIcon icon={hasRecipeItems ? createOutline : addOutline} />
-                                    <span>
-                                      {hasRecipeItems
-                                        ? "Modificar / Agregar Insumos"
-                                        : "➕ Seleccionar / Agregar Insumos"}
-                                    </span>
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* WHEN PIEZA, BULTO O CAJA IS SELECTED */}
-                              {(currentType === "pieza" || currentType === "bulto" || currentType === "caja") && (
-                                <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-black text-blue-900 flex items-center gap-1.5">
-                                      <span>📦</span>
-                                      <span className="capitalize">Control por {currentType}</span>
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-blue-700">
-                                    Este producto descuenta 1 {currentType} directa del almacén por cada orden comandada.
-                                  </p>
-                                </div>
-                              )}
-
-                              {/* WHEN SIN CONTROL */}
-                              {currentType === "none" && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center text-xs text-slate-400 font-semibold">
-                                  Sin seguimiento de inventario. El producto se vende libremente.
-                                </div>
+                            {/* Selection Helpers */}
+                            <div className="flex items-center gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (selectedProductIds.length === filteredRecipeProducts.length) {
+                                    setSelectedProductIds([]);
+                                  } else {
+                                    setSelectedProductIds(filteredRecipeProducts.map((p) => p.id));
+                                  }
+                                }}
+                                className="text-[11px] font-bold text-indigo-300 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg transition border-none cursor-pointer"
+                              >
+                                {selectedProductIds.length === filteredRecipeProducts.length && filteredRecipeProducts.length > 0
+                                  ? "Deseleccionar Todos"
+                                  : `Seleccionar Todos (${filteredRecipeProducts.length})`}
+                              </button>
+                              {selectedProductIds.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProductIds([])}
+                                  className="text-[11px] font-bold text-rose-300 hover:text-rose-100 bg-rose-500/20 px-2 py-1 rounded-lg transition border-none cursor-pointer"
+                                >
+                                  ✕ Limpiar
+                                </button>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
-                  </div>
+
+                          {/* Bulk Form Controls */}
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+                            {/* Insumo Selector */}
+                            <div className="lg:col-span-5">
+                              <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                                🍲 Seleccionar Insumo a Descontar:
+                              </label>
+                              <select
+                                value={bulkInsumoId}
+                                onChange={(e) => setBulkInsumoId(e.target.value)}
+                                className="w-full p-2 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400"
+                              >
+                                <option value="">-- Elige Insumo (ej. Tortilla de Harina, Bistec, Queso...) --</option>
+                                {inventory.map((i) => (
+                                  <option key={i.id} value={i.id}>
+                                    {i.name} ({i.unit}) — ${(Number(i.cost) || 0).toFixed(2)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Insumo Quantity */}
+                            <div className="lg:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                                Cantidad ({inventory.find((i) => i.id === bulkInsumoId)?.unit || "porción"}):
+                              </label>
+                              <input
+                                type="number"
+                                step="any"
+                                placeholder="1"
+                                value={bulkInsumoQty}
+                                onChange={(e) => setBulkInsumoQty(e.target.value)}
+                                className="w-full p-2 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 text-center"
+                              />
+                            </div>
+
+                            {/* Bulk Apply Buttons */}
+                            <div className="lg:col-span-5 flex flex-wrap gap-2 pt-3 lg:pt-0">
+                              <button
+                                type="button"
+                                onClick={() => handleBulkApplyInsumo(targetBulkProducts)}
+                                disabled={isApplyingBulk || !bulkInsumoId || filteredRecipeProducts.length === 0}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-xs py-2.5 px-3 rounded-xl transition shadow-md shadow-emerald-600/30 flex items-center justify-center gap-1.5 border-none cursor-pointer"
+                                title="Agrega o actualiza este insumo y cantidad a todos los productos filtrados"
+                              >
+                                <i className="fa-solid fa-bolt" />
+                                <span>{isApplyingBulk ? "Aplicando..." : `➕ Descontar a los ${targetBulkProducts.length}`}</span>
+                              </button>
+
+                              {bulkInsumoId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkRemoveInsumo(targetBulkProducts)}
+                                  disabled={isApplyingBulk}
+                                  className="bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition border-none cursor-pointer"
+                                  title="Quitar este insumo de la receta de todos los filtrados"
+                                >
+                                  🗑️ Quitar
+                                </button>
+                              )}
+
+                              <div className="w-full flex items-center gap-1.5 pt-1">
+                                <span className="text-[10px] text-slate-400 font-bold shrink-0">O cambiar modo a:</span>
+                                <select
+                                  value={bulkTargetInventoryType}
+                                  onChange={(e) => setBulkTargetInventoryType(e.target.value)}
+                                  className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-[11px] font-bold px-2 py-1 outline-none"
+                                >
+                                  <option value="receta">🍲 Por Receta</option>
+                                  <option value="pieza">📦 Por Pieza</option>
+                                  <option value="bulto">🎒 Por Bulto</option>
+                                  <option value="caja">🗳️ Por Caja</option>
+                                  <option value="none">⚪ Sin Control</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkChangeInventoryType(targetBulkProducts, bulkTargetInventoryType)}
+                                  disabled={isApplyingBulk || filteredRecipeProducts.length === 0}
+                                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-[11px] py-1 px-2.5 rounded-lg transition border-none cursor-pointer"
+                                >
+                                  Aplicar Modo ⚡
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ========================================================= */}
+                        {/* TABLA INTERACTIVA TIPO EXCEL / SPREADSHEET 📊 */}
+                        {/* ========================================================= */}
+                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-left text-xs text-slate-700 min-w-[1080px]">
+                              <thead>
+                                <tr className="bg-slate-900 text-white border-b border-slate-200 font-bold text-[11px]">
+                                  <th className="py-2.5 px-2.5 w-[36px] text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        filteredRecipeProducts.length > 0 &&
+                                        selectedProductIds.length === filteredRecipeProducts.length
+                                      }
+                                      onChange={() => {
+                                        if (selectedProductIds.length === filteredRecipeProducts.length) {
+                                          setSelectedProductIds([]);
+                                        } else {
+                                          setSelectedProductIds(filteredRecipeProducts.map((p) => p.id));
+                                        }
+                                      }}
+                                      className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                                      title="Seleccionar todos los productos filtrados"
+                                    />
+                                  </th>
+                                  <th className="py-2.5 px-2.5 w-[40px] text-center text-slate-400">#</th>
+                                  <th className="py-2.5 px-2.5 min-w-[200px]">Platillo / Producto</th>
+                                  <th className="py-2.5 px-2.5 w-[130px]">Subcategoría</th>
+                                  <th className="py-2.5 px-2.5 w-[110px] text-right">Precio ($) ✏️</th>
+                                  <th className="py-2.5 px-2.5 w-[185px]">Modo de Inventario ⚙️</th>
+                                  <th className="py-2.5 px-2.5 min-w-[280px]">Insumos / Escandallo 🍲</th>
+                                  <th className="py-2.5 px-2.5 w-[100px] text-right">Costo Insumos</th>
+                                  <th className="py-2.5 px-2.5 w-[100px] text-right">Margen Bruto</th>
+                                  <th className="py-2.5 px-2.5 w-[85px] text-center">% Ganancia</th>
+                                  <th className="py-2.5 px-2.5 w-[120px] text-center">Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 font-medium">
+                                {filteredRecipeProducts.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={11} className="p-8 text-center text-slate-400">
+                                      <span className="text-3xl block mb-2">🔍</span>
+                                      <p className="font-bold text-slate-600">No se encontraron productos con los filtros aplicados.</p>
+                                      <p className="text-xs text-slate-400 mt-1">Prueba cambiando la subcategoría o la búsqueda.</p>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  filteredRecipeProducts.map((prod, idx) => {
+                                    const isSelected = selectedProductIds.includes(prod.id);
+                                    const currentType = prod.inventoryType || (prod.recipe && prod.recipe.length > 0 ? "receta" : "none");
+                                    const recipeCost = calculateProductCost(prod);
+                                    const price = Number(prod.price) || 0;
+                                    const profit = price - recipeCost;
+                                    const marginPercent = price > 0 ? (profit / price) * 100 : 0;
+                                    const hasRecipeItems = prod.recipe && Array.isArray(prod.recipe) && prod.recipe.length > 0;
+
+                                    return (
+                                      <tr
+                                        key={prod.id}
+                                        className={`transition-colors ${
+                                          isSelected ? "bg-indigo-50/70" : "hover:bg-slate-50/80"
+                                        }`}
+                                      >
+                                        {/* Checkbox */}
+                                        <td className="py-2 px-2.5 text-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => {
+                                              setSelectedProductIds((prev) =>
+                                                prev.includes(prod.id)
+                                                  ? prev.filter((id) => id !== prod.id)
+                                                  : [...prev, prod.id]
+                                              );
+                                            }}
+                                            className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                                          />
+                                        </td>
+
+                                        {/* Row Index */}
+                                        <td className="py-2 px-2.5 text-center text-[11px] text-slate-400 font-mono">
+                                          {idx + 1}
+                                        </td>
+
+                                        {/* Product Name */}
+                                        <td className="py-2 px-2.5">
+                                          <div className="font-black text-slate-900 leading-snug">
+                                            {prod.name}
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 font-mono">
+                                            ID: {prod.id}
+                                          </div>
+                                        </td>
+
+                                        {/* Subcategory */}
+                                        <td className="py-2 px-2.5">
+                                          <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                                            {prod.subcategory || "General"}
+                                          </span>
+                                        </td>
+
+                                        {/* Sale Price (Editable on the fly) */}
+                                        <td className="py-2 px-2.5 text-right">
+                                          <div className="inline-flex items-center justify-end">
+                                            <span className="text-slate-400 text-xs mr-1 font-bold">$</span>
+                                            <input
+                                              type="number"
+                                              step="any"
+                                              defaultValue={price}
+                                              key={`${prod.id}-${price}`}
+                                              onBlur={(e) => handleInlinePriceChange(prod, e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  handleInlinePriceChange(prod, (e.target as any).value);
+                                                  (e.target as any).blur();
+                                                }
+                                              }}
+                                              className="w-20 p-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-lg text-xs font-black text-slate-900 text-right outline-none transition shadow-2xs"
+                                              title="Editar precio de venta al vuelo"
+                                            />
+                                          </div>
+                                        </td>
+
+                                        {/* Inventory Mode (Select on the fly) */}
+                                        <td className="py-2 px-2.5">
+                                          <select
+                                            value={currentType}
+                                            onChange={(e) => handleUpdateProductInventoryType(prod, e.target.value)}
+                                            className={`w-full p-1.5 rounded-lg text-xs font-bold border transition outline-none cursor-pointer ${
+                                              currentType === "receta"
+                                                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                                                : currentType === "pieza" || currentType === "bulto" || currentType === "caja"
+                                                ? "bg-blue-50 border-blue-300 text-blue-800"
+                                                : "bg-slate-50 border-slate-200 text-slate-600"
+                                            }`}
+                                          >
+                                            <option value="receta">🍲 Por Receta (Insumos)</option>
+                                            <option value="pieza">📦 Por Pieza</option>
+                                            <option value="bulto">🎒 Por Bulto</option>
+                                            <option value="caja">🗳️ Por Caja</option>
+                                            <option value="none">⚪ Sin Control / No Aplica</option>
+                                          </select>
+                                        </td>
+
+                                        {/* Insumos / Escandallo Breakdown */}
+                                        <td className="py-2 px-2.5">
+                                          {currentType === "receta" ? (
+                                            hasRecipeItems ? (
+                                              <div className="flex flex-wrap gap-1 items-center">
+                                                {prod.recipe.map((ing: any) => {
+                                                  const inv = inventory.find((i) => i.id === ing.inventoryItemId);
+                                                  return (
+                                                    <span
+                                                      key={ing.inventoryItemId}
+                                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-slate-800"
+                                                      title={`${inv?.name || "Insumo"}: ${ing.quantity} ${inv?.unit || "pza"} ($${((Number(inv?.cost) || 0) * (Number(ing.quantity) || 0)).toFixed(2)})`}
+                                                    >
+                                                      <span>🥩</span>
+                                                      <span>{inv?.name || "Insumo"}:</span>
+                                                      <strong className="text-emerald-700 font-black">
+                                                        {ing.quantity} {inv?.unit || "pza"}
+                                                      </strong>
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              <span className="text-[11px] text-amber-600 font-bold flex items-center gap-1">
+                                                <span>⚠️</span> Sin insumos asignados
+                                              </span>
+                                            )
+                                          ) : currentType === "none" ? (
+                                            <span className="text-[11px] text-slate-400 italic">
+                                              No aplica escandallo
+                                            </span>
+                                          ) : (
+                                            <span className="text-[11px] text-blue-700 font-semibold">
+                                              Descuenta 1 {currentType} por orden
+                                            </span>
+                                          )}
+                                        </td>
+
+                                        {/* Cost of Ingredients */}
+                                        <td className="py-2 px-2.5 text-right font-black text-slate-800">
+                                          {currentType === "receta" ? `$${recipeCost.toFixed(2)}` : "-"}
+                                        </td>
+
+                                        {/* Gross Profit */}
+                                        <td className="py-2 px-2.5 text-right font-black text-emerald-600">
+                                          {currentType === "receta" ? `$${Math.max(0, profit).toFixed(2)}` : `$${price.toFixed(2)}`}
+                                        </td>
+
+                                        {/* Margin Percent */}
+                                        <td className="py-2 px-2.5 text-center">
+                                          {currentType === "receta" && price > 0 ? (
+                                            <span
+                                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                                marginPercent >= 65
+                                                  ? "bg-emerald-100 text-emerald-800"
+                                                  : marginPercent >= 45
+                                                  ? "bg-amber-100 text-amber-800"
+                                                  : "bg-rose-100 text-rose-800"
+                                              }`}
+                                            >
+                                              {marginPercent.toFixed(0)}%
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-300 text-xs">-</span>
+                                          )}
+                                        </td>
+
+                                        {/* Action Button */}
+                                        <td className="py-2 px-2.5 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedRecipeProduct(prod);
+                                              setSelectedIngredientId("");
+                                              setSelectedIngredientQty("");
+                                              setIngredientSearchQuery("");
+                                              setShowAddIngredientModal(true);
+                                            }}
+                                            className="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 px-2.5 py-1.5 rounded-xl font-black text-[11px] transition cursor-pointer shadow-2xs"
+                                            title="Abrir editor de escandallo e insumos de este platillo"
+                                          >
+                                            <span>🍲</span>
+                                            <span>{hasRecipeItems ? "Editar" : "Insumos"}</span>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
