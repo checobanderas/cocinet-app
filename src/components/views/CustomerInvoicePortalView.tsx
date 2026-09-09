@@ -213,7 +213,7 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
     setSearchNotFoundText("");
   };
 
-  // Buscar sugerencias en catálogo local, Firestore en vivo y API PHP cuando query >= 6 caracteres
+  // Buscar sugerencias en catálogo local, Firestore en vivo y API PHP cuando query >= 3 caracteres
   const searchMatches = (queryVal: string, field: "rfc" | "razonSocial") => {
     const cleanQ = queryVal.trim().toUpperCase();
     if (searchDebounceRef.current) {
@@ -221,22 +221,22 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
     }
     setSearchNotFoundText("");
 
-    if (cleanQ.length < 6) {
+    if (cleanQ.length < 3) {
       setSuggestions([]);
       setActiveSuggestionField(null);
       setIsSearchingClient(false);
       return;
     }
 
-    // 1. Búsqueda instantánea en catálogo local y caché de memoria
+    // 1. Búsqueda instantánea en catálogo local y caché de memoria (0ms)
     const combinedList = [...localCustomers, ...(customers || [])];
     const localMatches = combinedList.filter((c: any) => {
       const cRfc = (c.rfc || "").toUpperCase();
       const cNom = (c.razonSocial || c.name || c.nombre || "").toUpperCase();
       if (field === "rfc") {
-        return cRfc.includes(cleanQ) || (cleanQ.length >= 6 && cNom.includes(cleanQ));
+        return cRfc.includes(cleanQ) || (cleanQ.length >= 3 && cNom.includes(cleanQ));
       } else {
-        return cNom.includes(cleanQ) || (cleanQ.length >= 6 && cRfc.includes(cleanQ));
+        return cNom.includes(cleanQ) || (cleanQ.length >= 3 && cRfc.includes(cleanQ));
       }
     });
 
@@ -249,13 +249,14 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
     }
 
     if (localMatches.length > 0) {
-      setSuggestions(localMatches.slice(0, 5));
+      setSuggestions(localMatches.slice(0, 6));
       setActiveSuggestionField(field);
     }
 
     setIsSearchingClient(true);
+    setActiveSuggestionField(field);
 
-    // 2. Consulta profunda en Firestore y en API PHP con debounce de 300ms
+    // 2. Consulta profunda en Firestore y en API PHP con debounce de 200ms
     searchDebounceRef.current = setTimeout(async () => {
       try {
         let results = [...localMatches];
@@ -297,7 +298,7 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
         if (exactFound && cleanQ.length >= 12) {
           applyCustomer(exactFound);
         } else if (uniqueResults.length > 0) {
-          setSuggestions(uniqueResults.slice(0, 5));
+          setSuggestions(uniqueResults.slice(0, 6));
           setActiveSuggestionField(field);
           setSearchNotFoundText("");
         } else {
@@ -308,7 +309,7 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
       } finally {
         setIsSearchingClient(false);
       }
-    }, 300);
+    }, 200);
   };
 
   // Autocomplete inicial al cargar por Teléfono o RFC
@@ -1086,18 +1087,22 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       value={rfc}
                       onChange={(e) => handleRfcChange(e.target.value)}
                       onFocus={() => {
-                        if (rfc.length >= 6) searchMatches(rfc, "rfc");
+                        if (rfc.length >= 3) searchMatches(rfc, "rfc");
                       }}
                       className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-amber-300 rounded-xl px-3.5 py-2.5 text-sm font-black font-mono tracking-widest uppercase focus:outline-none transition"
                     />
                     
                     {isSearchingClient && activeSuggestionField === "rfc" ? (
-                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 animate-pulse font-bold">
-                        <RefreshCw className="w-3 h-3 animate-spin text-amber-400 shrink-0" />
-                        <span>Consultando padrón en el servidor...</span>
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 font-medium animate-fadeIn">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                        <span>Buscando en el padrón de clientes</span>
+                        <span className="inline-flex gap-0.5 text-amber-400 font-bold tracking-widest animate-pulse">...</span>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-slate-500 mt-0.5">Detección automática a partir de 6 letras</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Detección automática a partir de 3 letras</p>
                     )}
 
                     {/* Dropdown de Sugerencias RFC */}
@@ -1141,15 +1146,19 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     value={razonSocial}
                     onChange={(e) => handleRazonSocialChange(e.target.value)}
                     onFocus={() => {
-                      if (razonSocial.length >= 6) searchMatches(razonSocial, "razonSocial");
+                      if (razonSocial.length >= 3) searchMatches(razonSocial, "razonSocial");
                     }}
                     className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold uppercase focus:outline-none transition"
                   />
                   
                   {isSearchingClient && activeSuggestionField === "razonSocial" ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 animate-pulse font-bold">
-                      <RefreshCw className="w-3 h-3 animate-spin text-amber-400 shrink-0" />
-                      <span>Consultando padrón en el servidor...</span>
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 font-medium animate-fadeIn">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                      <span>Buscando en el padrón de clientes</span>
+                      <span className="inline-flex gap-0.5 text-amber-400 font-bold tracking-widest animate-pulse">...</span>
                     </div>
                   ) : (
                     <p className="text-[10px] text-slate-500 mt-0.5">En CFDI 4.0 debe omitirse el régimen de capital (sin S.A. de C.V.)</p>

@@ -280,7 +280,7 @@ export async function buscarClienteFacturacion(
   apiUrl: string,
   query: string
 ): Promise<{ ok: boolean; clientes?: any[]; error?: string }> {
-  if (!apiUrl || !query || query.trim().length < 6) {
+  if (!apiUrl || !query || query.trim().length < 3) {
     return { ok: false };
   }
 
