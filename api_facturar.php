@@ -48,6 +48,9 @@ $con = null;
 
 // Intentar con mysqli (PHP 7+)
 if (function_exists('mysqli_connect')) {
+    if (function_exists('mysqli_report')) {
+        @mysqli_report(MYSQLI_REPORT_OFF);
+    }
     $con = @mysqli_connect($dbHost, $dbUser, $dbPass, $dbName);
     if (!$con) {
         // Fallback a IP remota si localhost no responde
