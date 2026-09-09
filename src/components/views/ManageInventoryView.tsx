@@ -26,11 +26,12 @@ import {
   trashOutline,
   downloadOutline,
   checkmarkCircleOutline,
-  alertCircleOutline,
   cartOutline,
   cashOutline,
   documentTextOutline,
   refreshOutline,
+  closeCircleOutline,
+  closeOutline,
 } from "ionicons/icons";
 import * as XLSX from "xlsx";
 import {
@@ -497,6 +498,39 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
       return rawCat === "desserts" || rawCat === "postres" || rawCat === "postre";
     }
     return rawCat === catId.toLowerCase();
+  };
+
+  const normalizeSearchText = (str: string) =>
+    (str || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  const matchProductSearchQuery = (prod: any, query: string) => {
+    if (!query || !query.trim()) return true;
+    const normalizedQuery = normalizeSearchText(query);
+    const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return true;
+
+    const prodName = normalizeSearchText(prod.name);
+    const prodSub = normalizeSearchText(prod.subcategory);
+    const prodDesc = normalizeSearchText(prod.description);
+    const prodCat = normalizeSearchText(prod.category);
+    const fullTarget = `${prodName} ${prodSub} ${prodDesc} ${prodCat}`;
+
+    // All terms in the query must match against the product text
+    return terms.every((term) => {
+      if (fullTarget.includes(term)) return true;
+      // Stemming: tacos -> taco, ordenes -> orden, etc.
+      if (term.endsWith("s") && term.length > 3 && fullTarget.includes(term.slice(0, -1))) {
+        return true;
+      }
+      if (term.endsWith("es") && term.length > 4 && fullTarget.includes(term.slice(0, -2))) {
+        return true;
+      }
+      return false;
+    });
   };
 
   const handleAddIngredientToRecipe = async () => {
@@ -1380,14 +1414,33 @@ Devuelve un JSON estructurado con:
                     {/* Search & Inventory Mode Filter Bar */}
                     <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                       <div className="relative flex-1 w-full">
-                        <IonIcon icon={searchOutline} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base" />
+                        <IonIcon
+                          icon={searchOutline}
+                          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base"
+                        />
                         <input
                           type="text"
-                          placeholder="🔍 Buscar producto en esta categoría..."
+                          placeholder="🔍 Buscar por cualquier palabra (ej: tacos har, pastor, arrachera)..."
                           value={recipeProductSearch}
                           onChange={(e) => setRecipeProductSearch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 transition"
+                          className="w-full pl-10 pr-36 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-semibold outline-none transition shadow-2xs"
                         />
+                        {recipeProductSearch.trim() !== "" && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRecipeProductSearch("");
+                                setSelectedProductIds([]);
+                              }}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-black px-2.5 py-1 rounded-lg transition flex items-center gap-1 border border-rose-200 cursor-pointer shadow-2xs"
+                              title="Limpiar búsqueda para volver a capturar"
+                            >
+                              <IonIcon icon={closeCircleOutline} className="text-sm" />
+                              <span>Limpiar búsqueda</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Filter by Inventory Type */}
@@ -1419,23 +1472,25 @@ Devuelve un JSON estructurado con:
 
                   {/* Computed Filtered Products List */}
                   {(() => {
+                    const isSearching = recipeProductSearch.trim().length > 0;
+
                     const filteredRecipeProducts = products
                       .filter((p) => !p.isDeleted)
-                      .filter((p) => isProductInCategory(p, recipeActiveCategory))
                       .filter((p) => {
-                        if (recipeActiveSubcategory && recipeActiveSubcategory !== "Todos") {
+                        // When searching, match across category or search globally within menu
+                        if (isSearching) {
+                          return isProductInCategory(p, recipeActiveCategory) || matchProductSearchQuery(p, recipeProductSearch);
+                        }
+                        return isProductInCategory(p, recipeActiveCategory);
+                      })
+                      .filter((p) => {
+                        // When searching text, search across all subcategories so nothing is hidden
+                        if (!isSearching && recipeActiveSubcategory && recipeActiveSubcategory !== "Todos") {
                           return p.subcategory === recipeActiveSubcategory;
                         }
                         return true;
                       })
-                      .filter((p) => {
-                        if (!recipeProductSearch.trim()) return true;
-                        const q = recipeProductSearch.toLowerCase().trim();
-                        return (
-                          (p.name || "").toLowerCase().includes(q) ||
-                          (p.subcategory || "").toLowerCase().includes(q)
-                        );
-                      })
+                      .filter((p) => matchProductSearchQuery(p, recipeProductSearch))
                       .filter((p) => {
                         const invType = p.inventoryType || (p.recipe && p.recipe.length > 0 ? "receta" : "none");
                         if (recipeInventoryTypeFilter === "TODOS") return true;
