@@ -119,6 +119,7 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const [selectedIngredientQty, setSelectedIngredientQty] = useState("");
   const [ingredientSearchQuery, setIngredientSearchQuery] = useState("");
   const [ingredientCategoryFilter, setIngredientCategoryFilter] = useState("TODOS");
+  const [recipeTabSubView, setRecipeTabSubView] = useState<"recipes_products" | "insumos_catalog">("recipes_products");
 
   // Excel Table Selection & Bulk Insumo Assignment States ⚡
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -210,14 +211,17 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
           "success"
         );
       } else {
+        const newId = `inv_${Date.now()}`;
         await addInventoryItemToFirebase({
-          id: `inv_${Date.now()}`,
+          id: newId,
           ...itemData,
           createdAt: getMexicoISOString(),
         });
+        setBulkInsumoId(newId);
+        setSelectedIngredientId(newId);
         triggerAppNotification(
-          "Insumo Creado",
-          `Se agregó "${itemData.name}" al catálogo de insumos.`,
+          "Insumo Creado y Seleccionado ✨",
+          `Se agregó "${itemData.name}" y se seleccionó listo para asignar en la receta.`,
           "success"
         );
       }
@@ -225,6 +229,53 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
     } catch (err) {
       console.error(err);
       alert("Error al guardar el insumo.");
+    }
+  };
+
+  const handleQuickCreateOrSelectInsumo = async (
+    name: string,
+    unit: string = "pza",
+    defaultCost: number = 1.0,
+    category: string = "Ingredientes"
+  ) => {
+    const existing = inventory.find(
+      (i) => i.name.toLowerCase().trim() === name.toLowerCase().trim()
+    );
+    if (existing) {
+      setBulkInsumoId(existing.id);
+      setSelectedIngredientId(existing.id);
+      triggerAppNotification(
+        "Insumo Seleccionado 🥩",
+        `"${existing.name}" seleccionado en la lista.`,
+        "info"
+      );
+      return;
+    }
+
+    const newId = `inv_${Date.now()}`;
+    const newItem = {
+      id: newId,
+      name,
+      category,
+      unit,
+      cost: defaultCost,
+      stock: 100,
+      minStock: 10,
+      createdAt: getMexicoISOString(),
+    };
+
+    try {
+      await addInventoryItemToFirebase(newItem);
+      setBulkInsumoId(newId);
+      setSelectedIngredientId(newId);
+      triggerAppNotification(
+        "Insumo Creado y Seleccionado ✨",
+        `Se registró "${name}" (${unit}) y se seleccionó automáticamente.`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "No se pudo crear el insumo rápido.", "error");
     }
   };
 
@@ -962,31 +1013,17 @@ Devuelve un JSON estructurado con:
                   {[
                     {
                       id: "recipes" as const,
-                      title: "Gestión de productos por recetas y modo de inventario",
+                      title: "Gestión de Productos, Insumos y Recetas",
                       emoji: "🍲",
                       color: "#10b981",
                       description:
-                        "Configura cómo descuenta inventario cada platillo (por pieza, por bulto, por caja o por receta) y asocia los insumos y porciones exactas como en el menú del cajero.",
+                        "Centro maestro integral: Administra catálogo de materias primas con stock, y asigna recetas y modos de inventario al vuelo en hoja de cálculo tipo Excel por categorías.",
                       actionExplanation:
-                        "Visualiza productos por categorías (Alimentos, Bebidas, Postres) y asigna recetas con descuento automático por comanda.",
+                        "Catálogo de insumos + Asignación de recetas en un solo módulo interactivo.",
                       bgGradient:
                         "linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(255, 255, 255, 0.95) 100%)",
                       borderColor: "#10b981",
-                      stat: `${productsWithRecipes} de ${products.filter((p) => !p.isDeleted).length} con Receta`,
-                    },
-                    {
-                      id: "insumos" as const,
-                      title: "Catálogo de Insumos y Stock",
-                      emoji: "🥩",
-                      color: "#3b82f6",
-                      description:
-                        "Registra materias primas, unidades de medida (kg, g, lt, ml, pza), costos unitarios, stock actual y stock mínimo de alerta.",
-                      actionExplanation:
-                        "Base de datos de ingredientes que se descontarán automáticamente con cada comanda cobrada en el punto de venta.",
-                      bgGradient:
-                        "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(255, 255, 255, 0.9) 100%)",
-                      borderColor: "#3b82f6",
-                      stat: `${inventory.length} Insumos Registrados`,
+                      stat: `${inventory.length} Insumos · ${productsWithRecipes} con Receta`,
                     },
                     {
                       id: "purchases_suppliers" as const,
@@ -1049,7 +1086,10 @@ Devuelve un JSON estructurado con:
                       key={w.id}
                       whileHover={{ scale: 1.02, y: -2 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setActiveTab(w.id)}
+                      onClick={() => {
+                        setActiveTab(w.id);
+                        if (w.id === "recipes") setRecipeTabSubView("recipes_products");
+                      }}
                       className="cursor-pointer rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between transition-all relative overflow-hidden group hover:border-slate-400"
                       style={{ background: w.bgGradient }}
                     >
@@ -1102,8 +1142,7 @@ Devuelve un JSON estructurado con:
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black uppercase text-slate-400">Módulo:</span>
                   <span className="text-xs font-black bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg border border-indigo-100">
-                    {activeTab === "insumos" && "Catálogo de Insumos 🥩"}
-                    {activeTab === "recipes" && "Escandallos y Recetas 🍲"}
+                    {(activeTab === "recipes" || activeTab === "insumos") && "Gestión de Productos, Insumos y Recetas 🍲"}
                     {activeTab === "purchases_suppliers" && "Compras y Proveedores 🛒"}
                     {activeTab === "physical_audit" && "Conteo Físico vs Teórico ⚖️"}
                     {activeTab === "kardex_movements" && "Kardex y Movimientos 📉"}
@@ -1113,219 +1152,259 @@ Devuelve un JSON estructurado con:
               </div>
 
               {/* ========================================================= */}
-              {/* TAB 1: INSUMOS (MATERIA PRIMA & STOCK) */}
+              {/* TAB 1: GESTIÓN INTEGRAL DE PRODUCTOS, INSUMOS Y RECETAS */}
               {/* ========================================================= */}
-              {activeTab === "insumos" && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                      <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                        <span>🥩</span> Catálogo de Insumos y Materia Prima ({inventory.length})
-                      </h2>
-                      <p className="text-xs text-slate-500">
-                        Administra ingredientes, bebidas y suministros con sus unidades de medida, costos y stock.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
+              {(activeTab === "recipes" || activeTab === "insumos") && (
+                <div className="space-y-4">
+                  {/* Sub-view Switcher Bar (Recetas Excel vs Catálogo de Insumos) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-2xl p-2.5 border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={exportInsumosToExcel}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 border border-emerald-200 cursor-pointer"
+                        onClick={() => setRecipeTabSubView("recipes_products")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          recipeTabSubView === "recipes_products"
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
                       >
-                        <IonIcon icon={downloadOutline} />
-                        <span>Exportar Excel</span>
+                        <span>🍲</span>
+                        <span>1. Asignación de Recetas a Platillos (Excel)</span>
                       </button>
                       <button
                         type="button"
-                        onClick={handleOpenNewInsumo}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer border-none"
+                        onClick={() => setRecipeTabSubView("insumos_catalog")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          recipeTabSubView === "insumos_catalog"
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
                       >
-                        <IonIcon icon={addOutline} />
-                        <span>Nuevo Insumo</span>
+                        <span>🥩</span>
+                        <span>2. Catálogo de Insumos y Stock ({inventory.length})</span>
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenNewInsumo}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 border-none cursor-pointer"
+                    >
+                      <IonIcon icon={addOutline} />
+                      <span>Nuevo Insumo</span>
+                    </button>
                   </div>
 
-                  {/* Filters & Search */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-6 relative">
-                      <IonIcon
-                        icon={searchOutline}
-                        className="absolute left-3 top-3 text-slate-400 text-base"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Buscar insumo por nombre..."
-                        value={insumoSearch}
-                        onChange={(e) => setInsumoSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-blue-500 transition"
-                      />
-                    </div>
+                  {/* SUB-VIEW 2: CATÁLOGO DE INSUMOS Y STOCK */}
+                  {recipeTabSubView === "insumos_catalog" && (
+                    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <span>🥩</span> Catálogo de Insumos y Materia Prima ({inventory.length})
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            Administra materias primas, unidades de medida, costos unitarios y existencias en tiempo real.
+                          </p>
+                        </div>
 
-                    <div className="sm:col-span-6 flex flex-wrap gap-1.5 items-center">
-                      {[
-                        "TODOS",
-                        "Ingredientes",
-                        "Carnes",
-                        "Bebidas",
-                        "Abarrotes",
-                        "Desechables",
-                        "Otros",
-                      ].map((cat) => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setInsumoCategoryFilter(cat)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                            insumoCategoryFilter === cat
-                              ? "bg-slate-800 text-white border-slate-800"
-                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Table of Insumos */}
-                  <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
-                          <th className="p-3">Insumo</th>
-                          <th className="p-3">Categoría</th>
-                          <th className="p-3 text-center">Unidad</th>
-                          <th className="p-3 text-right">Costo Unit.</th>
-                          <th className="p-3 text-center">Stock Actual</th>
-                          <th className="p-3 text-center">Stock Mínimo</th>
-                          <th className="p-3 text-right">Valorizado</th>
-                          <th className="p-3 text-center">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {inventory
-                          .filter((i) => {
-                            if (insumoCategoryFilter !== "TODOS" && (i.category || "Ingredientes") !== insumoCategoryFilter) {
-                              return false;
-                            }
-                            if (!insumoSearch.trim()) return true;
-                            return (i.name || "")
-                              .toLowerCase()
-                              .includes(insumoSearch.toLowerCase());
-                          })
-                          .map((item) => {
-                            const isLow = (Number(item.stock) || 0) <= (Number(item.minStock) || 0);
-                            const valTotal = (Number(item.stock) || 0) * (Number(item.cost) || 0);
-                            return (
-                              <tr key={item.id} className="hover:bg-slate-50/70 transition">
-                                <td className="p-3 font-black text-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <span>{item.name}</span>
-                                    {isLow && (
-                                      <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                                        ⚠️ Stock Bajo
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-3">
-                                  <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-bold">
-                                    {item.category || "Ingredientes"}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-center font-bold text-indigo-600">
-                                  {item.unit || "pza"}
-                                </td>
-                                <td className="p-3 text-right font-black text-slate-900">
-                                  ${(Number(item.cost) || 0).toFixed(2)}
-                                </td>
-                                <td className="p-3 text-center">
-                                  <span
-                                    className={`px-3 py-1 rounded-full font-black text-xs inline-block ${
-                                      isLow
-                                        ? "bg-rose-50 text-rose-600 border border-rose-200"
-                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    }`}
-                                  >
-                                    {item.stock ?? 0} {item.unit}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-center text-slate-500 font-bold">
-                                  {item.minStock ?? 5}
-                                </td>
-                                <td className="p-3 text-right font-black text-emerald-700">
-                                  ${valTotal.toFixed(2)}
-                                </td>
-                                <td className="p-3 text-center">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setQuickAdjustInsumo(item);
-                                        setQuickAdjustQty("");
-                                        setQuickAdjustReason("");
-                                        setQuickAdjustType("ajuste");
-                                      }}
-                                      title="Ajuste Rápido de Stock"
-                                      className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold transition border border-amber-200 cursor-pointer"
-                                    >
-                                      ⚡
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenEditInsumo(item)}
-                                      title="Editar Insumo"
-                                      className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition border border-blue-200 cursor-pointer"
-                                    >
-                                      ✏️
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteInsumo(item)}
-                                      title="Eliminar Insumo"
-                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition border border-rose-200 cursor-pointer"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* ========================================================= */}
-              {/* TAB 1: GESTIÓN DE PRODUCTOS POR RECETAS Y MODO DE INVENTARIO */}
-              {/* ========================================================= */}
-              {activeTab === "recipes" && (
-                <div className="space-y-5">
-                  {/* Top Bar with Category Segments & POS-style buttons */}
-                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                      <div>
-                        <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                          <span>🍲</span> Gestión de Productos por Recetas y Modo de Inventario
-                        </h2>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Visualiza los productos como en el menú del cajero por categorías (Alimentos, Bebidas, Postres) y configura su tipo de inventario y escandallos.
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={exportInsumosToExcel}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 border border-emerald-200 cursor-pointer"
+                          >
+                            <IonIcon icon={downloadOutline} />
+                            <span>Exportar Excel</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenNewInsumo}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-blue-500/20 cursor-pointer border-none"
+                          >
+                            <IonIcon icon={addOutline} />
+                            <span>Nuevo Insumo</span>
+                          </button>
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab(null)}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition self-start md:self-auto cursor-pointer border border-slate-200"
-                      >
-                        <IonIcon icon={arrowBackOutline} />
-                        <span>Volver a Módulos</span>
-                      </button>
+                      {/* Filters & Search */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-6 relative">
+                          <IonIcon
+                            icon={searchOutline}
+                            className="absolute left-3 top-3 text-slate-400 text-base"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Buscar insumo por nombre..."
+                            value={insumoSearch}
+                            onChange={(e) => setInsumoSearch(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-blue-500 transition"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-6 flex flex-wrap gap-1.5 items-center">
+                          {[
+                            "TODOS",
+                            "Ingredientes",
+                            "Carnes",
+                            "Bebidas",
+                            "Abarrotes",
+                            "Desechables",
+                            "Otros",
+                          ].map((cat) => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setInsumoCategoryFilter(cat)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                                insumoCategoryFilter === cat
+                                  ? "bg-slate-800 text-white border-slate-800"
+                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Table of Insumos */}
+                      <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                              <th className="p-3">Insumo</th>
+                              <th className="p-3">Categoría</th>
+                              <th className="p-3 text-center">Unidad</th>
+                              <th className="p-3 text-right">Costo Unit.</th>
+                              <th className="p-3 text-center">Stock Actual</th>
+                              <th className="p-3 text-center">Stock Mínimo</th>
+                              <th className="p-3 text-right">Valorizado</th>
+                              <th className="p-3 text-center">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                            {inventory
+                              .filter((i) => {
+                                if (insumoCategoryFilter !== "TODOS" && (i.category || "Ingredientes") !== insumoCategoryFilter) {
+                                  return false;
+                                }
+                                if (!insumoSearch.trim()) return true;
+                                return (i.name || "")
+                                  .toLowerCase()
+                                  .includes(insumoSearch.toLowerCase());
+                              })
+                              .map((item) => {
+                                const isLow = (Number(item.stock) || 0) <= (Number(item.minStock) || 0);
+                                const valTotal = (Number(item.stock) || 0) * (Number(item.cost) || 0);
+                                return (
+                                  <tr key={item.id} className="hover:bg-slate-50/70 transition">
+                                    <td className="p-3 font-black text-slate-800">
+                                      <div className="flex items-center gap-2">
+                                        <span>{item.name}</span>
+                                        {isLow && (
+                                          <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                                            ⚠️ Stock Bajo
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-bold">
+                                        {item.category || "Ingredientes"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-center font-bold text-indigo-600">
+                                      {item.unit || "pza"}
+                                    </td>
+                                    <td className="p-3 text-right font-black text-slate-900">
+                                      ${(Number(item.cost) || 0).toFixed(2)}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      <span
+                                        className={`px-3 py-1 rounded-full font-black text-xs inline-block ${
+                                          isLow
+                                            ? "bg-rose-50 text-rose-600 border border-rose-200"
+                                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        }`}
+                                      >
+                                        {item.stock ?? 0} {item.unit}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-center text-slate-500 font-bold">
+                                      {item.minStock ?? 5}
+                                    </td>
+                                    <td className="p-3 text-right font-black text-emerald-700">
+                                      ${valTotal.toFixed(2)}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setQuickAdjustInsumo(item);
+                                            setQuickAdjustQty("");
+                                            setQuickAdjustReason("");
+                                            setQuickAdjustType("ajuste");
+                                          }}
+                                          title="Ajuste Rápido de Stock"
+                                          className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold transition border border-amber-200 cursor-pointer"
+                                        >
+                                          ⚡
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditInsumo(item)}
+                                          title="Editar Insumo"
+                                          className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition border border-blue-200 cursor-pointer"
+                                        >
+                                          ✏️
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteInsumo(item)}
+                                          title="Eliminar Insumo"
+                                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition border border-rose-200 cursor-pointer"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+                  )}
+
+                  {/* SUB-VIEW 1: ASIGNACIÓN DE RECETAS A PLATILLOS (EXCEL) */}
+                  {recipeTabSubView === "recipes_products" && (
+                    <div className="space-y-5">
+                      {/* Top Bar with Category Segments & POS-style buttons */}
+                      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                          <div>
+                            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                              <span>🍲</span> Asignación de Recetas y Modo de Inventario
+                            </h2>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Visualiza los productos como en el menú del cajero por categorías (Alimentos, Bebidas, Postres) y configura su tipo de inventario y escandallos.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setRecipeTabSubView("insumos_catalog")}
+                            className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs flex items-center gap-1.5 transition self-start md:self-auto cursor-pointer border border-indigo-200"
+                          >
+                            <span>🥩</span>
+                            <span>Ver Catálogo de Insumos ({inventory.length}) →</span>
+                          </button>
+                        </div>
 
                     {/* POS-Style Main Category Buttons (Alimentos, Bebidas, Postres, etc.) */}
                     <div className="flex flex-wrap items-center gap-3">
@@ -1559,27 +1638,69 @@ Devuelve un JSON estructurado con:
                           {/* Bulk Form Controls */}
                           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
                             {/* Insumo Selector */}
-                            <div className="lg:col-span-5">
-                              <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                                🍲 Seleccionar Insumo a Descontar:
-                              </label>
+                            <div className="lg:col-span-5 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                                  🍲 Seleccionar Insumo a Descontar:
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={handleOpenNewInsumo}
+                                  className="text-[11px] font-black text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/40 px-2 py-0.5 rounded-lg border border-amber-400/40 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title="Crear un nuevo insumo y seleccionarlo automáticamente"
+                                >
+                                  <span>✨ + Crear Insumo</span>
+                                </button>
+                              </div>
                               <select
                                 value={bulkInsumoId}
-                                onChange={(e) => setBulkInsumoId(e.target.value)}
-                                className="w-full p-2 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400"
+                                onChange={(e) => {
+                                  if (e.target.value === "CREATE_NEW") {
+                                    handleOpenNewInsumo();
+                                  } else {
+                                    setBulkInsumoId(e.target.value);
+                                  }
+                                }}
+                                className="w-full p-2.5 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 cursor-pointer"
                               >
                                 <option value="">-- Elige Insumo (ej. Tortilla de Harina, Bistec, Queso...) --</option>
+                                <option value="CREATE_NEW" className="font-black text-amber-400 bg-slate-900">
+                                  ✨ + [Crear Nuevo Insumo al Catálogo]...
+                                </option>
                                 {inventory.map((i) => (
                                   <option key={i.id} value={i.id}>
                                     {i.name} ({i.unit}) — ${(Number(i.cost) || 0).toFixed(2)}
                                   </option>
                                 ))}
                               </select>
+
+                              {/* Quick Insumo Shortcuts */}
+                              <div className="flex flex-wrap gap-1 items-center pt-0.5">
+                                <span className="text-[10px] text-slate-400 font-bold mr-0.5">Atajos:</span>
+                                {[
+                                  { name: "Tortilla de Harina", unit: "pza", cost: 1.0, icon: "🌮" },
+                                  { name: "Tortilla de Maíz", unit: "pza", cost: 0.5, icon: "🌽" },
+                                  { name: "Bistec de Res", unit: "kg", cost: 160.0, icon: "🥩" },
+                                  { name: "Carne al Pastor", unit: "kg", cost: 140.0, icon: "🥓" },
+                                  { name: "Queso Oaxaca", unit: "kg", cost: 130.0, icon: "🧀" },
+                                ].map((quick) => (
+                                  <button
+                                    key={quick.name}
+                                    type="button"
+                                    onClick={() => handleQuickCreateOrSelectInsumo(quick.name, quick.unit, quick.cost, "Ingredientes")}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white transition border border-white/10 cursor-pointer flex items-center gap-1"
+                                    title={`Crear o seleccionar "${quick.name}" automáticamente`}
+                                  >
+                                    <span>{quick.icon}</span>
+                                    <span>{quick.name}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
 
                             {/* Insumo Quantity */}
-                            <div className="lg:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                            <div className="lg:col-span-2 space-y-1.5 self-start">
+                              <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">
                                 Cantidad ({inventory.find((i) => i.id === bulkInsumoId)?.unit || "porción"}):
                               </label>
                               <input
@@ -1588,7 +1709,7 @@ Devuelve un JSON estructurado con:
                                 placeholder="1"
                                 value={bulkInsumoQty}
                                 onChange={(e) => setBulkInsumoQty(e.target.value)}
-                                className="w-full p-2 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 text-center"
+                                className="w-full p-2.5 bg-slate-800/90 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-indigo-400 text-center"
                               />
                             </div>
 
@@ -1886,6 +2007,8 @@ Devuelve un JSON estructurado con:
                   })()}
                 </div>
               )}
+            </div>
+          )}
 
               {/* ========================================================= */}
               {/* TAB 3: COMPRAS Y PROVEEDORES */}
