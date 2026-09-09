@@ -122,14 +122,8 @@ export const ManageInvoicingView: React.FC<ManageInvoicingViewProps> = ({
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("ALL");
-  const [filterStartDate, setFilterStartDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  });
-  const [filterEndDate, setFilterEndDate] = useState<string>(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
 
   // Modal States
   const [resendModalInvoice, setResendModalInvoice] = useState<ApiInvoiceItem | null>(null);
@@ -161,8 +155,31 @@ export const ManageInvoicingView: React.FC<ManageInvoicingViewProps> = ({
 
       if (res.ok && res.facturas) {
         setInvoices(res.facturas);
-        if (res.resumen) {
-          setApiResumen(res.resumen);
+        const stats: any = res.resumen || (res as any).stats;
+        if (stats) {
+          const timbradasCount = stats.timbradas ?? res.facturas.filter((f) => !!f.timbrada || !!f.uuid).length;
+          const noTimbradasCount =
+            stats.no_timbradas ?? stats.pendientes ?? res.facturas.filter((f) => !f.timbrada && !f.uuid).length;
+          const montoTotal =
+            stats.monto_total_timbrado ??
+            stats.monto_facturado ??
+            res.facturas.reduce((acc, f) => (f.timbrada || f.uuid ? acc + (Number(f.total) || 0) : acc), 0);
+
+          setApiResumen({
+            total: stats.total ?? res.facturas.length,
+            timbradas: timbradasCount,
+            no_timbradas: noTimbradasCount,
+            monto_total_timbrado: montoTotal,
+            monto_total_no_timbrado: stats.monto_total_no_timbrado ?? 0,
+          });
+        } else {
+          setApiResumen({
+            total: res.facturas.length,
+            timbradas: res.facturas.filter((f) => !!f.timbrada || !!f.uuid).length,
+            no_timbradas: res.facturas.filter((f) => !f.timbrada && !f.uuid).length,
+            monto_total_timbrado: res.facturas.reduce((acc, f) => (f.timbrada || f.uuid ? acc + (Number(f.total) || 0) : acc), 0),
+            monto_total_no_timbrado: 0,
+          });
         }
       } else {
         triggerAppNotification(

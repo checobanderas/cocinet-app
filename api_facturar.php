@@ -121,9 +121,19 @@ function dbEscape($str, $dbCon = null) {
 
 // 2. Leer payload JSON o POST enviado desde Cocinet POS / Portal
 $rawInput = file_get_contents('php://input');
-$data = json_decode($rawInput, true);
+$data = null;
+if (!empty($rawInput)) {
+    $cleanInput = preg_replace('/^[\xEF\xBB\xBF\x00-\x1F\x7F]+/', '', trim($rawInput));
+    $data = json_decode($cleanInput, true);
+    if (!is_array($data)) {
+        $data = json_decode($rawInput, true);
+    }
+}
 if (!$data || !is_array($data)) {
     $data = $_POST;
+}
+if (!is_array($data)) {
+    $data = array();
 }
 
 $accion = '';
@@ -624,7 +634,7 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
 
     if (!empty($fechaInicio)) {
         $fIniEsc = dbEscape($fechaInicio);
-        $where[] = "F.FECHA >= '$fIniEsc 00:00:00'";
+        $where[] = "F.FECHA >= '$fIniEsc'";
     }
     if (!empty($fechaFin)) {
         $fFinEsc = dbEscape($fechaFin);
@@ -632,28 +642,18 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
     }
 
     $whereSql = implode(' AND ', $where);
-    $sql = "SELECT F.ID_FACTURA,
-                   F.ID_CLIENTE,
-                   F.FOLIO AS folio,
-                   F.FECHA AS fecha,
-                   C.NOMBRE AS nombre,
-                   C.NOMBRE AS razon_social,
-                   C.RFC AS rfc,
-                   C.CP AS cp,
-                   C.REGIMEN AS regimenfiscal,
-                   C.USOCFDI AS usocfdi,
-                   C.EMAIL AS correo,
-                   C.TELEFONO AS phone,
-                   F.IMPORTE AS subtotal,
-                   F.IVA AS iva,
-                   F.ISR AS ret_isr,
-                   F.TOTAL AS total,
-                   F.UUID AS uuid,
-                   F.estado AS estado
+    $sql = "SELECT F.*, 
+                   C.NOMBRE AS cliente_nombre, 
+                   C.RFC AS cliente_rfc, 
+                   C.CP AS cliente_cp, 
+                   C.REGIMEN AS cliente_regimen, 
+                   C.USOCFDI AS cliente_usocfdi, 
+                   C.EMAIL AS cliente_email, 
+                   C.TELEFONO AS cliente_telefono 
             FROM facturas F 
-            LEFT JOIN clientes C ON (F.ID_CLIENTE = C.ID_CLIENTE OR F.ID_CLIENTE = C.id)
+            LEFT JOIN clientes C ON F.id_cliente = C.id 
             WHERE $whereSql 
-            ORDER BY F.ID_FACTURA DESC LIMIT 150";
+            ORDER BY F.folio DESC LIMIT 200";
 
     $res = dbQuery($sql);
     $lista = array();
@@ -667,27 +667,39 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
             $pdfUrl = $baseUrl . "facturas/factura_{$folioRow}.pdf";
             $xmlUrl = $baseUrl . "facturas/factura_{$folioRow}.xml";
 
+            $nombreCli = getVal($row, 'cliente_nombre', getVal($row, 'nombre', getVal($row, 'NOMBRE', '')));
+            $rfcCli    = getVal($row, 'cliente_rfc', getVal($row, 'rfc', getVal($row, 'RFC', 'XAXX010101000')));
+
+            $subtotalVal = floatval(getVal($row, 'subtotal', getVal($row, 'SUBTOTAL', getVal($row, 'IMPORTE', 0))));
+            $ivaVal      = floatval(getVal($row, 'iva', getVal($row, 'IVA', 0)));
+            $isrVal      = floatval(getVal($row, 'isr', getVal($row, 'ISR', getVal($row, 'ret_isr', 0))));
+            $totalVal    = floatval(getVal($row, 'total', getVal($row, 'TOTAL', 0)));
+
+            if ($totalVal <= 0 && $subtotalVal > 0) {
+                $totalVal = $subtotalVal + $ivaVal - $isrVal;
+            }
+
             $lista[] = array(
-                'id'                  => getVal($row, 'ID_FACTURA'),
+                'id'                  => getVal($row, 'id_factura', getVal($row, 'ID_FACTURA', getVal($row, 'id', $folioRow))),
                 'folio'               => $folioRow,
-                'serie'               => 'A',
-                'fecha'               => getVal($row, 'fecha', getVal($row, 'FECHA')),
-                'rfc'                 => strtoupper(trim(getVal($row, 'rfc'))),
-                'razon_social'        => strtoupper(trim(getVal($row, 'razon_social', getVal($row, 'nombre')))),
-                'nombre'              => strtoupper(trim(getVal($row, 'nombre', getVal($row, 'razon_social')))),
-                'total'               => floatval(getVal($row, 'total', getVal($row, 'TOTAL', 0))),
-                'subtotal'            => floatval(getVal($row, 'subtotal', getVal($row, 'IMPORTE', 0))),
-                'iva'                 => floatval(getVal($row, 'iva', getVal($row, 'IVA', 0))),
-                'ret_isr'             => floatval(getVal($row, 'ret_isr', getVal($row, 'ISR', 0))),
-                'retencion_isr'       => floatval(getVal($row, 'ret_isr', getVal($row, 'ISR', 0))),
+                'serie'               => getVal($row, 'serie', 'A'),
+                'fecha'               => getVal($row, 'fecha', getVal($row, 'FECHA', '')),
+                'rfc'                 => strtoupper(trim($rfcCli)),
+                'razon_social'        => strtoupper(trim($nombreCli)),
+                'nombre'              => strtoupper(trim($nombreCli)),
+                'total'               => $totalVal,
+                'subtotal'            => $subtotalVal,
+                'iva'                 => $ivaVal,
+                'ret_isr'             => $isrVal,
+                'retencion_isr'       => $isrVal,
                 'uuid'                => $rawUuid,
                 'timbrada'            => $isTimbrada ? 1 : 0,
                 'estado'              => $isTimbrada ? 'TIMBRADA' : ($rawEstado ? $rawEstado : 'PENDIENTE'),
-                'email'               => getVal($row, 'correo'),
-                'correo'              => getVal($row, 'correo'),
-                'cp'                  => getVal($row, 'cp'),
-                'regimen_fiscal'      => getVal($row, 'regimenfiscal', '612'),
-                'uso_cfdi'            => getVal($row, 'usocfdi', 'G03'),
+                'email'               => getVal($row, 'cliente_email', getVal($row, 'correo', getVal($row, 'EMAIL', ''))),
+                'correo'              => getVal($row, 'cliente_email', getVal($row, 'correo', getVal($row, 'EMAIL', ''))),
+                'cp'                  => getVal($row, 'cliente_cp', getVal($row, 'cp', getVal($row, 'CP', ''))),
+                'regimen_fiscal'      => getVal($row, 'cliente_regimen', getVal($row, 'regimen', getVal($row, 'REGIMEN', '612'))),
+                'uso_cfdi'            => getVal($row, 'cliente_usocfdi', getVal($row, 'usocfdi', getVal($row, 'USOCFDI', 'G03'))),
                 'pdf_url'             => $pdfUrl,
                 'xml_url'             => $xmlUrl,
                 'pdfUrl'              => $pdfUrl,
@@ -704,17 +716,25 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
         SUM(CASE WHEN (UUID IS NOT NULL AND UUID <> '' AND UUID <> '0') OR estado = 'TIMBRADA' THEN TOTAL ELSE 0 END) AS total_facturado_monto
         FROM facturas");
     $stats = dbFetchAssoc($qStats);
+    $qCli  = dbQuery("SELECT COUNT(*) AS total_clientes FROM clientes WHERE emisor <> '1'");
+    $cli   = dbFetchAssoc($qCli);
+
+    $resumen = array(
+        'total'                   => intval(getVal($stats, 'total_count', 0)),
+        'timbradas'               => intval(getVal($stats, 'timbradas_count', 0)),
+        'no_timbradas'            => intval(getVal($stats, 'pendientes_count', 0)),
+        'pendientes'              => intval(getVal($stats, 'pendientes_count', 0)),
+        'clientes_mysql'          => intval(getVal($cli, 'total_clientes', 0)),
+        'monto_total_timbrado'    => floatval(getVal($stats, 'total_facturado_monto', 0)),
+        'monto_total_no_timbrado' => 0,
+        'monto_facturado'         => floatval(getVal($stats, 'total_facturado_monto', 0))
+    );
 
     echo json_encode(array(
         'ok'       => true,
         'facturas' => $lista,
-        'stats'    => array(
-            'total'          => intval(getVal($stats, 'total_count', 0)),
-            'timbradas'      => intval(getVal($stats, 'timbradas_count', 0)),
-            'pendientes'     => intval(getVal($stats, 'pendientes_count', 0)),
-            'clientes_mysql'  => intval(getVal($cli, 'total_clientes', 0)),
-            'monto_facturado'=> floatval(getVal($stats, 'total_facturado_monto', 0))
-        )
+        'resumen'  => $resumen,
+        'stats'    => $resumen
     ));
     exit;
 }
