@@ -1152,7 +1152,9 @@ return (
                                           );
                                         }
 
-                                        if (handleOpenCfdiInvoiceModal) {
+                                        const hasInvoiceRequirement = Boolean(account.requiresInvoice || (account.invoicePhone && account.invoicePhone.trim() !== ""));
+
+                                        if (handleOpenCfdiInvoiceModal && hasInvoiceRequirement) {
                                           return (
                                             <button
                                               type="button"
