@@ -107,15 +107,17 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const [insumoFormStock, setInsumoFormStock] = useState("");
   const [insumoFormMinStock, setInsumoFormMinStock] = useState("");
 
-  // --- Sub-states for Recipes Tab ---
+  // --- Sub-states for Recipes / Inventory Mode Tab ---
+  const [recipeActiveCategory, setRecipeActiveCategory] = useState<string>("food");
+  const [recipeActiveSubcategory, setRecipeActiveSubcategory] = useState<string>("Todos");
   const [recipeProductSearch, setRecipeProductSearch] = useState("");
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState("TODOS");
-  const [recipeHasRecipeFilter, setRecipeHasRecipeFilter] = useState<"TODOS" | "CON_RECETA" | "SIN_RECETA">("TODOS");
+  const [recipeInventoryTypeFilter, setRecipeInventoryTypeFilter] = useState<"TODOS" | "receta" | "pieza" | "bulto" | "caja" | "none">("TODOS");
   const [selectedRecipeProduct, setSelectedRecipeProduct] = useState<any | null>(null);
   const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
   const [selectedIngredientId, setSelectedIngredientId] = useState("");
   const [selectedIngredientQty, setSelectedIngredientQty] = useState("");
   const [ingredientSearchQuery, setIngredientSearchQuery] = useState("");
+  const [ingredientCategoryFilter, setIngredientCategoryFilter] = useState("TODOS");
 
   // --- Sub-states for Compras / Proveedores Tab ---
   const [purchasesTabSubView, setPurchasesTabSubView] = useState<"suppliers" | "purchases">("suppliers");
@@ -291,6 +293,70 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
       const unitCost = Number(invItem?.cost) || 0;
       return total + unitCost * (Number(ing.quantity) || 0);
     }, 0);
+  };
+
+  const handleUpdateProductInventoryType = async (prod: any, newType: string) => {
+    try {
+      const updatedProduct = {
+        ...prod,
+        inventoryType: newType,
+      };
+      await updateProductInFirebase(prod.id, updatedProduct);
+      if (selectedRecipeProduct?.id === prod.id) {
+        setSelectedRecipeProduct(updatedProduct);
+      }
+      const label =
+        newType === "receta"
+          ? "Por Receta (Insumos)"
+          : newType === "pieza"
+          ? "Por Pieza"
+          : newType === "bulto"
+          ? "Por Bulto"
+          : newType === "caja"
+          ? "Por Caja"
+          : "Sin Inventario";
+      triggerAppNotification(
+        "Modo de Inventario Actualizado",
+        `"${prod.name}" configurado como "${label}".`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAppNotification("Error", "No se pudo actualizar el modo de inventario.", "error");
+    }
+  };
+
+  const isProductInCategory = (prod: any, catId: string) => {
+    const rawCat = (prod.category || "").toLowerCase().trim();
+    if (catId === "food") {
+      return (
+        rawCat === "food" ||
+        rawCat === "alimentos" ||
+        rawCat === "comida" ||
+        rawCat === "platillos" ||
+        rawCat === "entradas" ||
+        rawCat === "tacos" ||
+        rawCat === "tlayudas" ||
+        (!rawCat && !isProductInCategory(prod, "drinks") && !isProductInCategory(prod, "desserts"))
+      );
+    }
+    if (catId === "drinks") {
+      return (
+        rawCat === "drinks" ||
+        rawCat === "bebidas" ||
+        rawCat === "bebida" ||
+        rawCat === "refrescos" ||
+        rawCat === "cervezas" ||
+        rawCat === "cocteleria" ||
+        rawCat === "aguas" ||
+        rawCat === "cafe" ||
+        rawCat === "café"
+      );
+    }
+    if (catId === "desserts") {
+      return rawCat === "desserts" || rawCat === "postres" || rawCat === "postre";
+    }
+    return rawCat === catId.toLowerCase();
   };
 
   const handleAddIngredientToRecipe = async () => {
@@ -721,6 +787,20 @@ Devuelve un JSON estructurado con:
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
                   {[
                     {
+                      id: "recipes" as const,
+                      title: "Gestión de productos por recetas y modo de inventario",
+                      emoji: "🍲",
+                      color: "#10b981",
+                      description:
+                        "Configura cómo descuenta inventario cada platillo (por pieza, por bulto, por caja o por receta) y asocia los insumos y porciones exactas como en el menú del cajero.",
+                      actionExplanation:
+                        "Visualiza productos por categorías (Alimentos, Bebidas, Postres) y asigna recetas con descuento automático por comanda.",
+                      bgGradient:
+                        "linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(255, 255, 255, 0.95) 100%)",
+                      borderColor: "#10b981",
+                      stat: `${productsWithRecipes} de ${products.filter((p) => !p.isDeleted).length} con Receta`,
+                    },
+                    {
                       id: "insumos" as const,
                       title: "Catálogo de Insumos y Stock",
                       emoji: "🥩",
@@ -733,20 +813,6 @@ Devuelve un JSON estructurado con:
                         "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(255, 255, 255, 0.9) 100%)",
                       borderColor: "#3b82f6",
                       stat: `${inventory.length} Insumos Registrados`,
-                    },
-                    {
-                      id: "recipes" as const,
-                      title: "Escandallos y Recetas",
-                      emoji: "🍲",
-                      color: "#10b981",
-                      description:
-                        "Vincula ingredientes y porciones a los platillos del menú. Calcula el costo teórico de producción y el margen de utilidad en vivo.",
-                      actionExplanation:
-                        "Permite controlar mermas, calcular rentabilidad real por platillo y descontar insumos automáticamente al cerrar cuentas.",
-                      bgGradient:
-                        "linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(255, 255, 255, 0.9) 100%)",
-                      borderColor: "#10b981",
-                      stat: `${productsWithRecipes} Platillos con Receta`,
                     },
                     {
                       id: "purchases_suppliers" as const,
@@ -1061,286 +1127,349 @@ Devuelve un JSON estructurado con:
               )}
 
               {/* ========================================================= */}
-              {/* TAB 2: ESCANDALLOS Y RECETAS POR PLATILLO */}
+              {/* TAB 1: GESTIÓN DE PRODUCTOS POR RECETAS Y MODO DE INVENTARIO */}
               {/* ========================================================= */}
               {activeTab === "recipes" && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                  {/* Left Column: List of Products */}
-                  <div className="lg:col-span-5 bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
-                    <div>
-                      <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                        <span>🍲</span> Catálogo de Platillos ({products.filter((p) => !p.isDeleted).length})
-                      </h3>
-                      <p className="text-[11px] text-slate-500">
-                        Selecciona un platillo para ver su escandallo, ingredientes y cálculo de margen.
-                      </p>
+                <div className="space-y-5">
+                  {/* Top Bar with Category Segments & POS-style buttons */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                          <span>🍲</span> Gestión de Productos por Recetas y Modo de Inventario
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Visualiza los productos como en el menú del cajero por categorías (Alimentos, Bebidas, Postres) y configura su tipo de inventario y escandallos.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition self-start md:self-auto cursor-pointer border border-slate-200"
+                      >
+                        <IonIcon icon={arrowBackOutline} />
+                        <span>Volver a Módulos</span>
+                      </button>
                     </div>
 
-                    {/* Search & Filter */}
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        placeholder="🔍 Buscar platillo..."
-                        value={recipeProductSearch}
-                        onChange={(e) => setRecipeProductSearch(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 transition"
-                      />
-
-                      <div className="flex gap-1">
-                        {(["TODOS", "CON_RECETA", "SIN_RECETA"] as const).map((mode) => (
+                    {/* POS-Style Main Category Buttons (Alimentos, Bebidas, Postres, etc.) */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {[
+                        { id: "food", name: "Alimentos", emoji: "🍽️", color: "#ef4444", bgActive: "bg-red-500", borderActive: "border-red-500", textActive: "text-white" },
+                        { id: "drinks", name: "Bebidas", emoji: "🥤", color: "#3b82f6", bgActive: "bg-blue-600", borderActive: "border-blue-600", textActive: "text-white" },
+                        { id: "desserts", name: "Postres", emoji: "🍰", color: "#f59e0b", bgActive: "bg-amber-500", borderActive: "border-amber-500", textActive: "text-white" },
+                      ].map((cat) => {
+                        const isSelected = recipeActiveCategory === cat.id;
+                        const count = products.filter((p) => !p.isDeleted && isProductInCategory(p, cat.id)).length;
+                        return (
                           <button
-                            key={mode}
+                            key={cat.id}
                             type="button"
-                            onClick={() => setRecipeHasRecipeFilter(mode)}
-                            className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition border cursor-pointer ${
-                              recipeHasRecipeFilter === mode
-                                ? "bg-indigo-600 text-white border-indigo-600"
+                            onClick={() => {
+                              setRecipeActiveCategory(cat.id);
+                              setRecipeActiveSubcategory("Todos");
+                            }}
+                            className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-sm transition-all shadow-xs cursor-pointer border ${
+                              isSelected
+                                ? `${cat.bgActive} ${cat.borderActive} ${cat.textActive} shadow-md scale-105`
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            <span className="text-xl">{cat.emoji}</span>
+                            <span>{cat.name}</span>
+                            <span
+                              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                isSelected ? "bg-white/25 text-white" : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Subcategories Horizontal Scroll Bar */}
+                    {(() => {
+                      const subcats = Array.from(
+                        new Set(
+                          products
+                            .filter((p) => !p.isDeleted && isProductInCategory(p, recipeActiveCategory))
+                            .map((p) => p.subcategory)
+                            .filter(Boolean)
+                        )
+                      ).sort();
+
+                      if (subcats.length === 0) return null;
+
+                      return (
+                        <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1 border-t border-slate-100">
+                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pr-1">
+                            Subcategoría:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRecipeActiveSubcategory("Todos")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border whitespace-nowrap ${
+                              recipeActiveSubcategory === "Todos"
+                                ? "bg-slate-800 text-white border-slate-800 shadow-xs"
                                 : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                             }`}
                           >
-                            {mode === "TODOS"
-                              ? "Todos"
-                              : mode === "CON_RECETA"
-                              ? "Con Receta"
-                              : "Sin Receta"}
+                            Todos
+                          </button>
+                          {subcats.map((sub) => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => setRecipeActiveSubcategory(sub)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border whitespace-nowrap ${
+                                recipeActiveSubcategory === sub
+                                  ? "bg-slate-800 text-white border-slate-800 shadow-xs"
+                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Search & Inventory Mode Filter Bar */}
+                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                      <div className="relative flex-1 w-full">
+                        <IonIcon icon={searchOutline} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base" />
+                        <input
+                          type="text"
+                          placeholder="🔍 Buscar producto en esta categoría..."
+                          value={recipeProductSearch}
+                          onChange={(e) => setRecipeProductSearch(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 transition"
+                        />
+                      </div>
+
+                      {/* Filter by Inventory Type */}
+                      <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto">
+                        {[
+                          { id: "TODOS", label: "Todos" },
+                          { id: "receta", label: "🍲 Por Receta" },
+                          { id: "pieza", label: "📦 Por Pieza" },
+                          { id: "bulto", label: "📦 Por Bulto" },
+                          { id: "caja", label: "📦 Por Caja" },
+                          { id: "none", label: "⚪ Sin Control" },
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setRecipeInventoryTypeFilter(f.id as any)}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition whitespace-nowrap cursor-pointer border ${
+                              recipeInventoryTypeFilter === f.id
+                                ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            {f.label}
                           </button>
                         ))}
                       </div>
                     </div>
-
-                    {/* Product List */}
-                    <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                      {products
-                        .filter((p) => !p.isDeleted)
-                        .filter((p) => {
-                          const hasRec = p.recipe && Array.isArray(p.recipe) && p.recipe.length > 0;
-                          if (recipeHasRecipeFilter === "CON_RECETA" && !hasRec) return false;
-                          if (recipeHasRecipeFilter === "SIN_RECETA" && hasRec) return false;
-                          if (!recipeProductSearch.trim()) return true;
-                          return p.name.toLowerCase().includes(recipeProductSearch.toLowerCase());
-                        })
-                        .map((prod) => {
-                          const isSelected = selectedRecipeProduct?.id === prod.id;
-                          const recipeCost = calculateProductCost(prod);
-                          const price = Number(prod.price) || 0;
-                          const marginPercent =
-                            price > 0 ? ((price - recipeCost) / price) * 100 : 0;
-                          const hasRec = prod.recipe && Array.isArray(prod.recipe) && prod.recipe.length > 0;
-
-                          return (
-                            <div
-                              key={prod.id}
-                              onClick={() => setSelectedRecipeProduct(prod)}
-                              className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                                isSelected
-                                  ? "bg-indigo-50 border-indigo-500 shadow-sm"
-                                  : "bg-white border-slate-200 hover:bg-slate-50"
-                              }`}
-                            >
-                              <div>
-                                <h4 className="text-xs font-black text-slate-800">
-                                  {prod.name}
-                                </h4>
-                                <div className="flex items-center gap-2 mt-1 text-[11px]">
-                                  <span className="font-bold text-slate-600">
-                                    Precio: ${price.toFixed(2)}
-                                  </span>
-                                  {hasRec ? (
-                                    <span className="text-indigo-600 font-black">
-                                      Costo: ${recipeCost.toFixed(2)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-600 font-bold">
-                                      Sin Receta
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div>
-                                {hasRec ? (
-                                  <span
-                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                      marginPercent >= 65
-                                        ? "bg-emerald-100 text-emerald-800"
-                                        : marginPercent >= 45
-                                        ? "bg-amber-100 text-amber-800"
-                                        : "bg-rose-100 text-rose-800"
-                                    }`}
-                                  >
-                                    {marginPercent.toFixed(0)}% Margen
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-slate-400 font-bold">
-                                    + Agregar
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
                   </div>
 
-                  {/* Right Column: Selected Product Recipe Details */}
-                  <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
-                    {selectedRecipeProduct ? (
-                      <>
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                          <div>
-                            <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider block">
-                              Escandallo de Producción
-                            </span>
-                            <h2 className="text-lg font-black text-slate-800">
-                              {selectedRecipeProduct.name}
-                            </h2>
-                          </div>
+                  {/* Products Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {products
+                      .filter((p) => !p.isDeleted)
+                      .filter((p) => isProductInCategory(p, recipeActiveCategory))
+                      .filter((p) => {
+                        if (recipeActiveSubcategory && recipeActiveSubcategory !== "Todos") {
+                          return p.subcategory === recipeActiveSubcategory;
+                        }
+                        return true;
+                      })
+                      .filter((p) => {
+                        if (!recipeProductSearch.trim()) return true;
+                        const q = recipeProductSearch.toLowerCase().trim();
+                        return (
+                          (p.name || "").toLowerCase().includes(q) ||
+                          (p.subcategory || "").toLowerCase().includes(q)
+                        );
+                      })
+                      .filter((p) => {
+                        const invType = p.inventoryType || (p.recipe && p.recipe.length > 0 ? "receta" : "none");
+                        if (recipeInventoryTypeFilter === "TODOS") return true;
+                        if (recipeInventoryTypeFilter === "receta") return invType === "receta" || (p.recipe && p.recipe.length > 0);
+                        if (recipeInventoryTypeFilter === "pieza") return invType === "pieza";
+                        if (recipeInventoryTypeFilter === "bulto") return invType === "bulto";
+                        if (recipeInventoryTypeFilter === "caja") return invType === "caja";
+                        if (recipeInventoryTypeFilter === "none") return invType === "none" && (!p.recipe || p.recipe.length === 0);
+                        return true;
+                      })
+                      .map((prod) => {
+                        const currentType = prod.inventoryType || (prod.recipe && prod.recipe.length > 0 ? "receta" : "none");
+                        const recipeCost = calculateProductCost(prod);
+                        const price = Number(prod.price) || 0;
+                        const profit = price - recipeCost;
+                        const marginPercent = price > 0 ? (profit / price) * 100 : 0;
+                        const hasRecipeItems = prod.recipe && Array.isArray(prod.recipe) && prod.recipe.length > 0;
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedIngredientId("");
-                              setSelectedIngredientQty("");
-                              setIngredientSearchQuery("");
-                              setShowAddIngredientModal(true);
-                            }}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer border-none"
+                        return (
+                          <div
+                            key={prod.id}
+                            className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm hover:border-indigo-300 transition-all flex flex-col justify-between space-y-4"
                           >
-                            <IonIcon icon={addOutline} />
-                            <span>Agregar Insumo a Receta</span>
-                          </button>
-                        </div>
-
-                        {/* Cost & Margin Metrics Banner */}
-                        {(() => {
-                          const cost = calculateProductCost(selectedRecipeProduct);
-                          const price = Number(selectedRecipeProduct.price) || 0;
-                          const profit = price - cost;
-                          const margin = price > 0 ? (profit / price) * 100 : 0;
-
-                          return (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                                  Precio de Venta
-                                </span>
-                                <span className="text-base font-black text-slate-900">
+                            {/* Product Header */}
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                    {prod.subcategory || "General"}
+                                  </span>
+                                  <h3 className="text-sm font-black text-slate-900 leading-snug">
+                                    {prod.name}
+                                  </h3>
+                                </div>
+                                <span className="text-base font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl">
                                   ${price.toFixed(2)}
                                 </span>
                               </div>
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                                  Costo Insumos
-                                </span>
-                                <span className="text-base font-black text-indigo-700">
-                                  ${cost.toFixed(2)}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                                  Ganancia Bruta
-                                </span>
-                                <span
-                                  className={`text-base font-black ${
-                                    profit > 0 ? "text-emerald-700" : "text-rose-600"
+
+                              {/* Inventory Type Selector Control */}
+                              <div className="mt-3 pt-3 border-t border-slate-100">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                                  Tipo de Inventario / Descuento:
+                                </label>
+                                <select
+                                  value={currentType}
+                                  onChange={(e) => handleUpdateProductInventoryType(prod, e.target.value)}
+                                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border transition outline-none cursor-pointer ${
+                                    currentType === "receta"
+                                      ? "bg-emerald-50 border-emerald-400 text-emerald-800"
+                                      : currentType === "pieza" || currentType === "bulto" || currentType === "caja"
+                                      ? "bg-blue-50 border-blue-400 text-blue-800"
+                                      : "bg-slate-50 border-slate-300 text-slate-700"
                                   }`}
                                 >
-                                  ${profit.toFixed(2)}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                                  Margen Utilidad
-                                </span>
-                                <span
-                                  className={`text-base font-black ${
-                                    margin >= 65
-                                      ? "text-emerald-600"
-                                      : margin >= 45
-                                      ? "text-amber-600"
-                                      : "text-rose-600"
-                                  }`}
-                                >
-                                  {margin.toFixed(1)}%
-                                </span>
+                                  <option value="none">⚪ Sin Control de Inventario</option>
+                                  <option value="pieza">📦 Por Pieza (Directo)</option>
+                                  <option value="bulto">📦 Por Bulto</option>
+                                  <option value="caja">📦 Por Caja</option>
+                                  <option value="receta">🍲 Por Receta (Escandallo de Insumos)</option>
+                                </select>
                               </div>
                             </div>
-                          );
-                        })()}
 
-                        {/* Ingredients Table */}
-                        <div className="space-y-2">
-                          <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                            Insumos y Porciones Requeridas
-                          </h4>
+                            {/* Mode Specific Body */}
+                            <div className="space-y-3">
+                              {/* WHEN RECIPE MODE IS SELECTED */}
+                              {currentType === "receta" && (
+                                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-2.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-black text-emerald-900 flex items-center gap-1.5">
+                                      <span>🍲</span>
+                                      <span>
+                                        {hasRecipeItems
+                                          ? `${prod.recipe.length} Insumo(s) en Receta`
+                                          : "Sin Insumos Asignados"}
+                                      </span>
+                                    </span>
+                                    {hasRecipeItems && (
+                                      <span
+                                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                          marginPercent >= 65
+                                            ? "bg-emerald-200 text-emerald-900"
+                                            : marginPercent >= 45
+                                            ? "bg-amber-200 text-amber-900"
+                                            : "bg-rose-200 text-rose-900"
+                                        }`}
+                                      >
+                                        {marginPercent.toFixed(0)}% Margen
+                                      </span>
+                                    )}
+                                  </div>
 
-                          {(!selectedRecipeProduct.recipe || selectedRecipeProduct.recipe.length === 0) ? (
-                            <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 text-slate-400 text-xs font-bold">
-                              Este platillo no tiene insumos asignados todavía. Presiona "Agregar Insumo a Receta".
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead>
-                                  <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
-                                    <th className="p-3">Insumo</th>
-                                    <th className="p-3 text-center">Porción</th>
-                                    <th className="p-3 text-right">Costo Unit.</th>
-                                    <th className="p-3 text-right">Subtotal</th>
-                                    <th className="p-3 text-center">Acción</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                                  {selectedRecipeProduct.recipe.map((ing: any) => {
-                                    const inv = inventory.find(
-                                      (i) => i.id === ing.inventoryItemId
-                                    );
-                                    const unitCost = Number(inv?.cost) || 0;
-                                    const subtotal = unitCost * (Number(ing.quantity) || 0);
-
-                                    return (
-                                      <tr key={ing.inventoryItemId} className="hover:bg-slate-50">
-                                        <td className="p-3 font-bold text-slate-800">
-                                          {inv?.name || "Insumo no encontrado"} ({inv?.unit || "pza"})
-                                        </td>
-                                        <td className="p-3 text-center font-black text-indigo-700">
-                                          {ing.quantity} {inv?.unit || "pza"}
-                                        </td>
-                                        <td className="p-3 text-right text-slate-600 font-bold">
-                                          ${unitCost.toFixed(2)}
-                                        </td>
-                                        <td className="p-3 text-right font-black text-slate-900">
-                                          ${subtotal.toFixed(2)}
-                                        </td>
-                                        <td className="p-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              handleRemoveIngredientFromRecipe(ing.inventoryItemId)
-                                            }
-                                            className="text-rose-600 hover:text-rose-800 font-bold text-xs p-1 rounded-md transition cursor-pointer"
-                                            title="Eliminar de la receta"
+                                  {/* List of current ingredients chips */}
+                                  {hasRecipeItems ? (
+                                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                                      {prod.recipe.map((ing: any) => {
+                                        const inv = inventory.find((i) => i.id === ing.inventoryItemId);
+                                        return (
+                                          <span
+                                            key={ing.inventoryItemId}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200 text-[11px] font-bold text-slate-800 shadow-2xs"
                                           >
-                                            ❌
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                                            <span>🥩</span>
+                                            <span>{inv?.name || "Insumo"}:</span>
+                                            <strong className="text-emerald-700 font-black">
+                                              {ing.quantity} {inv?.unit || "pza"}
+                                            </strong>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[11px] text-emerald-700 italic">
+                                      Asocia los insumos (tortillas, carne, queso, etc.) que se descontarán automáticamente al vender este platillo.
+                                    </p>
+                                  )}
+
+                                  {hasRecipeItems && (
+                                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-200/60 font-bold">
+                                      <span className="text-slate-600">Costo Teórico:</span>
+                                      <span className="font-black text-emerald-800">
+                                        ${recipeCost.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Button to open Modal and edit/add ingredients */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedRecipeProduct(prod);
+                                      setSelectedIngredientId("");
+                                      setSelectedIngredientQty("");
+                                      setIngredientSearchQuery("");
+                                      setShowAddIngredientModal(true);
+                                    }}
+                                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs py-2.5 rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer border-none active:scale-95"
+                                  >
+                                    <IonIcon icon={hasRecipeItems ? createOutline : addOutline} />
+                                    <span>
+                                      {hasRecipeItems
+                                        ? "Modificar / Agregar Insumos"
+                                        : "➕ Seleccionar / Agregar Insumos"}
+                                    </span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* WHEN PIEZA, BULTO O CAJA IS SELECTED */}
+                              {(currentType === "pieza" || currentType === "bulto" || currentType === "caja") && (
+                                <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-black text-blue-900 flex items-center gap-1.5">
+                                      <span>📦</span>
+                                      <span className="capitalize">Control por {currentType}</span>
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-blue-700">
+                                    Este producto descuenta 1 {currentType} directa del almacén por cada orden comandada.
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* WHEN SIN CONTROL */}
+                              {currentType === "none" && (
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center text-xs text-slate-400 font-semibold">
+                                  Sin seguimiento de inventario. El producto se vende libremente.
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-24 text-slate-400">
-                        <span className="text-4xl block mb-2">👈</span>
-                        <p className="font-bold text-xs">
-                          Selecciona un platillo de la lista izquierda para ver o editar su receta.
-                        </p>
-                      </div>
-                    )}
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -2250,80 +2379,300 @@ Devuelve un JSON estructurado con:
         </IonModal>
 
         {/* ========================================================= */}
-        {/* MODAL: AGREGAR INSUMO A RECETA */}
+        {/* MODAL: GESTIÓN DE RECETA / ESCANDALLO */}
         {/* ========================================================= */}
         <IonModal
-          isOpen={showAddIngredientModal}
-          onDidDismiss={() => setShowAddIngredientModal(false)}
-          initialBreakpoint={0.75}
-          breakpoints={[0, 0.75]}
+          isOpen={showAddIngredientModal && !!selectedRecipeProduct}
+          onDidDismiss={() => {
+            setShowAddIngredientModal(false);
+            setSelectedIngredientId("");
+            setSelectedIngredientQty("");
+            setIngredientSearchQuery("");
+            setIngredientCategoryFilter("TODOS");
+          }}
+          initialBreakpoint={0.9}
+          breakpoints={[0, 0.9, 1]}
         >
           <IonHeader className="ion-no-border">
             <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
-              <IonTitle>Agregar Ingrediente a la Receta 🍲</IonTitle>
+              <IonTitle>Receta y Escandallo 🍲</IonTitle>
               <IonButtons slot="end">
                 <IonButton onClick={() => setShowAddIngredientModal(false)}>Cerrar</IonButton>
               </IonButtons>
             </IonToolbar>
           </IonHeader>
           <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-            <div className="max-w-md mx-auto space-y-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Seleccionar Insumo del Catálogo
-                </label>
-                <input
-                  type="text"
-                  placeholder="🔍 Filtrar insumos..."
-                  value={ingredientSearchQuery}
-                  onChange={(e) => setIngredientSearchQuery(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none mb-2"
-                />
-                <select
-                  value={selectedIngredientId}
-                  onChange={(e) => setSelectedIngredientId(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
+            <div className="max-w-2xl mx-auto space-y-5 pb-8">
+              {/* Product Header Card */}
+              <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-4 sm:p-5 rounded-2xl text-white shadow-lg border border-slate-700/50">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-900/60 px-2.5 py-1 rounded-full border border-indigo-700/50">
+                      {selectedRecipeProduct?.category?.toUpperCase() || "PRODUCTO"}
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-black text-white mt-1.5 leading-tight">
+                      {selectedRecipeProduct?.name}
+                    </h2>
+                    {selectedRecipeProduct?.subcategory && (
+                      <p className="text-xs text-slate-300 font-semibold mt-0.5">
+                        📂 {selectedRecipeProduct.subcategory}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-bold">Precio de Venta</span>
+                    <span className="text-xl sm:text-2xl font-black text-emerald-400">
+                      ${(Number(selectedRecipeProduct?.price) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cost & Profit Analysis Bar */}
+                <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-3 gap-2 text-center bg-slate-900/80 p-3 rounded-xl">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-bold">Costo Insumos</div>
+                    <div className="text-sm sm:text-base font-black text-amber-400">
+                      ${calculateProductCost(selectedRecipeProduct).toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-bold">Margen Bruto</div>
+                    <div className="text-sm sm:text-base font-black text-emerald-400">
+                      ${Math.max(0, (Number(selectedRecipeProduct?.price) || 0) - calculateProductCost(selectedRecipeProduct)).toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-bold">% Ganancia</div>
+                    <div className="text-sm sm:text-base font-black text-cyan-400">
+                      {(Number(selectedRecipeProduct?.price) || 0) > 0
+                        ? (
+                            (Math.max(0, (Number(selectedRecipeProduct?.price) || 0) - calculateProductCost(selectedRecipeProduct)) /
+                              (Number(selectedRecipeProduct?.price) || 1)) *
+                            100
+                          ).toFixed(1)
+                        : "0"}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Ingredients in Recipe Table */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1.5">
+                    <span>📋 Insumos en la Receta</span>
+                    <span className="bg-indigo-100 text-indigo-700 text-[11px] font-black px-2 py-0.5 rounded-full">
+                      {selectedRecipeProduct?.recipe?.length || 0}
+                    </span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Se descontarán en cada venta
+                  </span>
+                </div>
+
+                {(!selectedRecipeProduct?.recipe || selectedRecipeProduct.recipe.length === 0) ? (
+                  <div className="p-6 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+                    <span className="text-3xl block mb-1">🥣</span>
+                    <p className="text-xs font-bold text-slate-600">
+                      Este platillo aún no tiene insumos asignados.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Agrega los ingredientes abajo (tortillas, carnes, salsas, etc.) para calcular costos y descontar inventario automáticamente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 text-[11px] font-bold">
+                          <th className="pb-2">Insumo</th>
+                          <th className="pb-2 text-center">Porción</th>
+                          <th className="pb-2 text-right">Costo Unit.</th>
+                          <th className="pb-2 text-right">Subtotal</th>
+                          <th className="pb-2 text-center">Quitar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedRecipeProduct.recipe.map((ing: any) => {
+                          const item = inventory.find((i) => i.id === ing.inventoryItemId);
+                          const unitCost = Number(item?.cost) || 0;
+                          const subtotal = unitCost * (Number(ing.quantity) || 0);
+                          return (
+                            <tr key={ing.inventoryItemId} className="hover:bg-slate-50 transition">
+                              <td className="py-2.5 font-bold text-slate-800">
+                                <div>{item?.name || "Insumo no encontrado"}</div>
+                                <div className="text-[10px] text-slate-400 font-medium">
+                                  {item?.category || "General"} • Stock: {item?.stock ?? 0} {item?.unit || ""}
+                                </div>
+                              </td>
+                              <td className="py-2.5 text-center font-black text-indigo-700">
+                                {ing.quantity} {item?.unit || "pza"}
+                              </td>
+                              <td className="py-2.5 text-right font-medium text-slate-600">
+                                ${unitCost.toFixed(2)}
+                              </td>
+                              <td className="py-2.5 text-right font-black text-slate-900">
+                                ${subtotal.toFixed(2)}
+                              </td>
+                              <td className="py-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveIngredientFromRecipe(ing.inventoryItemId)}
+                                  className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition cursor-pointer border-none"
+                                  title="Quitar de la receta"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Ingredient Section */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-indigo-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <span>➕ Agregar / Modificar Ingrediente</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleOpenNewInsumo}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition border border-indigo-200 cursor-pointer"
+                  >
+                    ✨ + Crear Nuevo Insumo
+                  </button>
+                </div>
+
+                {/* Category Filters for Insumos */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "TODOS",
+                    "Carnes",
+                    "Verduras",
+                    "Lácteos",
+                    "Abarrotes",
+                    "Bebidas",
+                    "Panadería",
+                    "Salsas",
+                    "Desechables",
+                    "Otros",
+                  ].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setIngredientCategoryFilter(cat)}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer border ${
+                        ingredientCategoryFilter === cat
+                          ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search and Insumo Selector */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar insumo (tortilla, bistec, queso, limón...)..."
+                      value={ingredientSearchQuery}
+                      onChange={(e) => setIngredientSearchQuery(e.target.value)}
+                      className="w-full p-2.5 pl-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 transition"
+                    />
+                  </div>
+
+                  <select
+                    value={selectedIngredientId}
+                    onChange={(e) => setSelectedIngredientId(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-indigo-500 transition"
+                  >
+                    <option value="">-- Selecciona el insumo a añadir o modificar --</option>
+                    {inventory
+                      .filter((i) => {
+                        const matchCat =
+                          ingredientCategoryFilter === "TODOS" ||
+                          (i.category || "").toLowerCase() === ingredientCategoryFilter.toLowerCase();
+                        const matchSearch =
+                          !ingredientSearchQuery.trim() ||
+                          (i.name || "").toLowerCase().includes(ingredientSearchQuery.toLowerCase());
+                        return matchCat && matchSearch;
+                      })
+                      .map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.name} ({i.unit}) — Costo: ${(Number(i.cost) || 0).toFixed(2)} | Stock: {i.stock ?? 0} {i.unit}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Portion Quantity and Live Cost Calculation */}
+                {selectedIngredientId && (
+                  <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100 space-y-3">
+                    {(() => {
+                      const selItem = inventory.find((i) => i.id === selectedIngredientId);
+                      const unit = selItem?.unit || "unidad";
+                      const cost = Number(selItem?.cost) || 0;
+                      const qty = parseFloat(selectedIngredientQty) || 0;
+                      const subtotal = cost * qty;
+
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-indigo-900">
+                              Insumo: <b>{selItem?.name}</b>
+                            </span>
+                            <span className="text-[11px] font-semibold text-slate-600">
+                              Costo unitario: <b>${cost.toFixed(2)} / {unit}</b>
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Cantidad por Porción ({unit}):
+                              </label>
+                              <input
+                                type="number"
+                                step="any"
+                                placeholder={`Ej: ${unit === "kg" ? "0.150 (para 150g)" : unit === "pza" ? "2" : "1"}`}
+                                value={selectedIngredientQty}
+                                onChange={(e) => setSelectedIngredientQty(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-black outline-none focus:border-indigo-600"
+                              />
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-xl border border-indigo-200 text-center">
+                              <span className="text-[10px] text-slate-500 font-bold block">
+                                Costo Agregado a la Receta
+                              </span>
+                              <span className="text-base font-black text-emerald-600">
+                                ${subtotal.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAddIngredientToRecipe}
+                  disabled={!selectedIngredientId || !selectedIngredientQty || parseFloat(selectedIngredientQty) <= 0}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-black text-xs sm:text-sm py-3 rounded-xl transition cursor-pointer border-none shadow-md shadow-indigo-500/20"
                 >
-                  <option value="">-- Selecciona Insumo --</option>
-                  {inventory
-                    .filter((i) => {
-                      if (!ingredientSearchQuery.trim()) return true;
-                      return (i.name || "")
-                        .toLowerCase()
-                        .includes(ingredientSearchQuery.toLowerCase());
-                    })
-                    .map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} ({i.unit}) - Costo: ${(Number(i.cost) || 0).toFixed(2)}
-                      </option>
-                    ))}
-                </select>
+                  ➕ Guardar Insumo en Receta
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Cantidad por Porción (
-                  {inventory.find((i) => i.id === selectedIngredientId)?.unit || "unidad"}
-                  )
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  placeholder="Ej: 0.150 para 150g, 1 para 1 pieza"
-                  value={selectedIngredientQty}
-                  onChange={(e) => setSelectedIngredientQty(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAddIngredientToRecipe}
-                disabled={!selectedIngredientId || !selectedIngredientQty}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs py-3 rounded-xl transition cursor-pointer border-none shadow-md shadow-indigo-500/20"
-              >
-                ➕ Vincular a la Receta
-              </button>
             </div>
           </IonContent>
         </IonModal>
