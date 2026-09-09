@@ -11,17 +11,19 @@
  */
 
 // Silenciar warnings en output para no corromper la respuesta JSON
-error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
 ini_set('display_errors', '0');
 
-header('Content-Type: application/json; charset=utf-8');
+// Encabezados CORS universales para permitir peticiones desde Firebase Web App (HTTPS) y Localhost
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept, X-Custom-Header');
+header('Access-Control-Max-Age: 86400');
+header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit;
+    exit(0);
 }
 
 // 1. Conexión resiliente a la Base de Datos MySQL
