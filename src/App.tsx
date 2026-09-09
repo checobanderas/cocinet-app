@@ -9920,30 +9920,43 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
 
     setInvoicePhoneError("");
-    if (pendingInvoiceTarget?.type === "activeTable") {
+    const targetAcc = pendingInvoiceTarget?.account;
+    const targetType = pendingInvoiceTarget?.type;
+
+    // 1. Optimistic Update (0ms latency for immediate UI reaction)
+    if (targetType === "activeTable") {
       setRequiresInvoice(true);
       setInvoicePhone(cleanP1);
-    } else if (pendingInvoiceTarget?.type === "closedAccount" && pendingInvoiceTarget.account) {
-      try {
-        await updateInvoiceRequirementInFirebase(pendingInvoiceTarget.account.id, true, cleanP1);
-        setHistory((prev) =>
-          prev.map((acc) =>
-            acc.id === pendingInvoiceTarget.account.id
-              ? { ...acc, requiresInvoice: true, invoicePhone: cleanP1 }
-              : acc
-          )
-        );
-        triggerAppNotification(
-          "🧾 FACTURACIÓN ACTUALIZADA",
-          `Cuenta ${pendingInvoiceTarget.account.tableLabel} marcada como: Requiere Factura (Cel: ${cleanP1})`
-        );
-      } catch (err) {
-        console.error("Error updating invoice requirement:", err);
-      }
+      triggerAppNotification(
+        "🧾 FACTURACIÓN CONFIGURADA",
+        `Venta activa marcada como: Requiere Factura (Cel: ${cleanP1})`,
+        "success"
+      );
+    } else if (targetType === "closedAccount" && targetAcc) {
+      setHistory((prev) =>
+        prev.map((acc) =>
+          acc.id === targetAcc.id
+            ? { ...acc, requiresInvoice: true, invoicePhone: cleanP1 }
+            : acc
+        )
+      );
+      triggerAppNotification(
+        "🧾 FACTURACIÓN ACTUALIZADA",
+        `Cuenta ${targetAcc.tableLabel || "Mesa"} marcada como: Requiere Factura (Cel: ${cleanP1})`,
+        "success"
+      );
+
+      // Persist in background
+      updateInvoiceRequirementInFirebase(targetAcc.id, true, cleanP1).catch((err) => {
+        console.error("Error updating invoice requirement in Firebase:", err);
+      });
     }
 
-    // Enviar mensaje de WhatsApp automático con el formulario de datos fiscales
-    const targetAcc = pendingInvoiceTarget?.account;
+    // Close modal immediately
+    setShowInvoicePhoneModal(false);
+    setPendingInvoiceTarget(null);
+
+    // 2. Send WhatsApp in background
     const folioVal = targetAcc?.folio || targetAcc?.folioInterno || selectedTable?.folio;
     const totalVal = targetAcc?.total || selectedTable?.total;
     const clientName = targetAcc?.customerName || targetAcc?.clientName || targetAcc?.deliveryClientName || selectedDeliveryClient?.name;
@@ -9962,9 +9975,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }).catch((err) => {
       console.warn("Error enviando WhatsApp de formulario fiscal:", err);
     });
-
-    setShowInvoicePhoneModal(false);
-    setPendingInvoiceTarget(null);
   };
 
   const buildWhatsAppInvoiceMessage = (account: any) => {

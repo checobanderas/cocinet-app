@@ -84,6 +84,81 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   invoicingApiUrl
 }) => {
   const [showSummaryPanel, setShowSummaryPanel] = React.useState(false);
+  const [savingInvoiceAccountId, setSavingInvoiceAccountId] = React.useState<string | null>(null);
+
+  const handleSaveInvoicePhoneInline = async (account: any) => {
+    const cleanPhone = (editingInvoicePhoneValue || "").replace(/\D/g, "").slice(0, 10);
+    if (cleanPhone.length !== 10) {
+      triggerAppNotification(
+        "⚠️ Número Inválido",
+        "El número celular debe contener exactamente 10 dígitos.",
+        "warning"
+      );
+      return;
+    }
+
+    setSavingInvoiceAccountId(account.id);
+
+    // 1. Optimistic Update (0ms latency for user)
+    setHistory((prev: any[]) =>
+      prev.map((acc: any) =>
+        acc.id === account.id
+          ? { ...acc, requiresInvoice: true, invoicePhone: cleanPhone }
+          : acc
+      )
+    );
+
+    // 2. Clear editing mode
+    setEditingInvoiceAccountId(null);
+    setEditingInvoicePhoneValue("");
+
+    // 3. Instant Notification
+    triggerAppNotification(
+      "🧾 Facturación Actualizada",
+      `Cuenta ${account.tableLabel || "Mesa"} marcada como: Requiere Factura (Cel: ${cleanPhone})`,
+      "success"
+    );
+
+    // 4. Background persistence & WhatsApp
+    try {
+      await updateInvoiceRequirementInFirebase(account.id, true, cleanPhone);
+      sendInvoiceDataRequestWhatsApp({
+        phone: cleanPhone,
+        clientName: account.deliveryClientName || account.customerName || account.clientName,
+        branchName: selectedTenant?.name || "Cocinet",
+        folio: account.folio || account.folioInterno,
+        total: account.total ? Number(account.total) : undefined,
+        tenantId: selectedTenant?.id,
+      }).catch((e) => console.warn("Error enviando WhatsApp de formulario fiscal:", e));
+    } catch (err) {
+      console.error("Error guardando requerimiento de factura:", err);
+    } finally {
+      setSavingInvoiceAccountId(null);
+    }
+  };
+
+  const handleRemoveInvoiceRequirement = async (account: any) => {
+    // Optimistic Update
+    setHistory((prev: any[]) =>
+      prev.map((acc: any) =>
+        acc.id === account.id
+          ? { ...acc, requiresInvoice: false, invoicePhone: "" }
+          : acc
+      )
+    );
+
+    triggerAppNotification(
+      "🧾 Facturación Actualizada",
+      `Cuenta ${account.tableLabel || "Mesa"} marcada como: No requiere Factura`,
+      "info"
+    );
+
+    try {
+      await updateInvoiceRequirementInFirebase(account.id, false, "");
+    } catch (err) {
+      console.error("Error al quitar factura:", err);
+    }
+  };
 
 return (
       <>
@@ -995,109 +1070,76 @@ return (
                                         </IonButton>
                                       )}
                                     {account.status !== "cancelled" && (
-                                       editingInvoiceAccountId === account.id ? (
-                                         <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-xl border-2 border-amber-300 shadow-sm" onClick={(e) => e.stopPropagation()}>
-                                           <span className="text-xs font-black text-amber-950">📱 Celular:</span>
-                                           <input
-                                             type="tel"
-                                             inputMode="numeric"
-                                             maxLength={10}
-                                             placeholder="Ej. 6621234567"
-                                             value={editingInvoicePhoneValue}
-                                             onChange={(e) => setEditingInvoicePhoneValue(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                                             className="bg-white border-2 border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono font-black text-slate-900 w-36 outline-none focus:border-amber-600"
-                                             autoFocus
-                                           />
-                                           <button
-                                             type="button"
-                                             onClick={async (e) => {
-                                               e.stopPropagation();
-                                               if (editingInvoicePhoneValue.length !== 10) {
-                                                 alert("El número celular debe tener exactamente 10 dígitos.");
-                                                 return;
-                                               }
-                                               try {
-                                                 await updateInvoiceRequirementInFirebase(account.id, true, editingInvoicePhoneValue);
-                                                 setHistory((prev) =>
-                                                   prev.map((acc) =>
-                                                     acc.id === account.id
-                                                       ? { ...acc, requiresInvoice: true, invoicePhone: editingInvoicePhoneValue }
-                                                       : acc
-                                                   )
-                                                 );
-                                                 triggerAppNotification(
-                                                   "🧾 FACTURACIÓN ACTUALIZADA",
-                                                   `Cuenta ${account.tableLabel} marcada como: Requiere Factura (Cel: ${editingInvoicePhoneValue})`
-                                                 );
-
-                                                 // Enviar WhatsApp silencioso con enlace al formulario de datos fiscales
-                                                 sendInvoiceDataRequestWhatsApp({
-                                                   phone: editingInvoicePhoneValue,
-                                                   clientName: account.deliveryClientName || account.customerName || account.clientName,
-                                                   branchName: "Cocinet",
-                                                   folio: account.folio || account.folioInterno,
-                                                   total: account.total ? Number(account.total) : undefined,
-                                                 }).catch(e => console.warn("Error enviando WhatsApp de formulario fiscal:", e));
-
-                                                 setEditingInvoiceAccountId(null);
-                                                 setEditingInvoicePhoneValue("");
-                                               } catch (err) {
-                                                 console.error(err);
-                                               }
-                                             }}
-                                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer transition active:scale-95 flex items-center gap-1"
-                                           >
-                                             <span>Guardar</span> ✓
-                                           </button>
-                                           <button
-                                             type="button"
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               setEditingInvoiceAccountId(null);
-                                               setEditingInvoicePhoneValue("");
-                                             }}
-                                             className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer transition"
-                                           >
-                                             ✕
-                                           </button>
-                                         </div>
-                                       ) : (
-                                         <button
-                                           type="button"
-                                           onClick={async (e) => {
-                                             e.stopPropagation();
-                                             if (account.requiresInvoice) {
-                                               try {
-                                                 await updateInvoiceRequirementInFirebase(account.id, false, "");
-                                                 setHistory((prev) =>
-                                                   prev.map((acc) =>
-                                                     acc.id === account.id
-                                                       ? { ...acc, requiresInvoice: false, invoicePhone: "" }
-                                                       : acc
-                                                   )
-                                                 );
-                                                 triggerAppNotification(
-                                                   "🧾 FACTURACIÓN ACTUALIZADA",
-                                                   `Cuenta ${account.tableLabel} marcada como: No requiere Factura`
-                                                 );
-                                               } catch (err) {
-                                                 console.error("Error updating invoice requirement:", err);
-                                               }
-                                             } else {
-                                               setEditingInvoiceAccountId(account.id);
-                                               setEditingInvoicePhoneValue(account.invoicePhone || "");
-                                             }
-                                           }}
-                                           className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 ${
-                                             account.requiresInvoice
-                                               ? "bg-amber-500 hover:bg-amber-600 text-slate-900 border-amber-600"
-                                               : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
-                                           }`}
-                                         >
-                                           🧾 {account.requiresInvoice ? "Quitar Factura" : "Requiere Factura"}
-                                         </button>
-                                       )
-                                     )}
+                                        editingInvoiceAccountId === account.id ? (
+                                          <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-xl border-2 border-amber-300 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-xs font-black text-amber-950">📱 Celular:</span>
+                                            <input
+                                              type="tel"
+                                              inputMode="numeric"
+                                              maxLength={10}
+                                              placeholder="Ej. 6621234567"
+                                              value={editingInvoicePhoneValue}
+                                              onChange={(e) => setEditingInvoicePhoneValue(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  handleSaveInvoicePhoneInline(account);
+                                                }
+                                              }}
+                                              className="bg-white border-2 border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono font-black text-slate-900 w-36 outline-none focus:border-amber-600"
+                                              autoFocus
+                                            />
+                                            <button
+                                              type="button"
+                                              disabled={savingInvoiceAccountId === account.id}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSaveInvoicePhoneInline(account);
+                                              }}
+                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-75 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer transition active:scale-95 flex items-center gap-1.5"
+                                            >
+                                              {savingInvoiceAccountId === account.id ? (
+                                                <span>Guardando...</span>
+                                              ) : (
+                                                <>
+                                                  <span>Guardar</span> ✓
+                                                </>
+                                              )}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingInvoiceAccountId(null);
+                                                setEditingInvoicePhoneValue("");
+                                              }}
+                                              className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer transition"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (account.requiresInvoice) {
+                                                handleRemoveInvoiceRequirement(account);
+                                              } else {
+                                                setEditingInvoiceAccountId(account.id);
+                                                setEditingInvoicePhoneValue(account.invoicePhone || "");
+                                              }
+                                            }}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                                              account.requiresInvoice
+                                                ? "bg-amber-500 hover:bg-amber-600 text-slate-900 border-amber-600"
+                                                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                                            }`}
+                                          >
+                                            🧾 {account.requiresInvoice ? "Quitar Factura" : "Requiere Factura"}
+                                          </button>
+                                        )
+                                      )}
 
                                       {account.status !== "cancelled" && (() => {
                                         const isStamped = Boolean(account.invoiceUuid || account.isStamped || account.invoiceStatus === "timbrada");
