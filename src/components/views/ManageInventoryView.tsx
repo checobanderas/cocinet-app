@@ -1385,7 +1385,7 @@ Devuelve un JSON estructurado con:
   return (
     <IonPage>
       {renderMaterialHeader({
-        title: "Control de Inventarios y Almacén 📦",
+        title: "Control de Inventario y Almacén 📦",
         subtitle: `Sucursal: ${selectedTenant?.name || "Matriz"} · ${inventory.length} insumos · ${productsWithRecipes} recetas`,
         showBack: true,
         onBack: () => {

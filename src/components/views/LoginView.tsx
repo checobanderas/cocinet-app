@@ -1014,7 +1014,7 @@ return (
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                         >
                           <option value="mesero">Mesero (Atención general)</option>
-                          <option value="cajero">Cajero (Cobro e Inventarios)</option>
+                          <option value="cajero">Cajero (Cobro e Inventario)</option>
                         </select>
                       </div>
                       
