@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   IonPage,
@@ -32,6 +32,16 @@ import {
   refreshOutline,
   closeCircleOutline,
   closeOutline,
+  printOutline,
+  walletOutline,
+  cardOutline,
+  receiptOutline,
+  timeOutline,
+  checkmarkOutline,
+  storefrontOutline,
+  personOutline,
+  calculatorOutline,
+  alertCircleOutline,
 } from "ionicons/icons";
 import * as XLSX from "xlsx";
 import {
@@ -43,8 +53,15 @@ import {
   addSupplierToFirebase,
   updateSupplierInFirebase,
   deleteSupplierFromFirebase,
+  addPurchaseToFirebase,
+  deletePurchaseFromFirebase,
+  updatePurchaseStatusInFirebase,
+  subscribeToSupplierPayments,
+  addSupplierPaymentToFirebase,
+  addCashMovementToFirebase,
   getMexicoISOString,
 } from "../../utils/firestore";
+import { executePrintPurchaseReception, printPurchaseReceiptHtml } from "../../services/purchasePrintService";
 import { SupplierModal } from "../modals/SupplierModal";
 import { SupplierPurchaseModal } from "../modals/SupplierPurchaseModal";
 
@@ -130,7 +147,7 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const [showBulkPanel, setShowBulkPanel] = useState<boolean>(true);
 
   // --- Sub-states for Compras / Proveedores Tab ---
-  const [purchasesTabSubView, setPurchasesTabSubView] = useState<"suppliers" | "purchases">("suppliers");
+  const [purchasesTabSubView, setPurchasesTabSubView] = useState<"quick_purchase" | "cartera" | "suppliers" | "purchases">("quick_purchase");
   const [supplierModal, setSupplierModal] = useState<{ isOpen: boolean; supplier: any | null }>({
     isOpen: false,
     supplier: null,
@@ -139,6 +156,27 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const [selectedScheduleSupplier, setSelectedScheduleSupplier] = useState<any | null>(null);
   const [supplierPurchaseItems, setSupplierPurchaseItems] = useState<any[]>([]);
   const [supplierPurchaseIsPaid, setSupplierPurchaseIsPaid] = useState(true);
+
+  // Agile Purchase in Single Window States 🚛
+  const [selectedPurchaseSupplierId, setSelectedPurchaseSupplierId] = useState<string>("");
+  const [purchaseCart, setPurchaseCart] = useState<Array<{
+    inventoryItemId: string;
+    name: string;
+    unit: string;
+    qty: number;
+    unitCost: number;
+    price: number;
+  }>>([]);
+  const [purchaseInvoiceNumber, setPurchaseInvoiceNumber] = useState<string>("");
+  const [purchasePaymentMethod, setPurchasePaymentMethod] = useState<"efectivo" | "credito" | "transferencia">("efectivo");
+  const [purchaseNotes, setPurchaseNotes] = useState<string>("");
+  const [quickProductSearch, setQuickProductSearch] = useState<string>("");
+  const [isSubmittingPurchase, setIsSubmittingPurchase] = useState<boolean>(false);
+  const [supplierPayments, setSupplierPayments] = useState<any[]>([]);
+  const [selectedSupplierForPayment, setSelectedSupplierForPayment] = useState<any | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>("");
+  const [paymentMethodType, setPaymentMethodType] = useState<"efectivo" | "transferencia">("efectivo");
+  const [paymentNotes, setPaymentNotes] = useState<string>("");
 
   // --- Sub-states for Physical Audit Tab ---
   const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>({});
@@ -164,6 +202,444 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   const productsWithRecipes = products.filter(
     (p) => p.recipe && Array.isArray(p.recipe) && p.recipe.length > 0 && !p.isDeleted
   ).length;
+
+  // --- Subscriptions & Auto-selection for Compras & Proveedores ---
+  useEffect(() => {
+    if (!selectedTenant?.id) return;
+    const unsub = subscribeToSupplierPayments(selectedTenant.id, (data) => {
+      setSupplierPayments(data);
+    });
+    return () => unsub();
+  }, [selectedTenant?.id]);
+
+  useEffect(() => {
+    if (!selectedPurchaseSupplierId && suppliers && suppliers.length > 0) {
+      setSelectedPurchaseSupplierId(suppliers[0].id);
+    }
+  }, [suppliers, selectedPurchaseSupplierId]);
+
+  const activePurchaseSupplier = useMemo(() => {
+    if (!suppliers || suppliers.length === 0) return null;
+    return suppliers.find((s) => s.id === selectedPurchaseSupplierId) || suppliers[0] || null;
+  }, [suppliers, selectedPurchaseSupplierId]);
+
+  // Historial inteligente de productos e insumos asociados al proveedor activo
+  const supplierHistoryProducts = useMemo(() => {
+    if (!activePurchaseSupplier) return [];
+    const map = new Map<
+      string,
+      {
+        invItem: any;
+        lastCost: number;
+        timesPurchased: number;
+        lastDate: string;
+        isFromHistory: boolean;
+      }
+    >();
+
+    const supNameNorm = activePurchaseSupplier.name?.toLowerCase().trim() || "";
+    const supId = activePurchaseSupplier.id;
+
+    // 1. Escanear compras históricas de este proveedor
+    purchases.forEach((p) => {
+      const isMatch =
+        (p.supplier && p.supplier.toLowerCase().trim() === supNameNorm) ||
+        (p.supplierId && p.supplierId === supId);
+
+      if (isMatch && Array.isArray(p.items)) {
+        p.items.forEach((item: any) => {
+          const invId = item.inventoryItemId;
+          const inv = inventory.find((i) => i.id === invId) || {
+            id: invId || `hist_${item.name}`,
+            name: item.name,
+            unit: item.unit || "pza",
+            cost: item.unitCost || (item.qty > 0 ? item.price / item.qty : 0),
+            stock: 0,
+            category: "General",
+          };
+
+          const uCost =
+            item.unitCost !== undefined
+              ? Number(item.unitCost)
+              : item.qty > 0
+              ? Number((item.price / item.qty).toFixed(2))
+              : Number(inv.cost) || 0;
+
+          const existing = map.get(inv.id);
+          if (!existing) {
+            map.set(inv.id, {
+              invItem: inv,
+              lastCost: uCost,
+              timesPurchased: 1,
+              lastDate: p.timestamp || p.date || "",
+              isFromHistory: true,
+            });
+          } else {
+            existing.timesPurchased += 1;
+            if (
+              p.timestamp &&
+              (!existing.lastDate || new Date(p.timestamp) > new Date(existing.lastDate))
+            ) {
+              existing.lastCost = uCost;
+              existing.lastDate = p.timestamp;
+            }
+          }
+        });
+      }
+    });
+
+    // 2. Incluir insumos del catálogo que coincidan con la categoría del proveedor
+    const supCat = activePurchaseSupplier.category?.toLowerCase() || "";
+    if (supCat) {
+      inventory.forEach((inv) => {
+        const invCat = inv.category?.toLowerCase() || "";
+        if (
+          invCat &&
+          (invCat.includes(supCat) || supCat.includes(invCat)) &&
+          !map.has(inv.id)
+        ) {
+          map.set(inv.id, {
+            invItem: inv,
+            lastCost: Number(inv.cost) || 0,
+            timesPurchased: 0,
+            lastDate: "",
+            isFromHistory: false,
+          });
+        }
+      });
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        b.timesPurchased - a.timesPurchased ||
+        a.invItem.name.localeCompare(b.invItem.name)
+    );
+  }, [activePurchaseSupplier, purchases, inventory]);
+
+  // Cartera de Cuentas por Pagar a Proveedores (Saldos deudores)
+  const supplierBalances = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        supplier: any;
+        totalPurchasesCount: number;
+        totalAmount: number;
+        totalPaid: number;
+        totalCredit: number;
+        totalAbonos: number;
+        pendingBalance: number;
+        unpaidPurchases: any[];
+      }
+    >();
+
+    suppliers.forEach((s) => {
+      map.set(s.id, {
+        supplier: s,
+        totalPurchasesCount: 0,
+        totalAmount: 0,
+        totalPaid: 0,
+        totalCredit: 0,
+        totalAbonos: 0,
+        pendingBalance: 0,
+        unpaidPurchases: [],
+      });
+    });
+
+    purchases.forEach((p) => {
+      const sId =
+        p.supplierId ||
+        suppliers.find(
+          (s) => s.name?.toLowerCase().trim() === p.supplier?.toLowerCase().trim()
+        )?.id;
+
+      if (sId && map.has(sId)) {
+        const entry = map.get(sId)!;
+        entry.totalPurchasesCount++;
+        const amt = Number(p.total) || 0;
+        entry.totalAmount += amt;
+        if (p.isPaid) {
+          entry.totalPaid += amt;
+        } else {
+          entry.totalCredit += amt;
+          entry.pendingBalance += amt;
+          entry.unpaidPurchases.push(p);
+        }
+      }
+    });
+
+    supplierPayments.forEach((pay) => {
+      const sId =
+        pay.supplierId ||
+        suppliers.find(
+          (s) => s.name?.toLowerCase().trim() === pay.supplierName?.toLowerCase().trim()
+        )?.id;
+
+      if (sId && map.has(sId)) {
+        const entry = map.get(sId)!;
+        const abonoAmt = Number(pay.amount) || 0;
+        entry.totalAbonos += abonoAmt;
+        entry.pendingBalance = Math.max(0, entry.pendingBalance - abonoAmt);
+      }
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => b.pendingBalance - a.pendingBalance || a.supplier.name.localeCompare(b.supplier.name)
+    );
+  }, [suppliers, purchases, supplierPayments]);
+
+  const activeSupplierPendingBalance = useMemo(() => {
+    if (!activePurchaseSupplier) return 0;
+    const item = supplierBalances.find((b) => b.supplier.id === activePurchaseSupplier.id);
+    return item ? item.pendingBalance : 0;
+  }, [activePurchaseSupplier, supplierBalances]);
+
+  // Cart total calculations
+  const purchaseCartTotal = useMemo(() => {
+    return purchaseCart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+  }, [purchaseCart]);
+
+  // Handlers para Carrito de Compra Ágil
+  const handleQuickAddInsumoToPurchase = (
+    invItem: any,
+    qty: number = 1,
+    cost?: number
+  ) => {
+    const unitCost = cost !== undefined ? Number(cost) : Number(invItem.cost) || 0;
+    const existingIndex = purchaseCart.findIndex((x) => x.inventoryItemId === invItem.id);
+
+    if (existingIndex >= 0) {
+      const updated = [...purchaseCart];
+      const newQty = updated[existingIndex].qty + qty;
+      updated[existingIndex].qty = newQty;
+      updated[existingIndex].price = Number((newQty * updated[existingIndex].unitCost).toFixed(2));
+      setPurchaseCart(updated);
+    } else {
+      setPurchaseCart([
+        ...purchaseCart,
+        {
+          inventoryItemId: invItem.id,
+          name: invItem.name,
+          unit: invItem.unit || "pza",
+          qty,
+          unitCost,
+          price: Number((qty * unitCost).toFixed(2)),
+        },
+      ]);
+    }
+  };
+
+  const handleUpdateCartItemQty = (invId: string, newQty: number) => {
+    if (newQty <= 0) {
+      handleRemoveCartItem(invId);
+      return;
+    }
+    setPurchaseCart((prev) =>
+      prev.map((item) => {
+        if (item.inventoryItemId === invId) {
+          return {
+            ...item,
+            qty: newQty,
+            price: Number((newQty * item.unitCost).toFixed(2)),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleUpdateCartItemCost = (invId: string, newCost: number) => {
+    setPurchaseCart((prev) =>
+      prev.map((item) => {
+        if (item.inventoryItemId === invId) {
+          return {
+            ...item,
+            unitCost: newCost,
+            price: Number((item.qty * newCost).toFixed(2)),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleRemoveCartItem = (invId: string) => {
+    setPurchaseCart((prev) => prev.filter((item) => item.inventoryItemId !== invId));
+  };
+
+  const handleConfirmPurchaseAndPrint = async () => {
+    if (!activePurchaseSupplier) {
+      alert("Por favor selecciona un proveedor.");
+      return;
+    }
+    if (purchaseCart.length === 0) {
+      alert("Agrega al menos un producto o insumo al surtido.");
+      return;
+    }
+
+    setIsSubmittingPurchase(true);
+    const totalAmt = purchaseCartTotal;
+    const isPaidCash = purchasePaymentMethod === "efectivo";
+    const isPaid = purchasePaymentMethod !== "credito";
+    const now = getMexicoISOString();
+    const folio = `REC-${Date.now().toString().slice(-6)}`;
+
+    const activeSession = cashierSessions.find((s) => s.status === "open");
+
+    try {
+      // 1. Guardar la compra en Firestore con actualización automática de stock y costo
+      const purchaseData: any = {
+        folio,
+        supplier: activePurchaseSupplier.name,
+        supplierId: activePurchaseSupplier.id,
+        supplierCategory: activePurchaseSupplier.category || "General",
+        invoiceNumber: purchaseInvoiceNumber.trim() || null,
+        items: purchaseCart.map((i) => ({
+          inventoryItemId: i.inventoryItemId,
+          name: i.name,
+          unit: i.unit,
+          qty: i.qty,
+          unitCost: i.unitCost,
+          price: i.price,
+        })),
+        total: totalAmt,
+        isPaid,
+        paymentMethod: purchasePaymentMethod,
+        notes: purchaseNotes.trim() || null,
+        receivedBy: currentUser?.name || "Admin",
+        createdBy: currentUser?.name || "Admin",
+        userId: currentUser?.id || null,
+        sessionId: activeSession?.id || null,
+        timestamp: now,
+      };
+
+      const purchaseId = await addPurchaseToFirebase(purchaseData);
+
+      // 2. Si se pagó de contado en caja, registrar la salida de efectivo automática
+      if (isPaidCash) {
+        await addCashMovementToFirebase({
+          type: "out",
+          concept: "pago_proveedor",
+          amount: totalAmt,
+          description: `Pago de Surtido a Proveedor: ${activePurchaseSupplier.name}${purchaseInvoiceNumber ? ` (Remisión: ${purchaseInvoiceNumber})` : ""}`,
+          user: currentUser?.name || "Admin",
+          userId: currentUser?.id || null,
+          date: now,
+          sessionId: activeSession?.id || null,
+        });
+      }
+
+      // 3. Generar e Imprimir Comprobante de Entrega-Recepción
+      const newPendingBalance = isPaid
+        ? activeSupplierPendingBalance
+        : activeSupplierPendingBalance + totalAmt;
+
+      await executePrintPurchaseReception({
+        purchase: {
+          ...purchaseData,
+          id: purchaseId,
+          supplierBalance: newPendingBalance,
+        },
+        supplier: activePurchaseSupplier,
+        selectedTenant,
+        currentUser,
+        triggerAppNotification,
+      });
+
+      triggerAppNotification(
+        "🚛 Recepción Guardada e Impresa",
+        `Se registró la compra a ${activePurchaseSupplier.name} por $${totalAmt.toFixed(2)}. Condición: ${isPaidCash ? "💵 PAGADO DE CAJA" : purchasePaymentMethod === "transferencia" ? "💳 TRANSFERENCIA" : "📄 A CRÉDITO (EN CARTERA)"}.`,
+        "success"
+      );
+
+      // Limpiar formulario para la siguiente compra
+      setPurchaseCart([]);
+      setPurchaseInvoiceNumber("");
+      setPurchaseNotes("");
+      setQuickProductSearch("");
+      setPurchasePaymentMethod("efectivo");
+    } catch (err) {
+      console.error("Error al registrar compra ágil:", err);
+      alert("Ocurrió un error al guardar la recepción.");
+    } finally {
+      setIsSubmittingPurchase(false);
+    }
+  };
+
+  const handleRegisterSupplierPayment = async () => {
+    if (!selectedSupplierForPayment) return;
+    const amt = parseFloat(paymentAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert("Ingresa un monto de abono válido mayor a 0.");
+      return;
+    }
+
+    const activeSession = cashierSessions.find((s) => s.status === "open");
+
+    try {
+      await addSupplierPaymentToFirebase({
+        supplierId: selectedSupplierForPayment.supplier.id,
+        supplierName: selectedSupplierForPayment.supplier.name,
+        amount: amt,
+        paymentMethod: paymentMethodType,
+        isPaidFromCash: paymentMethodType === "efectivo",
+        notes: paymentNotes.trim() || null,
+        userName: currentUser?.name || "Admin",
+        userId: currentUser?.id || null,
+        sessionId: activeSession?.id || null,
+      });
+
+      triggerAppNotification(
+        "💳 Abono Registrado",
+        `Se registró un abono de $${amt.toFixed(2)} a ${selectedSupplierForPayment.supplier.name}.`,
+        "success"
+      );
+
+      setSelectedSupplierForPayment(null);
+      setPaymentAmount("");
+      setPaymentNotes("");
+    } catch (err) {
+      console.error("Error al registrar abono a proveedor:", err);
+      alert("Error al registrar abono.");
+    }
+  };
+
+  const handlePrintExistingPurchase = async (p: any) => {
+    const matchedSup = suppliers.find(
+      (s) => s.id === p.supplierId || s.name?.toLowerCase().trim() === p.supplier?.toLowerCase().trim()
+    );
+    const balance = supplierBalances.find((b) => b.supplier.id === matchedSup?.id)?.pendingBalance || 0;
+
+    await executePrintPurchaseReception({
+      purchase: {
+        id: p.id,
+        folio: p.folio || `REC-${p.id.slice(-6).toUpperCase()}`,
+        supplier: p.supplier || "Proveedor General",
+        supplierId: p.supplierId,
+        invoiceNumber: p.invoiceNumber,
+        items: Array.isArray(p.items)
+          ? p.items.map((i: any) => ({
+              name: i.name || inventory.find((inv) => inv.id === i.inventoryItemId)?.name || "Insumo",
+              unit: i.unit || inventory.find((inv) => inv.id === i.inventoryItemId)?.unit || "pza",
+              qty: Number(i.qty) || 1,
+              unitCost: i.unitCost || (i.qty > 0 ? Number(i.price) / Number(i.qty) : Number(i.price)),
+              price: Number(i.price) || 0,
+            }))
+          : [],
+        total: Number(p.total) || 0,
+        isPaid: p.isPaid,
+        paymentMethod: p.paymentMethod || (p.isPaid ? "efectivo" : "credito"),
+        notes: p.notes,
+        timestamp: p.timestamp || p.date,
+        receivedBy: p.receivedBy || p.createdBy || "Almacén",
+        createdBy: p.createdBy,
+        supplierBalance: balance,
+      },
+      supplier: matchedSup,
+      selectedTenant,
+      currentUser,
+      triggerAppNotification,
+    });
+  };
 
   // Handler for Insumo Modal Open
   const handleOpenNewInsumo = () => {
@@ -2011,192 +2487,916 @@ Devuelve un JSON estructurado con:
           )}
 
               {/* ========================================================= */}
+              {/* ========================================================= */}
               {/* TAB 3: COMPRAS Y PROVEEDORES */}
               {/* ========================================================= */}
               {activeTab === "purchases_suppliers" && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                      <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                        <span>🤝</span> Compras y Directorio de Proveedores
-                      </h2>
-                      <p className="text-xs text-slate-500">
-                        Gestiona tus proveedores y registra recepciones de insumos con entradas automáticas al stock.
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2">
+                <div className="space-y-4">
+                  {/* Sub-view Switcher Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-2xl p-2.5 border border-slate-200 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (suppliers.length === 0) {
-                            alert("Registra primero un proveedor para recibir compras.");
-                            return;
-                          }
-                          setSelectedScheduleSupplier(suppliers[0]);
-                          setSupplierPurchaseItems([]);
-                          setSupplierPurchaseIsPaid(true);
-                          setShowSupplierPurchaseModal(true);
-                        }}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer border-none"
+                        onClick={() => setPurchasesTabSubView("quick_purchase")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          purchasesTabSubView === "quick_purchase"
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
                       >
-                        <IonIcon icon={cartOutline} />
-                        <span>Registrar Nueva Compra</span>
+                        <span>🚛</span>
+                        <span>1. Registrar Compra Ágil (Una Sola Ventana)</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => setSupplierModal({ isOpen: true, supplier: null })}
-                        className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer border-none"
+                        onClick={() => setPurchasesTabSubView("cartera")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          purchasesTabSubView === "cartera"
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
                       >
-                        <IonIcon icon={addOutline} />
-                        <span>Nuevo Proveedor</span>
+                        <span>💳</span>
+                        <span>
+                          2. Cartera / Cuentas por Pagar (
+                          {supplierBalances.filter((b) => b.pendingBalance > 0).length} con saldo)
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPurchasesTabSubView("suppliers")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          purchasesTabSubView === "suppliers"
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        <span>🤝</span>
+                        <span>3. Directorio de Proveedores ({suppliers.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPurchasesTabSubView("purchases")}
+                        className={`px-4 py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer border ${
+                          purchasesTabSubView === "purchases"
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        <span>🛒</span>
+                        <span>4. Historial de Compras ({purchases.length})</span>
                       </button>
                     </div>
-                  </div>
 
-                  {/* Sub-view switcher */}
-                  <div className="flex gap-2 border-b border-slate-200 pb-2">
                     <button
                       type="button"
-                      onClick={() => setPurchasesTabSubView("suppliers")}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                        purchasesTabSubView === "suppliers"
-                          ? "bg-slate-800 text-white shadow-sm"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
+                      onClick={() => setSupplierModal({ isOpen: true, supplier: null })}
+                      className="bg-slate-800 hover:bg-slate-900 text-white font-black text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-sm border-none cursor-pointer"
                     >
-                      🤝 Proveedores ({suppliers.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPurchasesTabSubView("purchases")}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                        purchasesTabSubView === "purchases"
-                          ? "bg-slate-800 text-white shadow-sm"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      🛒 Historial de Compras ({purchases.length})
+                      <IonIcon icon={addOutline} />
+                      <span>Nuevo Proveedor</span>
                     </button>
                   </div>
 
-                  {purchasesTabSubView === "suppliers" ? (
-                    /* Suppliers List */
-                    <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
-                            <th className="p-3">Proveedor</th>
-                            <th className="p-3">Categoría</th>
-                            <th className="p-3">Teléfono</th>
-                            <th className="p-3">Email</th>
-                            <th className="p-3">Frecuencia</th>
-                            <th className="p-3 text-center">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {suppliers.map((s) => (
-                            <tr key={s.id} className="hover:bg-slate-50">
-                              <td className="p-3 font-black text-slate-800">
-                                {s.name}
-                              </td>
-                              <td className="p-3">
-                                <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-[11px] font-bold">
-                                  {s.category || "General"}
+                  {/* ========================================================= */}
+                  {/* SUB-VIEW 1: REGISTRAR COMPRA ÁGIL (UNA SOLA VENTANA) 🚛 */}
+                  {/* ========================================================= */}
+                  {purchasesTabSubView === "quick_purchase" && (
+                    <div className="space-y-4">
+                      {/* Top Supplier Selector & Metadata Card */}
+                      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                          <div className="flex-1">
+                            <label className="block text-xs font-black text-indigo-950 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                              <span>🤝</span> Seleccionar el Proveedor *:
+                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={selectedPurchaseSupplierId}
+                                onChange={(e) => {
+                                  setSelectedPurchaseSupplierId(e.target.value);
+                                  setPurchaseCart([]);
+                                }}
+                                className="flex-1 min-w-[240px] bg-slate-50 border-2 border-indigo-200 focus:border-indigo-600 rounded-2xl p-2.5 text-sm font-black text-slate-800 outline-none transition cursor-pointer"
+                              >
+                                <option value="">-- Elige un Proveedor --</option>
+                                {suppliers.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.category || "General"})
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                type="button"
+                                onClick={() => setSupplierModal({ isOpen: true, supplier: null })}
+                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black px-3.5 py-2.5 rounded-2xl transition flex items-center gap-1 border border-indigo-200 cursor-pointer"
+                                title="Crear nuevo proveedor al catálogo"
+                              >
+                                <span>➕</span>
+                                <span>Nuevo Proveedor</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick details of selected supplier */}
+                          {activePurchaseSupplier ? (
+                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl p-3.5 flex flex-wrap items-center gap-4 text-xs font-bold text-indigo-950">
+                              <div>
+                                <span className="text-[10px] text-indigo-500 uppercase block font-black">
+                                  Categoría
                                 </span>
-                              </td>
-                              <td className="p-3 text-slate-600">{s.phone || "-"}</td>
-                              <td className="p-3 text-slate-600">{s.email || "-"}</td>
-                              <td className="p-3 text-indigo-600 font-bold uppercase text-[10px]">
-                                📅 {s.frequency || "Semanal"}
-                              </td>
-                              <td className="p-3 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedScheduleSupplier(s);
-                                      setSupplierPurchaseItems([]);
-                                      setSupplierPurchaseIsPaid(true);
-                                      setShowSupplierPurchaseModal(true);
-                                    }}
-                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-indigo-200"
-                                  >
-                                    🛒 Surtir
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSupplierModal({ isOpen: true, supplier: s })}
-                                    className="text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition"
-                                    title="Editar"
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (window.confirm(`¿Eliminar al proveedor "${s.name}"?`)) {
-                                        await deleteSupplierFromFirebase(s.id);
-                                      }
-                                    }}
-                                    className="text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg transition"
-                                    title="Eliminar"
-                                  >
-                                    🗑️
-                                  </button>
+                                <span className="font-black text-slate-800">
+                                  {activePurchaseSupplier.category || "General"}
+                                </span>
+                              </div>
+                              {activePurchaseSupplier.phone && (
+                                <div>
+                                  <span className="text-[10px] text-indigo-500 uppercase block font-black">
+                                    Teléfono
+                                  </span>
+                                  <span className="font-semibold text-slate-700">
+                                    {activePurchaseSupplier.phone}
+                                  </span>
                                 </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    /* Purchases History */
-                    <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
-                            <th className="p-3">Fecha / Hora</th>
-                            <th className="p-3">Proveedor</th>
-                            <th className="p-3">Insumos Recibidos</th>
-                            <th className="p-3 text-center">Término</th>
-                            <th className="p-3 text-right">Total Compra</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                          {purchases.map((p) => (
-                            <tr key={p.id} className="hover:bg-slate-50">
-                              <td className="p-3 text-slate-600 font-bold">
-                                {p.timestamp ? new Date(p.timestamp).toLocaleString("es-MX") : "-"}
-                              </td>
-                              <td className="p-3 font-black text-slate-800">
-                                {p.supplier || "Proveedor General"}
-                              </td>
-                              <td className="p-3 text-slate-600">
-                                {p.items && Array.isArray(p.items)
-                                  ? p.items.map((i: any) => `${i.qty}x`).join(", ")
-                                  : "-"}
-                              </td>
-                              <td className="p-3 text-center">
+                              )}
+                              <div>
+                                <span className="text-[10px] text-indigo-500 uppercase block font-black">
+                                  Frecuencia
+                                </span>
+                                <span className="font-black uppercase text-indigo-700">
+                                  📅 {activePurchaseSupplier.frequency || "Semanal"}
+                                </span>
+                              </div>
+                              <div className="border-l border-indigo-200 pl-3">
+                                <span className="text-[10px] text-rose-500 uppercase block font-black">
+                                  Saldo en Cartera
+                                </span>
                                 <span
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                    p.isPaid
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : "bg-amber-100 text-amber-800"
+                                  className={`text-sm font-black ${
+                                    activeSupplierPendingBalance > 0
+                                      ? "text-rose-600"
+                                      : "text-emerald-600"
                                   }`}
                                 >
-                                  {p.isPaid ? "💵 Pagado Caja" : "📄 A Crédito"}
+                                  ${activeSupplierPendingBalance.toFixed(2)}
                                 </span>
-                              </td>
-                              <td className="p-3 text-right font-black text-slate-900 text-sm">
-                                ${(Number(p.total) || 0).toFixed(2)}
-                              </td>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-400 italic">
+                              Selecciona un proveedor para cargar su historial de insumos.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Invoice & Session Details Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                              📄 No. Remisión / Factura Física:
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Ej. REM-4821 o Nota 12"
+                              value={purchaseInvoiceNumber}
+                              onChange={(e) => setPurchaseInvoiceNumber(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                              👤 Recibido por:
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value={currentUser?.name || "Administrador"}
+                              className="w-full bg-slate-100 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-600 cursor-not-allowed"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                              📅 Fecha y Turno:
+                            </label>
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-700 flex items-center justify-between">
+                              <span>{new Date().toLocaleDateString("es-MX")}</span>
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                                {cashierSessions.find((s) => s.status === "open")
+                                  ? "Caja Abierta"
+                                  : "Sin Turno"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Main 2-Column Section: Left (Products/Insumos Catalog) & Right (Cart Summary) */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        {/* LEFT COLUMN: Insumos Habituales del Proveedor + Buscador Universal */}
+                        <div className="lg:col-span-7 space-y-4">
+                          {/* Insumos Habituales / Historial del Proveedor */}
+                          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <div>
+                                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                                  <span>📦</span> Insumos y Productos Habituales de{" "}
+                                  <span className="text-indigo-600 font-black">
+                                    {activePurchaseSupplier?.name || "este Proveedor"}
+                                  </span>
+                                </h3>
+                                <p className="text-[11px] text-slate-500">
+                                  Historial inteligente de productos surtidos anteriormente por este vendedor.
+                                </p>
+                              </div>
+                              <span className="text-xs bg-indigo-50 text-indigo-700 font-black px-2.5 py-1 rounded-full">
+                                {supplierHistoryProducts.length} disponibles
+                              </span>
+                            </div>
+
+                            {supplierHistoryProducts.length === 0 ? (
+                              <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 space-y-2">
+                                <span className="text-3xl block">📋</span>
+                                <p className="text-xs font-bold text-slate-600">
+                                  Aún no hay compras previas registradas para este proveedor.
+                                </p>
+                                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                                  Utiliza el buscador de abajo para agregar insumos del catálogo o crear uno nuevo. Quedarán relacionados automáticamente.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                                {supplierHistoryProducts.map(({ invItem, lastCost, timesPurchased }) => {
+                                  const cartItem = purchaseCart.find(
+                                    (x) => x.inventoryItemId === invItem.id
+                                  );
+                                  const isInCart = !!cartItem;
+
+                                  return (
+                                    <div
+                                      key={invItem.id}
+                                      className={`p-3 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                        isInCart
+                                          ? "bg-indigo-50/70 border-indigo-300 shadow-2xs"
+                                          : "bg-slate-50 hover:bg-slate-100/80 border-slate-200"
+                                      }`}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-black text-slate-900 truncate">
+                                            {invItem.name}
+                                          </span>
+                                          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-md shrink-0">
+                                            {invItem.unit || "pza"}
+                                          </span>
+                                          {timesPurchased > 0 && (
+                                            <span className="text-[9px] bg-indigo-100 text-indigo-800 font-black px-1.5 py-0.5 rounded shrink-0">
+                                              {timesPurchased}x compras
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
+                                          <span>
+                                            Stock actual: <b>{invItem.stock ?? 0} {invItem.unit || "pza"}</b>
+                                          </span>
+                                          <span>•</span>
+                                          <span>
+                                            Último costo: <b className="text-slate-800">${Number(lastCost || invItem.cost || 0).toFixed(2)}</b>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Add / Qty Controls */}
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {isInCart ? (
+                                          <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-indigo-200 shadow-2xs">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUpdateCartItemQty(
+                                                  invItem.id,
+                                                  cartItem.qty - 1
+                                                )
+                                              }
+                                              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center border-none cursor-pointer"
+                                            >
+                                              -
+                                            </button>
+                                            <span className="text-xs font-black text-indigo-700 min-w-[28px] text-center">
+                                              {cartItem.qty}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUpdateCartItemQty(
+                                                  invItem.id,
+                                                  cartItem.qty + 1
+                                                )
+                                              }
+                                              className="w-6 h-6 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center border-none cursor-pointer"
+                                            >
+                                              +
+                                            </button>
+                                            <span className="text-[10px] font-bold text-slate-400 pl-1">
+                                              {invItem.unit}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleQuickAddInsumoToPurchase(
+                                                invItem,
+                                                1,
+                                                lastCost || invItem.cost
+                                              )
+                                            }
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer border-none shadow-2xs"
+                                          >
+                                            <span>➕ Surtir</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Buscador Universal de Insumos del Catálogo General */}
+                          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🔍</span> Surtir Insumo del Catálogo General:
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={handleOpenNewInsumo}
+                                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100"
+                              >
+                                <span>✨ + Crear Insumo Nuevo</span>
+                              </button>
+                            </div>
+
+                            <div className="relative">
+                              <IonIcon
+                                icon={searchOutline}
+                                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Escribe para buscar cualquier insumo (ej: Jarritos, Queso, Arrachera)..."
+                                value={quickProductSearch}
+                                onChange={(e) => setQuickProductSearch(e.target.value)}
+                                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-2xl text-xs font-semibold outline-none"
+                              />
+                            </div>
+
+                            {/* Search Results Dropdown */}
+                            {quickProductSearch.trim().length > 0 && (
+                              <div className="space-y-1.5 max-h-56 overflow-y-auto p-1 bg-slate-50/80 rounded-2xl border border-slate-200">
+                                {inventory
+                                  .filter((inv) =>
+                                    inv.name
+                                      ?.toLowerCase()
+                                      .includes(quickProductSearch.toLowerCase().trim())
+                                  )
+                                  .slice(0, 10)
+                                  .map((inv) => (
+                                    <div
+                                      key={inv.id}
+                                      className="p-2.5 bg-white hover:bg-indigo-50 rounded-xl border border-slate-200 flex items-center justify-between transition"
+                                    >
+                                      <div>
+                                        <div className="text-xs font-black text-slate-800">
+                                          {inv.name}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500">
+                                          Categoría: <b>{inv.category || "General"}</b> | Costo: <b>${inv.cost || 0}</b> | Stock: <b>{inv.stock || 0} {inv.unit}</b>
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleQuickAddInsumoToPurchase(inv, 1, inv.cost);
+                                          setQuickProductSearch("");
+                                        }}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs px-3 py-1 rounded-xl transition cursor-pointer border-none"
+                                      >
+                                        ➕ Agregar
+                                      </button>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: Carrito de Recepción & Liquidación */}
+                        <div className="lg:col-span-5 space-y-4">
+                          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <div>
+                                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>🗂️</span> Resumen de Recepción
+                                </h3>
+                                <p className="text-[11px] text-slate-500">
+                                  Insumos que ingresarán al almacén en esta entrega.
+                                </p>
+                              </div>
+                              <span className="text-xs bg-emerald-50 text-emerald-800 font-black px-2.5 py-1 rounded-full border border-emerald-200">
+                                {purchaseCart.length} partidas
+                              </span>
+                            </div>
+
+                            {/* Table of items in cart */}
+                            {purchaseCart.length === 0 ? (
+                              <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 space-y-2">
+                                <span className="text-3xl block">🛒</span>
+                                <p className="text-xs font-bold text-slate-600">
+                                  El carrito de recepción está vacío.
+                                </p>
+                                <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                                  Selecciona insumos del panel izquierdo o búscalos por nombre para añadirlos a la orden.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                                {purchaseCart.map((item) => (
+                                  <div
+                                    key={item.inventoryItemId}
+                                    className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-black text-xs text-slate-900 truncate">
+                                        {item.name}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoveCartItem(item.inventoryItemId)
+                                        }
+                                        className="text-rose-500 hover:text-rose-700 text-xs font-bold p-1 rounded-md transition cursor-pointer border-none bg-transparent"
+                                        title="Quitar de la orden"
+                                      >
+                                        <IonIcon icon={trashOutline} />
+                                      </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-12 gap-2 items-center text-xs">
+                                      {/* Qty Input */}
+                                      <div className="col-span-5">
+                                        <label className="block text-[9px] font-bold text-slate-400 uppercase">
+                                          Cant ({item.unit}):
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0.01"
+                                          value={item.qty}
+                                          onChange={(e) =>
+                                            handleUpdateCartItemQty(
+                                              item.inventoryItemId,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-center outline-none focus:border-indigo-500"
+                                        />
+                                      </div>
+
+                                      {/* Unit Cost Input */}
+                                      <div className="col-span-4">
+                                        <label className="block text-[9px] font-bold text-slate-400 uppercase">
+                                          Costo Unit $:
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          value={item.unitCost}
+                                          onChange={(e) =>
+                                            handleUpdateCartItemCost(
+                                              item.inventoryItemId,
+                                              parseFloat(e.target.value) || 0
+                                            )
+                                          }
+                                          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-center outline-none focus:border-indigo-500"
+                                        />
+                                      </div>
+
+                                      {/* Subtotal */}
+                                      <div className="col-span-3 text-right">
+                                        <span className="block text-[9px] font-bold text-slate-400 uppercase">
+                                          Importe:
+                                        </span>
+                                        <span className="font-black text-indigo-700 text-xs">
+                                          ${item.price.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Total Banner */}
+                            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl flex items-center justify-between shadow-md">
+                              <div>
+                                <span className="text-[10px] text-slate-300 uppercase font-black tracking-wider block">
+                                  Total a Pagar / Recibir:
+                                </span>
+                                <span className="text-xl font-black text-emerald-400">
+                                  ${purchaseCartTotal.toFixed(2)}
+                                </span>
+                              </div>
+                              <span className="text-xs bg-indigo-500/30 text-indigo-200 px-2.5 py-1 rounded-full font-semibold">
+                                {purchaseCart.length} productos
+                              </span>
+                            </div>
+
+                            {/* Forma de Pago Selector */}
+                            <div className="space-y-2 border-t border-slate-100 pt-3">
+                              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                                💳 Término y Forma de Pago:
+                              </label>
+                              <div className="grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPurchasePaymentMethod("efectivo")}
+                                  className={`p-2.5 rounded-xl text-[11px] font-black transition flex flex-col items-center gap-1 border cursor-pointer ${
+                                    purchasePaymentMethod === "efectivo"
+                                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <span>💵 Efectivo</span>
+                                  <span className="text-[9px] opacity-80">(Sale de Caja)</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setPurchasePaymentMethod("transferencia")}
+                                  className={`p-2.5 rounded-xl text-[11px] font-black transition flex flex-col items-center gap-1 border cursor-pointer ${
+                                    purchasePaymentMethod === "transferencia"
+                                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <span>💳 Banco</span>
+                                  <span className="text-[9px] opacity-80">(Transferencia)</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setPurchasePaymentMethod("credito")}
+                                  className={`p-2.5 rounded-xl text-[11px] font-black transition flex flex-col items-center gap-1 border cursor-pointer ${
+                                    purchasePaymentMethod === "credito"
+                                      ? "bg-amber-500 text-white border-amber-500 shadow-xs"
+                                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <span>📄 A Crédito</span>
+                                  <span className="text-[9px] opacity-80">(En Cartera)</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Notes */}
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                Notas u Observaciones de la Entrega:
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Ej. Entregado por Chofer Juan, todo en buen estado"
+                                value={purchaseNotes}
+                                onChange={(e) => setPurchaseNotes(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-800 outline-none"
+                              />
+                            </div>
+
+                            {/* Action Button: Confirm & Print */}
+                            <button
+                              type="button"
+                              disabled={isSubmittingPurchase || purchaseCart.length === 0}
+                              onClick={handleConfirmPurchaseAndPrint}
+                              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-black text-sm py-3.5 px-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 border-none cursor-pointer"
+                            >
+                              {isSubmittingPurchase ? (
+                                <>
+                                  <IonSpinner name="crescent" style={{ width: "18px", height: "18px" }} />
+                                  <span>Guardando e Imprimiendo...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <IonIcon icon={printOutline} className="text-lg" />
+                                  <span>Confirmar Recepción y Ticket 🖨️ 💾</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* SUB-VIEW 2: CARTERA Y CUENTAS POR PAGAR 💳 */}
+                  {/* ========================================================= */}
+                  {purchasesTabSubView === "cartera" && (
+                    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <span>💳</span> Cartera de Proveedores y Cuentas por Pagar
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            Supervisa los saldos pendientes de compras a crédito y registra abonos o liquidaciones de facturas.
+                          </p>
+                        </div>
+
+                        <div className="bg-rose-50 border border-rose-200 px-4 py-2 rounded-2xl flex items-center gap-3">
+                          <span className="text-xs font-bold text-rose-700">Deuda Total Acumulada:</span>
+                          <span className="text-base font-black text-rose-700">
+                            $
+                            {supplierBalances
+                              .reduce((sum, b) => sum + b.pendingBalance, 0)
+                              .toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                              <th className="p-3">Proveedor</th>
+                              <th className="p-3">Categoría</th>
+                              <th className="p-3 text-center">Compras Totales</th>
+                              <th className="p-3 text-right">Comprado a Crédito</th>
+                              <th className="p-3 text-right">Abonos Realizados</th>
+                              <th className="p-3 text-right">Saldo Pendiente</th>
+                              <th className="p-3 text-center">Acciones</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                            {supplierBalances.map((b) => (
+                              <tr key={b.supplier.id} className="hover:bg-slate-50">
+                                <td className="p-3 font-black text-slate-800">
+                                  {b.supplier.name}
+                                  {b.supplier.phone && (
+                                    <span className="text-[10px] text-slate-400 block font-normal">
+                                      Tel: {b.supplier.phone}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                    {b.supplier.category || "General"}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center font-bold text-slate-600">
+                                  {b.totalPurchasesCount} compras
+                                </td>
+                                <td className="p-3 text-right font-bold text-slate-800">
+                                  ${b.totalCredit.toFixed(2)}
+                                </td>
+                                <td className="p-3 text-right font-bold text-emerald-600">
+                                  ${b.totalAbonos.toFixed(2)}
+                                </td>
+                                <td className="p-3 text-right font-black text-sm">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full ${
+                                      b.pendingBalance > 0
+                                        ? "bg-rose-100 text-rose-800"
+                                        : "bg-emerald-100 text-emerald-800"
+                                    }`}
+                                  >
+                                    ${b.pendingBalance.toFixed(2)}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {b.pendingBalance > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedSupplierForPayment(b);
+                                        setPaymentAmount(String(b.pendingBalance));
+                                        setPaymentMethodType("efectivo");
+                                        setPaymentNotes("");
+                                      }}
+                                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs px-3 py-1.5 rounded-xl transition cursor-pointer border-none shadow-2xs"
+                                    >
+                                      💵 Abonar / Pagar
+                                    </button>
+                                  ) : (
+                                    <span className="text-emerald-600 font-bold text-xs">
+                                      ✓ Al Corriente
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* SUB-VIEW 3: DIRECTORIO DE PROVEEDORES 🤝 */}
+                  {/* ========================================================= */}
+                  {purchasesTabSubView === "suppliers" && (
+                    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <span>🤝</span> Directorio de Proveedores Registrados ({suppliers.length})
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            Administra datos de contacto, frecuencias de visita y categorías de tus proveedores.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSupplierModal({ isOpen: true, supplier: null })}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer border-none"
+                        >
+                          <IonIcon icon={addOutline} />
+                          <span>Nuevo Proveedor</span>
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                              <th className="p-3">Proveedor</th>
+                              <th className="p-3">Categoría</th>
+                              <th className="p-3">Teléfono</th>
+                              <th className="p-3">Email</th>
+                              <th className="p-3">Frecuencia</th>
+                              <th className="p-3 text-center">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                            {suppliers.map((s) => (
+                              <tr key={s.id} className="hover:bg-slate-50">
+                                <td className="p-3 font-black text-slate-800">
+                                  {s.name}
+                                </td>
+                                <td className="p-3">
+                                  <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-[11px] font-bold">
+                                    {s.category || "General"}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-slate-600">{s.phone || "-"}</td>
+                                <td className="p-3 text-slate-600">{s.email || "-"}</td>
+                                <td className="p-3 text-indigo-600 font-bold uppercase text-[10px]">
+                                  📅 {s.frequency || "Semanal"}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPurchaseSupplierId(s.id);
+                                        setPurchasesTabSubView("quick_purchase");
+                                      }}
+                                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-indigo-200"
+                                    >
+                                      🛒 Surtir
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSupplierModal({ isOpen: true, supplier: s })}
+                                      className="text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition"
+                                      title="Editar"
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (window.confirm(`¿Eliminar al proveedor "${s.name}"?`)) {
+                                          await deleteSupplierFromFirebase(s.id);
+                                        }
+                                      }}
+                                      className="text-rose-600 hover:bg-rose-100 p-1.5 rounded-lg transition"
+                                      title="Eliminar"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* SUB-VIEW 4: HISTORIAL DE COMPRAS & REIMPRESIÓN 🛒 */}
+                  {/* ========================================================= */}
+                  {purchasesTabSubView === "purchases" && (
+                    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <span>🛒</span> Historial de Recepciones y Compras ({purchases.length})
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            Consulta las compras registradas y reimprime los comprobantes de entrega-recepción.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                              <th className="p-3">Fecha / Folio</th>
+                              <th className="p-3">Proveedor</th>
+                              <th className="p-3">Remisión / Nota</th>
+                              <th className="p-3">Insumos Recibidos</th>
+                              <th className="p-3 text-center">Condición</th>
+                              <th className="p-3 text-right">Total Compra</th>
+                              <th className="p-3 text-center">Comprobante</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                            {purchases.map((p) => (
+                              <tr key={p.id} className="hover:bg-slate-50">
+                                <td className="p-3">
+                                  <span className="font-black text-slate-800 block">
+                                    {p.folio || `REC-${p.id.slice(-6).toUpperCase()}`}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {p.timestamp ? new Date(p.timestamp).toLocaleString("es-MX") : "-"}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-black text-slate-800">
+                                  {p.supplier || "Proveedor General"}
+                                </td>
+                                <td className="p-3 text-slate-600">
+                                  {p.invoiceNumber ? (
+                                    <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded">
+                                      {p.invoiceNumber}
+                                    </span>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </td>
+                                <td className="p-3 text-slate-600 max-w-xs truncate">
+                                  {p.items && Array.isArray(p.items)
+                                    ? p.items
+                                        .map((i: any) => `${i.qty}x ${i.name || "item"}`)
+                                        .join(", ")
+                                    : "-"}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                                      p.isPaid
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-amber-100 text-amber-800"
+                                    }`}
+                                  >
+                                    {p.isPaid
+                                      ? p.paymentMethod === "transferencia"
+                                        ? "💳 Transferencia"
+                                        : "💵 Pagado Caja"
+                                      : "📄 A Crédito"}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right font-black text-slate-900 text-sm">
+                                  ${(Number(p.total) || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePrintExistingPurchase(p)}
+                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs px-2.5 py-1.5 rounded-xl transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200"
+                                    title="Reimprimir Comprobante de Entrega-Recepción"
+                                  >
+                                    <IonIcon icon={printOutline} />
+                                    <span>Imprimir</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3209,6 +4409,108 @@ Devuelve un JSON estructurado con:
                   ➕ Guardar Insumo en Receta
                 </button>
               </div>
+            </div>
+          </IonContent>
+        </IonModal>
+
+        {/* ========================================================= */}
+        {/* MODAL: ABONO / LIQUIDACIÓN A PROVEEDOR 💳 */}
+        {/* ========================================================= */}
+        <IonModal
+          isOpen={!!selectedSupplierForPayment}
+          onDidDismiss={() => setSelectedSupplierForPayment(null)}
+          initialBreakpoint={0.65}
+          breakpoints={[0, 0.65]}
+        >
+          <IonHeader className="ion-no-border">
+            <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
+              <IonTitle>Abonar a Proveedor 💳</IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setSelectedSupplierForPayment(null)}>Cerrar</IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
+            <div className="max-w-md mx-auto space-y-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-indigo-950">
+                <span className="text-[10px] uppercase font-black tracking-wider text-indigo-500 block">
+                  PROVEEDOR
+                </span>
+                <span className="text-base font-black">
+                  {selectedSupplierForPayment?.supplier?.name}
+                </span>
+                <div className="mt-2 flex items-center justify-between text-xs pt-2 border-t border-indigo-100">
+                  <span className="text-slate-600 font-bold">Saldo Deudor Actual:</span>
+                  <span className="text-sm font-black text-rose-600">
+                    ${(Number(selectedSupplierForPayment?.pendingBalance) || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Monto a Abonar ($) *
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-black text-center outline-none focus:border-indigo-600 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Forma de Pago del Abono:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodType("efectivo")}
+                    className={`p-2.5 rounded-xl text-xs font-black transition border cursor-pointer ${
+                      paymentMethodType === "efectivo"
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                        : "bg-slate-50 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    💵 Efectivo de Caja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodType("transferencia")}
+                    className={`p-2.5 rounded-xl text-xs font-black transition border cursor-pointer ${
+                      paymentMethodType === "transferencia"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-slate-50 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    💳 Transferencia / Banco
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nota / Concepto del Abono:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Pago parcial factura 12, liquidación semanal..."
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRegisterSupplierPayment}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs py-3.5 rounded-xl transition cursor-pointer border-none shadow-md shadow-indigo-600/30"
+              >
+                💾 Registrar Abono a Proveedor
+              </button>
             </div>
           </IonContent>
         </IonModal>

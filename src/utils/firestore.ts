@@ -393,20 +393,28 @@ export async function addPurchaseToFirebase(purchaseData: any) {
     ...purchaseData,
     id: purchaseRef.id,
     uid: purchaseRef.id,
-    timestamp: now,
+    timestamp: purchaseData.timestamp || now,
     updatedAt: now,
   });
 
   batch.set(purchaseRef, purchase);
 
   // Update inventory stock based on purchase items
-  if (purchaseData.items) {
+  if (purchaseData.items && Array.isArray(purchaseData.items)) {
     for (const item of purchaseData.items) {
+      if (!item.inventoryItemId) continue;
       const invRef = doc(db, "inventory", item.inventoryItemId);
-      batch.update(invRef, {
-        stock: increment(item.qty),
+      const updateData: any = {
+        stock: increment(Number(item.qty) || 0),
         updatedAt: now,
-      });
+      };
+      // If unit price is present, update last cost
+      if (item.unitCost !== undefined && item.unitCost > 0) {
+        updateData.cost = Number(item.unitCost);
+      } else if (item.price !== undefined && item.qty > 0) {
+        updateData.cost = Number((item.price / item.qty).toFixed(2));
+      }
+      batch.update(invRef, updateData);
 
       // Registrar movimiento de inventario automatizado para compra 📦
       const mRef = doc(collection(db, "inventory_movements"));
@@ -419,15 +427,16 @@ export async function addPurchaseToFirebase(purchaseData: any) {
           updatedAt: now,
           inventoryItemId: item.inventoryItemId,
           type: "compra",
-          qty: item.qty,
-          concept: `Compra registrada de proveedor: ${purchaseData.supplier || "General"}`,
-          executedBy: "Sistema",
+          qty: Number(item.qty) || 0,
+          concept: `Compra de proveedor: ${purchaseData.supplier || "General"}${purchaseData.invoiceNumber ? ` (Remisión: ${purchaseData.invoiceNumber})` : ""}`,
+          executedBy: purchaseData.createdBy || "Sistema",
         }),
       );
     }
   }
 
   await runWrite(batch.commit());
+  return purchaseRef.id;
 }
 
 export async function updatePurchaseStatusInFirebase(
@@ -438,6 +447,82 @@ export async function updatePurchaseStatusInFirebase(
   await runWrite(
     updateDoc(ref, { isPaid, updatedAt: getMexicoISOString() }),
   );
+}
+
+export function subscribeToSupplierPayments(
+  tenantId: string,
+  callback: (data: any[]) => void,
+) {
+  const q = query(
+    collection(db, "supplier_payments"),
+    where("tenantId", "==", tenantId)
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const payments = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      payments.sort((a: any, b: any) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      });
+      callback(payments);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, "supplier_payments");
+    }
+  );
+}
+
+export async function addSupplierPaymentToFirebase(paymentData: any) {
+  const payRef = doc(collection(db, "supplier_payments"));
+  const batch = writeBatch(db);
+  const now = getMexicoISOString();
+
+  const payment = injectTenant({
+    ...paymentData,
+    id: payRef.id,
+    uid: payRef.id,
+    timestamp: paymentData.timestamp || now,
+    updatedAt: now,
+  });
+
+  batch.set(payRef, payment);
+
+  // If paid in cash and cash movement needed
+  if (paymentData.paymentMethod === "efectivo" || paymentData.isPaidFromCash) {
+    const cashRef = doc(collection(db, "cash_movements"));
+    batch.set(
+      cashRef,
+      injectTenant({
+        id: cashRef.id,
+        uid: cashRef.id,
+        type: "out",
+        concept: "pago_proveedor",
+        amount: Number(paymentData.amount) || 0,
+        description: `Abono a Proveedor: ${paymentData.supplierName || "Proveedor"}${paymentData.notes ? ` - ${paymentData.notes}` : ""}`,
+        user: paymentData.userName || "Admin",
+        userId: paymentData.userId || null,
+        date: now,
+        updatedAt: now,
+        sessionId: paymentData.sessionId || null,
+      })
+    );
+  }
+
+  // If specific purchase is paid/settled
+  if (paymentData.purchaseId) {
+    const pRef = doc(db, "purchases", paymentData.purchaseId);
+    batch.update(pRef, {
+      isPaid: true,
+      paidAt: now,
+      paidAmount: Number(paymentData.amount) || 0,
+      updatedAt: now,
+    });
+  }
+
+  await runWrite(batch.commit());
+  return payRef.id;
 }
 
 export async function addProductToFirebase(product: any) {
