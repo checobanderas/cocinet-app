@@ -10,8 +10,7 @@ import { TenantUsersModal } from '../modals/TenantUsersModal';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
-import { logoToUse, logoUrl } from 'ionicons/icons';
-import { getLockedTerminalTenantId } from '../../services/pwaTerminalService';
+import { getLockedTerminalTenantId, resetToDefaultManifest } from '../../services/pwaTerminalService';
 import { LandingIntroView } from './LandingIntroView';
 
 interface LoginViewProps {
@@ -95,6 +94,8 @@ interface LoginViewProps {
   setFormTenantAvatar: any;
   setFormTenantDireccion: any;
   setFormTenantEmail: any;
+  formTenantInvoicingApiUrl?: string;
+  setFormTenantInvoicingApiUrl?: any;
   setFormTenantLat: any;
   setFormTenantLng: any;
   setFormTenantLogoUrl: any;
@@ -310,11 +311,28 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setFormTenantCancellationTimeoutMinutes,
   formTenantShowFiscalData,
   setFormTenantShowFiscalData,
+  formTenantInvoicingApiUrl,
+  setFormTenantInvoicingApiUrl,
 }) => {
   const [showEditMasterPinModal, setShowEditMasterPinModal] = React.useState(false);
   const [newMasterPinInput, setNewMasterPinInput] = React.useState("");
   const [confirmMasterPinInput, setConfirmMasterPinInput] = React.useState("");
   const [isSavingMasterPin, setIsSavingMasterPin] = React.useState(false);
+
+  const [dashboardViewMode, setDashboardViewMode] = React.useState<'view1' | 'view2' | 'view3'>(() => {
+    try {
+      return (localStorage.getItem("cocinet_login_view_mode") as any) || "view3";
+    } catch {
+      return "view3";
+    }
+  });
+
+  const handleSetViewMode = (mode: 'view1' | 'view2' | 'view3') => {
+    setDashboardViewMode(mode);
+    try {
+      localStorage.setItem("cocinet_login_view_mode", mode);
+    } catch {}
+  };
 
   const [showLandingIntro, setShowLandingIntro] = React.useState<boolean>(() => {
     try {
@@ -362,6 +380,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setLoginSubStep("tenant");
     setShowPinPanel(false);
     setOwnerPasswordInput("");
+    resetToDefaultManifest();
     try {
       window.history.replaceState({}, document.title, window.location.pathname);
     } catch (e) {}
@@ -575,6 +594,8 @@ return (
           setFormTenantCancellationTimeoutMinutes={setFormTenantCancellationTimeoutMinutes}
           formTenantShowFiscalData={formTenantShowFiscalData}
           setFormTenantShowFiscalData={setFormTenantShowFiscalData}
+          formTenantInvoicingApiUrl={formTenantInvoicingApiUrl}
+          setFormTenantInvoicingApiUrl={setFormTenantInvoicingApiUrl}
           transferStep={transferStep}
           setTransferStep={setTransferStep}
           transferTargetOwnerKey={transferTargetOwnerKey}
@@ -1224,7 +1245,7 @@ return (
                                 )}
                               </div>
                               <p className="text-[10px] opacity-75 font-bold">
-                                {ownerObj ? `Clave de Red: #${ownerObj.key} • PIN Acceso: ${customOwnerPins[ownerObj.key] || "No asig."}` : "Consola maestra de supervisión de transacciones locales."}
+                                {ownerObj ? `Clave de Red: #${ownerObj.key} • Red de Sucursales` : "Consola maestra de supervisión de transacciones locales."}
                               </p>
                             </div>
                           </div>
@@ -1270,18 +1291,528 @@ return (
                         <button
                           type="button"
                           onClick={() => {
-                            setNewMasterPinInput(masterAdminPin || "2052");
-                            setConfirmMasterPinInput(masterAdminPin || "2052");
+                            setNewMasterPinInput("");
+                            setConfirmMasterPinInput("");
                             setShowEditMasterPinModal(true);
                           }}
                           className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border-none uppercase tracking-wider"
                         >
-                          🔑 Cambiar PIN Maestro (Actual: {masterAdminPin || "2052"})
+                          🔑 Cambiar PIN Maestro
                         </button>
                       </div>
                     )}
 
+                    {/* BARRA SELECTORA DE MODO DE VISTA Y BÚSQUEDA RÁPIDA */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                      {/* Selector de Vistas */}
+                      <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-250 w-full sm:w-auto overflow-x-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleSetViewMode("view1")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border-none cursor-pointer whitespace-nowrap ${
+                            dashboardViewMode === "view1"
+                              ? "bg-white text-indigo-700 shadow-sm font-black"
+                              : "text-slate-600 hover:text-slate-900 bg-transparent"
+                          }`}
+                        >
+                          <span>📋</span> <span>Vista 1: Clásica</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetViewMode("view2")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border-none cursor-pointer whitespace-nowrap ${
+                            dashboardViewMode === "view2"
+                              ? "bg-indigo-600 text-white shadow-md font-black shadow-indigo-200"
+                              : "text-slate-600 hover:text-slate-900 bg-transparent"
+                          }`}
+                        >
+                          <span>⚡</span> <span>Vista 2: Dashboard Ágil</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetViewMode("view3")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border-none cursor-pointer whitespace-nowrap ${
+                            dashboardViewMode === "view3"
+                              ? "bg-indigo-600 text-white shadow-md font-black shadow-indigo-200"
+                              : "text-slate-600 hover:text-slate-900 bg-transparent"
+                          }`}
+                        >
+                          <span>🗂️</span> <span>Vista 3: Matriz Global</span>
+                        </button>
+                      </div>
+
+                      {/* Buscador en caliente */}
+                      <div className="relative w-full sm:w-80">
+                        <input
+                          type="text"
+                          placeholder="🔍 Buscar patrón, sucursal, RFC..."
+                          value={searchCompanyQuery || ""}
+                          onChange={(e) => setSearchCompanyQuery && setSearchCompanyQuery(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition shadow-inner"
+                        />
+                        {searchCompanyQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchCompanyQuery("")}
+                            className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-black border-none bg-transparent cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RENDERIZADO SEGÚN EL MODO DE VISTA SELECCIONADO */}
                     {(() => {
+                      // =========================================================================
+                      // VISTA 2: DASHBOARD ÁGIL DE PROPIETARIOS Y SUCURSALES (TODO EN UNO)
+                      // =========================================================================
+                      if (dashboardViewMode === "view2") {
+                        const ownersToRender = customOwners.filter((owner: any) => {
+                          if (activeOwnerFilter && owner.key !== activeOwnerFilter) return false;
+                          if (!searchCompanyQuery) return true;
+                          const q = searchCompanyQuery.toLowerCase();
+                          const ownerMatch = (owner.name || "").toLowerCase().includes(q) || (owner.key || "").toLowerCase().includes(q);
+                          const branchMatch = COMPANY_CATALOG.some((c: any) => 
+                            c.ownerKey === owner.key && 
+                            ((c.name || "").toLowerCase().includes(q) || (c.sucursalDefault || "").toLowerCase().includes(q) || (c.rfc || "").toLowerCase().includes(q))
+                          );
+                          return ownerMatch || branchMatch;
+                        });
+
+                        return (
+                          <div className="space-y-6 text-left">
+                            <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
+                              <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                                  <span>⚡</span> Dashboard Ágil de Propietarios y Sucursales
+                                </h3>
+                                <p className="text-[11px] text-slate-500 font-bold">
+                                  Acceso directo con un solo clic a usuarios, configuración y punto de venta de cada inquilino.
+                                </p>
+                              </div>
+                              {isMasterAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingOwner(null);
+                                    setFormOwnerName("");
+                                    setFormOwnerAvatar("🤠");
+                                    setFormOwnerAccent("indigo");
+                                    setFormOwnerPin("");
+                                    setFormOwnerLogo("");
+                                    setShowOwnerCrudModal(true);
+                                  }}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md border-none transition-all uppercase tracking-wider"
+                                  style={{ backgroundColor: "#4f46e5" }}
+                                >
+                                  ➕ Agregar Propietario
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="space-y-6">
+                              {ownersToRender.map((owner: any) => {
+                                const ownerBranches = COMPANY_CATALOG.filter((c: any) => {
+                                  if (c.ownerKey !== owner.key) return false;
+                                  if (!searchCompanyQuery) return true;
+                                  const q = searchCompanyQuery.toLowerCase();
+                                  return (c.name || "").toLowerCase().includes(q) || (c.sucursalDefault || "").toLowerCase().includes(q) || (c.rfc || "").toLowerCase().includes(q) || (owner.name || "").toLowerCase().includes(q);
+                                });
+
+                                const numMatrices = ownerBranches.filter((c: any) => c.type === 'Matriz').length;
+                                const numSucursales = ownerBranches.filter((c: any) => c.type !== 'Matriz').length;
+                                const pin = customOwnerPins[owner.key] || "No asig.";
+                                
+                                const totalUsersInOwner = ownerBranches.reduce((sum: number, b: any) => {
+                                  return sum + getTenantUsers(b.id).length;
+                                }, 0);
+
+                                const colHex = 
+                                  owner.accentColor === "red" ? "#dc2626" :
+                                  owner.accentColor === "purple" ? "#7c3aed" :
+                                  owner.accentColor === "pink" ? "#db2777" :
+                                  owner.accentColor === "teal" ? "#0d9488" :
+                                  owner.accentColor === "amber" ? "#d97706" :
+                                  owner.accentColor === "emerald" ? "#059669" :
+                                  owner.accentColor === "indigo" ? "#4f46e5" :
+                                  owner.accentColor === "cyan" ? "#0891b2" :
+                                  "#4f46e5";
+
+                                return (
+                                  <div
+                                    key={owner.key}
+                                    className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all space-y-4"
+                                  >
+                                    {/* WIDGET HEADER: PROPIETARIO */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                                      <div className="flex items-center gap-3.5">
+                                        {/* Logo Grandote / Avatar */}
+                                        <div
+                                          className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-md overflow-hidden bg-white shrink-0 border-2"
+                                          style={{ borderColor: colHex, backgroundColor: colHex }}
+                                        >
+                                          {owner.logo ? (
+                                            <img src={owner.logo} alt="Logo" className="w-full h-full object-cover" />
+                                          ) : (
+                                            <span className="text-3xl">{owner.avatar || "👑"}</span>
+                                          )}
+                                        </div>
+
+                                        <div>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-base font-black text-slate-800 tracking-tight leading-none uppercase">
+                                              {owner.name}
+                                            </h3>
+                                            <span className="text-[10px] bg-slate-900 text-amber-300 font-mono font-black px-2 py-0.5 rounded border border-slate-700">
+                                              PATRÓN #{owner.key}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 mt-2 flex-wrap text-xs">
+                                            <span className="bg-slate-100 text-slate-700 font-mono font-bold px-2 py-0.5 rounded border border-slate-250">
+                                              🔒 PIN Protegido
+                                            </span>
+                                            <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded border border-indigo-150">
+                                              🏠 {numMatrices} {numMatrices === 1 ? "Matriz" : "Matrices"}
+                                            </span>
+                                            <span className="bg-teal-50 text-teal-700 font-bold px-2 py-0.5 rounded border border-teal-150">
+                                              📍 {numSucursales} {numSucursales === 1 ? "Sucursal" : "Sucursales"}
+                                            </span>
+                                            <span className="bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded border border-purple-150">
+                                              👥 {totalUsersInOwner} Usuarios Registrados
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Acciones del Propietario */}
+                                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                                        {isMasterAdmin && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                resetTenantForm();
+                                                setFormTenantOwnerKey(owner.key);
+                                                setFormTenantPropietario(owner.name);
+                                                setFormTenantEmail("contacto@cocinet.mx");
+                                                setFormTenantAvatar(owner.avatar || "🏢");
+                                                setFormTenantAccentColor(colHex);
+                                                setFormTenantType("Sucursal");
+                                                setShowTenantCrudModal(true);
+                                              }}
+                                              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm border-none uppercase tracking-wider"
+                                              style={{ backgroundColor: "#059669" }}
+                                              title="Agregar una nueva sucursal a este propietario"
+                                            >
+                                              <span>➕</span> <span>Nueva Sucursal</span>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingOwner(owner);
+                                                setFormOwnerName(owner.name);
+                                                setFormOwnerAvatar(owner.avatar);
+                                                setFormOwnerAccent(owner.accentColor);
+                                                setFormOwnerPin(pin);
+                                                setFormOwnerSupervisorPin(customOwnerSupervisorPins[owner.key] || "");
+                                                setFormOwnerLogo(owner.logo || "");
+                                                setShowOwnerCrudModal(true);
+                                              }}
+                                              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer border border-slate-200 transition uppercase"
+                                              title="Editar información de este propietario"
+                                            >
+                                              <span>✏️</span> <span>Editar</span>
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* LISTA ÁGIL DE SUCURSALES / MATRICES DE ESTE PROPIETARIO */}
+                                    <div className="space-y-3">
+                                      <div className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1 pl-1">
+                                        <span>🏢</span> Sucursales y Puntos de Venta Vinculados ({ownerBranches.length})
+                                      </div>
+
+                                      {ownerBranches.length === 0 ? (
+                                        <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-500 font-bold">
+                                          Este propietario no tiene ninguna sucursal registrada todavía. Haz clic en "➕ Nueva Sucursal" para dar de alta su primera matriz o punto de venta.
+                                        </div>
+                                      ) : (
+                                        <div className="grid grid-cols-1 gap-3">
+                                          {ownerBranches.map((company: any) => {
+                                            const isSelected = selectedTenant?.id === company.id;
+                                            const tUsers = getTenantUsers(company.id);
+                                            const hasInvoicing = Boolean(company.invoicingApiUrl && company.invoicingApiUrl.trim().length > 0);
+
+                                            return (
+                                              <div
+                                                key={company.id}
+                                                className={`p-3.5 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                                                  isSelected
+                                                    ? "bg-indigo-50/60 border-indigo-500 shadow-sm"
+                                                    : "bg-slate-50/70 hover:bg-slate-100/70 border-slate-200"
+                                                }`}
+                                              >
+                                                {/* Identidad de la Sucursal */}
+                                                <div className="flex items-center gap-3 min-w-[240px]">
+                                                  <div
+                                                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-black shadow-sm overflow-hidden bg-white shrink-0 border border-slate-200"
+                                                    style={{ backgroundColor: company.accentColor || colHex }}
+                                                  >
+                                                    {company.logoUrl ? (
+                                                      <img src={company.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                      <span>{company.avatar || "🏪"}</span>
+                                                    )}
+                                                  </div>
+
+                                                  <div>
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <h4 className="text-sm font-black text-slate-800 leading-tight uppercase m-0">
+                                                        {company.name}
+                                                      </h4>
+                                                      <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${
+                                                        company.type === "Matriz"
+                                                          ? "bg-amber-100 text-amber-900 border-amber-200"
+                                                          : "bg-slate-200 text-slate-700 border-slate-300"
+                                                      }`}>
+                                                        {company.type === "Matriz" ? "Matriz 🏡" : "Sucursal 📍"}
+                                                      </span>
+                                                      <span className="text-[10px] bg-slate-900 text-amber-300 font-mono font-bold px-1.5 py-0.5 rounded">
+                                                        {company.id}
+                                                      </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-bold flex-wrap">
+                                                      <span>📍 <b>{company.sucursalDefault}</b></span>
+                                                      {company.rfc && <span className="font-mono text-slate-600">• {company.rfc}</span>}
+                                                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${hasInvoicing ? "bg-emerald-100 text-emerald-800" : "bg-slate-150 text-slate-400"}`}>
+                                                        {hasInvoicing ? "🧾 CFDI 4.0 Activo ✅" : "🧾 Sin Facturación Web API"}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+
+                                                {/* HUB DE ACCIONES RÁPIDAS (DIRECTO) */}
+                                                <div className="flex items-center gap-2 flex-wrap self-end md:self-center">
+                                                  {/* 1. Botón de Usuarios del Tenant */}
+                                                  <a
+                                                    href={`/?tenant=${encodeURIComponent(company.id)}&action=users`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-2xs no-underline hover:scale-105 active:scale-95"
+                                                    title={`Ver lista de usuarios, cajeros y PINs de ${company.name} en nueva pestaña`}
+                                                  >
+                                                    <span>👥</span>
+                                                    <span>Usuarios ({tUsers.length})</span>
+                                                    <span className="text-[10px] opacity-60">↗</span>
+                                                  </a>
+
+                                                  {/* 2. Botón de Configuración del Sistema */}
+                                                  {isMasterAdmin && (
+                                                    <a
+                                                      href={`/?tenant=${encodeURIComponent(company.id)}&action=config`}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-250 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-2xs no-underline hover:scale-105 active:scale-95"
+                                                      title={`Configurar datos fiscales y parámetros de ${company.name} en nueva pestaña`}
+                                                    >
+                                                      <span>⚙️</span>
+                                                      <span>Configuración</span>
+                                                      <span className="text-[10px] opacity-60">↗</span>
+                                                    </a>
+                                                  )}
+
+                                                  {/* 3. Botón de ENTRAR AL POS / TURNO (1-Click Login) */}
+                                                  <a
+                                                    href={`/?tenant=${encodeURIComponent(company.id)}&action=login`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md border-none uppercase tracking-wider no-underline hover:scale-105 active:scale-95"
+                                                    style={{ backgroundColor: "#059669" }}
+                                                    title={`Conectar a ${company.name} y abrir punto de venta en nueva pestaña`}
+                                                  >
+                                                    <span>⚡</span>
+                                                    <span>Entrar al POS &rarr;</span>
+                                                    <span className="text-[10px] opacity-80">↗</span>
+                                                  </a>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // =========================================================================
+                      // VISTA 3: MATRIZ GLOBAL COMPACTA (TABLA DE ALTA DENSIDAD)
+                      // =========================================================================
+                      if (dashboardViewMode === "view3") {
+                        const allCompaniesList = COMPANY_CATALOG.filter((company: any) => {
+                          if (activeOwnerFilter && company.ownerKey !== activeOwnerFilter) return false;
+                          if (!searchCompanyQuery) return true;
+                          const q = searchCompanyQuery.toLowerCase();
+                          const ownerObj = customOwners.find((o: any) => o.key === company.ownerKey);
+                          return (
+                            (company.name || "").toLowerCase().includes(q) ||
+                            (company.sucursalDefault || "").toLowerCase().includes(q) ||
+                            (company.rfc || "").toLowerCase().includes(q) ||
+                            (ownerObj?.name || "").toLowerCase().includes(q)
+                          );
+                        });
+
+                        return (
+                          <div className="space-y-4 text-left">
+                            <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
+                              <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                                  <span>🗂️</span> Matriz Global de Inquilinos ({allCompaniesList.length})
+                                </h3>
+                                <p className="text-[11px] text-slate-500 font-bold">
+                                  Vista tabular compacta para supervisión y administración global del sistema.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-wider font-mono">
+                                  <tr>
+                                    <th className="p-3">Patrón / Propietario</th>
+                                    <th className="p-3">Empresa / Sucursal</th>
+                                    <th className="p-3">Tipo</th>
+                                    <th className="p-3">RFC</th>
+                                    <th className="p-3">Usuarios</th>
+                                    <th className="p-3">Facturación API</th>
+                                    <th className="p-3 text-right">Acciones Rápidas</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium">
+                                  {allCompaniesList.map((company: any) => {
+                                    const ownerObj = customOwners.find((o: any) => o.key === company.ownerKey);
+                                    const tUsers = getTenantUsers(company.id);
+                                    const hasInvoicing = Boolean(company.invoicingApiUrl && company.invoicingApiUrl.trim().length > 0);
+                                    const isSelected = selectedTenant?.id === company.id;
+
+                                    return (
+                                      <tr
+                                        key={company.id}
+                                        className={`hover:bg-slate-50/80 transition ${
+                                          isSelected ? "bg-indigo-50/40" : ""
+                                        }`}
+                                      >
+                                        <td className="p-3 whitespace-nowrap">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-base">{ownerObj?.avatar || "👑"}</span>
+                                            <div>
+                                              <span className="font-bold text-slate-800 block uppercase">
+                                                {ownerObj?.name || "Sin Patrón"}
+                                              </span>
+                                              <span className="text-[10px] text-slate-400 font-mono">
+                                                Patrón #{company.ownerKey || "N/A"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </td>
+
+                                        <td className="p-3 whitespace-nowrap">
+                                          <div className="font-black text-slate-800 uppercase">
+                                            {company.name}
+                                          </div>
+                                          <div className="text-[10.5px] text-slate-500 font-bold">
+                                            📍 {company.sucursalDefault} • <span className="font-mono text-slate-400">{company.id}</span>
+                                          </div>
+                                        </td>
+
+                                        <td className="p-3 whitespace-nowrap">
+                                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ${
+                                            company.type === "Matriz"
+                                              ? "bg-amber-100 text-amber-900 border border-amber-200"
+                                              : "bg-slate-100 text-slate-700 border border-slate-200"
+                                          }`}>
+                                            {company.type || "Sucursal"}
+                                          </span>
+                                        </td>
+
+                                        <td className="p-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                                          {company.rfc || "XAXX010101000"}
+                                        </td>
+
+                                        <td className="p-3 whitespace-nowrap">
+                                          <a
+                                            href={`/?tenant=${encodeURIComponent(company.id)}&action=users`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 rounded-lg text-[11px] font-bold border border-purple-200 cursor-pointer no-underline transition hover:scale-105 active:scale-95 shadow-2xs"
+                                            title={`Abrir gestión de usuarios de ${company.name} en una nueva pestaña`}
+                                          >
+                                            <span>👥</span>
+                                            <span>{tUsers.length} Usuarios</span>
+                                            <span className="text-[10px] opacity-60">↗</span>
+                                          </a>
+                                        </td>
+
+                                        <td className="p-3 whitespace-nowrap">
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                            hasInvoicing
+                                              ? "bg-emerald-100 text-emerald-800"
+                                              : "bg-slate-100 text-slate-400"
+                                          }`}>
+                                            {hasInvoicing ? "🟢 Conectada" : "⚪ No config."}
+                                          </span>
+                                        </td>
+
+                                        <td className="p-3 text-right whitespace-nowrap">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {isMasterAdmin && (
+                                              <a
+                                                href={`/?tenant=${encodeURIComponent(company.id)}&action=config`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-xs font-bold border border-slate-200 cursor-pointer no-underline transition hover:scale-105 active:scale-95 shadow-2xs"
+                                                title={`Configuración de ${company.name} (Abrir en nueva pestaña)`}
+                                              >
+                                                <span>⚙️</span>
+                                                <span className="text-[9px] opacity-60 ml-0.5">↗</span>
+                                              </a>
+                                            )}
+                                            <a
+                                              href={`/?tenant=${encodeURIComponent(company.id)}&action=login`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black cursor-pointer border-none shadow-xs uppercase tracking-wider no-underline transition hover:scale-105 active:scale-95"
+                                              style={{ backgroundColor: "#059669" }}
+                                              title={`Entrar a ${company.name} en una nueva pestaña`}
+                                            >
+                                              <span>⚡ Entrar</span>
+                                              <span className="text-[10px] opacity-80">↗</span>
+                                            </a>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // =========================================================================
+                      // VISTA 1: DIRECTORIO CLÁSICO (INTACTO Y PRESERVADO AL 100%)
+                      // =========================================================================
                       if (isMasterAdmin && !activeOwnerFilter) {
                         // Render Propietarios list as cards
                         return (
@@ -1314,10 +1845,10 @@ return (
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                              {customOwners.map((owner) => {
-                                const ownerBranches = COMPANY_CATALOG.filter(c => c.ownerKey === owner.key);
-                                const numMatrices = ownerBranches.filter(c => c.type === 'Matriz').length;
-                                const numSucursales = ownerBranches.filter(c => c.type !== 'Matriz').length;
+                              {customOwners.map((owner: any) => {
+                                const ownerBranches = COMPANY_CATALOG.filter((c: any) => c.ownerKey === owner.key);
+                                const numMatrices = ownerBranches.filter((c: any) => c.type === 'Matriz').length;
+                                const numSucursales = ownerBranches.filter((c: any) => c.type !== 'Matriz').length;
                                 const pin = customOwnerPins[owner.key] || "No asig.";
 
                                 const colHex = 
@@ -1396,9 +1927,9 @@ return (
 
                                       <div className="pt-2 border-t border-slate-100 space-y-1 text-[12.5px] text-slate-500 font-semibold">
                                         <div className="flex items-center justify-between">
-                                          <span>🔑 PIN Acceso:</span>
+                                          <span>🔒 Acceso:</span>
                                           <span className="font-mono bg-white text-slate-850 px-1.5 py-0.5 rounded text-[11.5px] font-black tracking-widest border border-slate-200">
-                                            {pin}
+                                            Protegido
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between">
@@ -1424,8 +1955,8 @@ return (
                         );
                       }
 
-                      // Otherwise, filter and display matrices and sucursales
-                      const filteredCompanies = COMPANY_CATALOG.filter((company) => {
+                      // Otherwise, filter and display matrices and sucursales in Vista 1
+                      const filteredCompanies = COMPANY_CATALOG.filter((company: any) => {
                         const conf = companiesConfig[company.id];
                         const isVisible = conf ? conf.visible : true;
                         if (!isVisible) return false;
@@ -1436,8 +1967,8 @@ return (
                         return true;
                       });
 
-                      const matrices = filteredCompanies.filter(c => c.type === "Matriz");
-                      const sucursales = filteredCompanies.filter(c => c.type !== "Matriz");
+                      const matrices = filteredCompanies.filter((c: any) => c.type === "Matriz");
+                      const sucursales = filteredCompanies.filter((c: any) => c.type !== "Matriz");
 
                       return (
                         <div className="space-y-6 text-left">
@@ -1449,7 +1980,7 @@ return (
                                 type="button"
                                 onClick={() => {
                                   resetTenantForm();
-                                  const ownerObj = customOwners.find(o => o.key === activeOwnerFilter);
+                                  const ownerObj = customOwners.find((o: any) => o.key === activeOwnerFilter);
                                   if (ownerObj) {
                                     setFormTenantOwnerKey(ownerObj.key);
                                     setFormTenantPropietario(ownerObj.name);
@@ -1475,7 +2006,7 @@ return (
                                 🏠 Casa Matriz / Base de Operaciones Principal
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {matrices.map((company) => {
+                                {matrices.map((company: any) => {
                                   const isSelected = selectedTenant?.id === company.id;
                                   return (
                                     <div
@@ -1496,7 +2027,7 @@ return (
                                         <div className="flex items-center justify-between">
                                           <div className="flex items-center gap-2.5">
                                             {(() => {
-                                              const ownerObj = customOwners.find(o => o.key === company.ownerKey);
+                                              const ownerObj = customOwners.find((o: any) => o.key === company.ownerKey);
                                               const logoToUse = company.logoUrl || ownerObj?.logo;
                                               return (
                                                 <div className="relative group shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1523,11 +2054,11 @@ return (
                                                             const reader = new FileReader();
                                                             reader.onloadend = async () => {
                                                               const base64 = reader.result as string;
-                                                              const idx = COMPANY_CATALOG.findIndex(c => c.id === company.id);
+                                                              const idx = COMPANY_CATALOG.findIndex((c: any) => c.id === company.id);
                                                               if (idx !== -1) {
                                                                 COMPANY_CATALOG[idx] = { ...COMPANY_CATALOG[idx], logoUrl: base64 };
                                                                 localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
-                                                                setTenantsVersion(prev => prev + 1);
+                                                                setTenantsVersion((prev: number) => prev + 1);
                                                                 
                                                                 try {
                                                                   await saveCompanyConfigInFirebase(company.id, {
@@ -1542,7 +2073,7 @@ return (
                                                                   console.error("Firebase error:", err);
                                                                   triggerAppNotification("⚠️ Error Firebase", "No se pudo sincronizar, pero se guardó localmente.", "warning");
                                                                 }
-                                                              }
+                                                               }
                                                             };
                                                             reader.readAsDataURL(file);
                                                           }
@@ -1642,7 +2173,7 @@ return (
                                 📍 Puntos de Venta y Sucursales de la Red
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {sucursales.map((company) => {
+                                {sucursales.map((company: any) => {
                                   const isSelected = selectedTenant?.id === company.id;
                                   return (
                                     <div
@@ -1663,7 +2194,7 @@ return (
                                         <div className="flex items-center justify-between">
                                           <div className="flex items-center gap-2.5">
                                             {(() => {
-                                              const ownerObj = customOwners.find(o => o.key === company.ownerKey);
+                                              const ownerObj = customOwners.find((o: any) => o.key === company.ownerKey);
                                               const logoToUse = company.logoUrl || ownerObj?.logo;
                                               return (
                                                 <div className="relative group shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1690,11 +2221,11 @@ return (
                                                             const reader = new FileReader();
                                                             reader.onloadend = async () => {
                                                               const base64 = reader.result as string;
-                                                              const idx = COMPANY_CATALOG.findIndex(c => c.id === company.id);
+                                                              const idx = COMPANY_CATALOG.findIndex((c: any) => c.id === company.id);
                                                               if (idx !== -1) {
                                                                 COMPANY_CATALOG[idx] = { ...COMPANY_CATALOG[idx], logoUrl: base64 };
                                                                 localStorage.setItem("cocinet_custom_tenants_v3", JSON.stringify(COMPANY_CATALOG));
-                                                                setTenantsVersion(prev => prev + 1);
+                                                                setTenantsVersion((prev: number) => prev + 1);
                                                                 
                                                                 try {
                                                                   await saveCompanyConfigInFirebase(company.id, {
@@ -1750,7 +2281,7 @@ return (
                                                 e.stopPropagation();
                                                 handleEditTenantClick(company);
                                               }}
-                                              className="w-8 h-8 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center text-xs border border-amber-250 cursor-pointer transition-all font-bold"
+                                              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs border border-slate-250 cursor-pointer transition-all font-bold"
                                               title="Modificar Inquilino"
                                             >
                                               ✏️
@@ -1922,7 +2453,7 @@ return (
                       pattern="[0-9]*"
                       value={newMasterPinInput}
                       onChange={(e) => setNewMasterPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                      placeholder="Ej. 2052"
+                      placeholder="••••"
                       className="w-full text-center text-2xl font-mono font-black tracking-widest px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 rounded-xl outline-none transition-all"
                     />
                   </div>

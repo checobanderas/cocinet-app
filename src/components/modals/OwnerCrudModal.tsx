@@ -109,9 +109,11 @@ export const OwnerCrudModal: React.FC<OwnerCrudModalProps> = ({
                 PIN de Acceso Propietario (4 dígitos)
               </label>
               <input
-                type="text"
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 maxLength={4}
-                placeholder="Ej: 2010"
+                placeholder="••••"
                 value={formOwnerPin}
                 onChange={(e) => setFormOwnerPin(e.target.value.replace(/\D/g, ""))}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold font-mono text-slate-700 focus:outline-none focus:border-indigo-500 transition-all tracking-widest"
@@ -125,9 +127,11 @@ export const OwnerCrudModal: React.FC<OwnerCrudModalProps> = ({
                 <span className="text-[9.5px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full font-extrabold">Rol Supervisor</span>
               </label>
               <input
-                type="text"
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 maxLength={4}
-                placeholder="Ej: 2011"
+                placeholder="••••"
                 value={formOwnerSupervisorPin}
                 onChange={(e) => setFormOwnerSupervisorPin(e.target.value.replace(/\D/g, ""))}
                 className="w-full bg-indigo-50/50 border border-indigo-200 rounded-xl px-4 py-3 text-xs font-bold font-mono text-indigo-900 focus:outline-none focus:border-indigo-500 transition-all tracking-widest"

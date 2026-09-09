@@ -188,18 +188,27 @@ export default defineConfig(({mode}) => {
         manifest: {
           name: 'COCINET Pro 2026',
           short_name: 'COCINET',
-          description: 'Sistema de gestión inteligente con sincronización real-time',
+          description: 'Sistema de gestión gastronómico inteligente para restaurantes, taquerías y bares',
           theme_color: '#3b82f6',
+          background_color: '#0f172a',
           icons: [
             {
-              src: 'https://img.icons8.com/fluency/192/restaurant.png',
+              src: '/restaurant-192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             },
             {
-              src: 'https://img.icons8.com/fluency/512/restaurant.png',
+              src: '/restaurant-512.png',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/restaurant.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
             }
           ]
         }

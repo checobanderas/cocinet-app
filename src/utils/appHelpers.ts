@@ -385,8 +385,88 @@ export const initializeUsersDatabase = (): User[] => {
 };
 
 export const getTenantUsers = (tenantId: string): User[] => {
+  if (!tenantId) return [];
   const allUsers = initializeUsersDatabase();
-  return allUsers.filter((u) => u.tenantId === tenantId);
+  const existing = allUsers.filter((u) => u.tenantId === tenantId);
+  if (existing.length > 0) return existing;
+
+  // Si es un inquilino nuevo que aún no estaba en el caché de usuarios, generarlos al instante
+  const fullFresh = getDefaultUsersList();
+  const freshForTenant = fullFresh.filter((u) => u.tenantId === tenantId);
+  if (freshForTenant.length > 0) {
+    try {
+      const merged = [...allUsers.filter((u) => u.tenantId !== tenantId), ...freshForTenant];
+      localStorage.setItem("cocinet_users_db", JSON.stringify(merged));
+    } catch (e) {}
+    return freshForTenant;
+  }
+
+  // Respaldo de seguridad inmediato con roles estándar si el catálogo aún se está sincronizando
+  const fallbackUsers: User[] = [
+    {
+      id: `${tenantId}-admin`,
+      name: "Administrador 👑",
+      role: "admin",
+      pin: "2026",
+      avatar: "fa-solid fa-user-shield",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-manager`,
+      name: "Gerente 👔",
+      role: "admin",
+      pin: "1526",
+      avatar: "fa-solid fa-user-tie",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-sistemas`,
+      name: "Sistemas ⚙️",
+      role: "admin",
+      pin: "4020",
+      avatar: "fa-solid fa-laptop-code",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-cajero-1`,
+      name: "Cajero 1 💵",
+      role: "cajero",
+      pin: "1026",
+      avatar: "fa-solid fa-cash-register",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-cajero-2`,
+      name: "Cajero 2 💳",
+      role: "cajero",
+      pin: "1126",
+      avatar: "fa-solid fa-credit-card",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-mesero-main`,
+      name: "Mesero 1 🏃",
+      role: "mesero",
+      pin: "0126",
+      avatar: "fa-solid fa-bell-concierge",
+      tenantId: tenantId,
+    },
+    {
+      id: `${tenantId}-mesero-1`,
+      name: "Mesero 2 🚴",
+      role: "mesero",
+      pin: "0226",
+      avatar: "fa-solid fa-person-walking",
+      tenantId: tenantId,
+    }
+  ];
+
+  try {
+    const merged = [...allUsers, ...fallbackUsers];
+    localStorage.setItem("cocinet_users_db", JSON.stringify(merged));
+  } catch (e) {}
+
+  return fallbackUsers;
 };
 
 export const SUBCATEGORY_ORDER = [

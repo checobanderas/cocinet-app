@@ -160,43 +160,36 @@ export const EditFondoModal: React.FC<EditFondoModalProps> = ({
                     try {
                       if (sessionToRender) {
                         // 1. Actualizar Sesión actual
-                        await updateCashierSessionInFirebase(sessionToRender.id, {
+                        const updatedSession = {
                           ...sessionToRender,
                           dotacionInicial: newVal,
-                          lastUpdate: getMexicoISOString()
-                        });
-                        setCashierSessions((prev) => {
-                          const exists = prev.some((s) => s.id === sessionToRender.id);
-                          if (exists) {
-                            return prev.map((s) => (s.id === sessionToRender.id ? { ...s, dotacionInicial: newVal, updatedAt: getMexicoISOString() } : s));
-                          } else {
-                            return [...prev, { ...sessionToRender, dotacionInicial: newVal, updatedAt: getMexicoISOString() }];
-                          }
-                        });
+                          lastUpdate: getMexicoISOString(),
+                          updatedAt: getMexicoISOString()
+                        };
 
-                        // 2. Actualizar Tenant (Matriz) para que sea el valor por defecto en futuros turnos
-                        if (selectedTenant) {
-                          const updatedTenant = {
-                            ...selectedTenant,
-                            defaultStartingCash: newVal
-                          };
-                          await addTenantToFirebase(updatedTenant);
-                          setSelectedTenant(updatedTenant);
+                        await updateCashierSessionInFirebase(sessionToRender.id, updatedSession);
+
+                        if (setCashierSessions) {
+                          setCashierSessions((prev: any[]) => {
+                            const exists = prev.some((s) => s.id === sessionToRender.id);
+                            if (exists) {
+                              return prev.map((s) => (s.id === sessionToRender.id ? updatedSession : s));
+                            } else {
+                              return [...prev, updatedSession];
+                            }
+                          });
                         }
 
-                        // 3. Actualizar la sesión en el estado local si es la que se está visualizando
+                        // 2. Actualizar la sesión en el estado local si es la que se está visualizando
                         if (corteTablaSessionSelected && corteTablaSessionSelected.id === sessionToRender.id) {
-                          const updatedSess = {
-                            ...corteTablaSessionSelected,
-                            dotacionInicial: newVal
-                          };
-                          setCorteTablaSessionSelected(updatedSess as any);
-                          // Sincronizar también el fondo de apertura global para el corte X si aplica
+                          setCorteTablaSessionSelected(updatedSession as any);
+                        }
+                        if (setCorteXFondoApertura) {
                           setCorteXFondoApertura(newVal);
                         }
 
                         setShowEditFondoModal(false);
-                        triggerAppNotification("💰 Fondo Guardado", `El fondo inicial ha sido corregido a $${newVal.toFixed(2)} y guardado como predeterminado. ⚡`, "success");
+                        triggerAppNotification("💰 Fondo Guardado", `El fondo inicial ha sido corregido a $${newVal.toFixed(2)}. ⚡`, "success");
                       }
                     } catch (err) {
                       console.error("Error actualizando fondo:", err);

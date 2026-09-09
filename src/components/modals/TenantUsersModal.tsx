@@ -246,6 +246,28 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
       }
     };
 
+    const handleDirectLogin = (user: any) => {
+      const publicBase = (typeof window !== "undefined" && window.location.origin && window.location.origin.startsWith("https://") && !window.location.origin.includes("localhost"))
+        ? window.location.origin
+        : "https://cocinet-prueba.web.app";
+      const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
+      const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
+      const directUrl = `${publicBase}${cleanPath}?tenant=${encodeURIComponent(modalTenant?.id || 'tenant-1')}&token=${encodeURIComponent(user.id)}&direct=1`;
+
+      try {
+        if (modalTenant) {
+          localStorage.setItem("pos_selected_tenant", JSON.stringify(modalTenant));
+        }
+      } catch (e) {}
+
+      window.open(directUrl, "_blank");
+      triggerAppNotification(
+        "⚡ Acceso Directo Iniciado",
+        `Abriendo sesión activa para ${user.name} (${user.role.toUpperCase()}) en ${modalTenant?.name || modalTenant?.sucursalDefault || modalTenant?.id || 'Sucursal'}...`,
+        "success"
+      );
+    };
+
     const handleShareAccessWA = async (user: any, accessLink?: string) => {
       const phoneTarget = formatMexicoPhone(user.phone || "");
       if (!phoneTarget) {
@@ -258,7 +280,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
         : "https://cocinet-prueba.web.app";
       const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
       const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
-      const cleanAccessLink = accessLink || `${publicBase}${cleanPath}?tenant=${modalTenant?.id || 'tenant-1'}`;
+      const cleanAccessLink = accessLink || `${publicBase}${cleanPath}?tenant=${encodeURIComponent(modalTenant?.id || 'tenant-1')}&token=${encodeURIComponent(user.id)}&direct=1`;
 
       const msg = `Hola ${user.name}! 👋\n\n🔑 *Tus Credenciales de Acceso a Cocinet Pro:*\n🏪 *Sucursal:* ${modalTenant?.name || "Cocinet"}\n👤 *Usuario / Rol:* ${user.name} (${user.role.toUpperCase()})\n🔢 *Tu PIN / Contraseña:* *${user.pin || "Sin PIN asignado"}*\n\n🔗 *Enlace para ingresar al Sistema:*\n\n${cleanAccessLink}\n\n⚠️ *IMPORTANTE:* _No compartas tu contraseña para seguridad de la captura del sistema._`;
 
@@ -684,7 +706,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[1150px]">
+                <table className="w-full border-collapse text-left text-xs text-slate-600 min-w-[1240px]">
                   <thead>
                     <tr className="bg-slate-900 text-white border-b border-slate-200 font-bold text-[11px]">
                       <th className="py-2.5 px-2.5 w-[40px] text-center">
@@ -704,7 +726,8 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                       <th className="py-2.5 px-2.5 w-[125px]">Teléfono 📱</th>
                       <th className="py-2.5 px-2.5 w-[135px]">Horario Reporte ⏰</th>
                       <th className="py-2.5 px-2.5 w-[220px] text-center">Mensajes y Pruebas 🚀</th>
-                      <th className="py-2.5 px-2.5 w-[140px] text-center">Compartir Acceso</th>
+                      <th className="py-2.5 px-2.5 w-[140px] text-center">Compartir Acceso 🔗</th>
+                      <th className="py-2.5 px-2.5 w-[95px] text-center">Entrar ⚡</th>
                       <th className="py-2.5 px-2.5 w-[65px] text-center">Acción</th>
                     </tr>
                   </thead>
@@ -718,7 +741,7 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                         : "https://cocinet-prueba.web.app";
                       const rawPath = (typeof window !== "undefined" && window.location.pathname) ? window.location.pathname : "/";
                       const cleanPath = rawPath.endsWith("/") ? rawPath : `${rawPath}/`;
-                      const link = `${publicBase}${cleanPath}?tenant=${modalTenant.id}`;
+                      const directLink = `${publicBase}${cleanPath}?tenant=${encodeURIComponent(modalTenant.id)}&token=${encodeURIComponent(user.id)}&direct=1`;
                       
                       return (
                         <tr key={user.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50/50'}`}>
@@ -918,10 +941,10 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                                 type="button"
                                 onClick={async () => {
                                   try {
-                                    await navigator.clipboard.writeText(link);
+                                    await navigator.clipboard.writeText(directLink);
                                   } catch (err) {
                                     const textarea = document.createElement("textarea");
-                                    textarea.value = link;
+                                    textarea.value = directLink;
                                     document.body.appendChild(textarea);
                                     textarea.select();
                                     document.execCommand("copy");
@@ -935,19 +958,32 @@ export const TenantUsersModal: React.FC<TenantUsersModalProps> = ({
                                   );
                                 }}
                                 className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
-                                title="Copiar enlace directo de acceso"
+                                title="Copiar enlace directo ya autenticado para este usuario"
                               >
                                 📋 Copiar
                               </button>
-                               <button
+                              <button
                                 type="button"
-                                onClick={() => handleShareAccessWA(user, link)}
+                                onClick={() => handleShareAccessWA(user, directLink)}
                                 className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition border-none"
                                 title="Enviar credenciales de acceso por WhatsApp Silencioso"
                               >
                                 🟢 Acceso
                               </button>
                             </div>
+                          </td>
+
+                          {/* Botón de Entrar Directo con este Usuario */}
+                          <td className="py-2 px-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDirectLogin(user)}
+                              className="px-2 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-lg text-[10px] font-black flex items-center justify-center gap-1 cursor-pointer transition shadow-xs hover:shadow-md border-none w-full active:scale-95"
+                              title={`Entrar al sistema ya logueado como ${user.name} (${user.role.toUpperCase()}) en ${modalTenant?.name || modalTenant?.id}`}
+                            >
+                              <span>⚡ Entrar</span>
+                              <span className="text-[11px]">🚪</span>
+                            </button>
                           </td>
 
                           {/* Action (Delete) */}

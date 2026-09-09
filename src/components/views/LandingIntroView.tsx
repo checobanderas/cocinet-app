@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
+import { resetToDefaultManifest } from '../../services/pwaTerminalService';
 
 interface LandingIntroViewProps {
   onEnterLogin: () => void;
@@ -13,6 +14,10 @@ export const LandingIntroView: React.FC<LandingIntroViewProps> = ({
   resolvedTenantName,
   neutralPlatformLogo = "/cocinet-logo.png",
 }) => {
+  React.useEffect(() => {
+    resetToDefaultManifest();
+  }, []);
+
   const phoneNumber = "9511273796";
   const [showQuoteModal, setShowQuoteModal] = React.useState(false);
   const [clientContactName, setClientContactName] = React.useState("");
@@ -212,31 +217,14 @@ Hemos recibido tu solicitud de cotización para *${businessName.trim() || "tu ne
           </button>
         </div>
 
-        {/* 🎬 VIDEO SHOWCASE HERO (Ambiente Alegre de Servicio y Cocina en Acción) */}
+        {/* 🎬 HERO SHOWCASE (Ambiente Alegre de Servicio y Cocina en Acción) */}
         <div className="relative max-w-4xl mx-auto mt-6 rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-slate-900">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            poster="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80"
+          <img
+            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80"
+            alt="Ambiente de restaurante alegre COCINET"
             className="w-full h-64 sm:h-96 object-cover brightness-95"
-          >
-            <source
-              src="https://cdn.coverr.co/videos/coverr-a-chef-preparing-a-dish-in-a-kitchen-9005/1080p.mp4"
-              type="video/mp4"
-            />
-            <source
-              src="https://assets.mixkit.co/videos/preview/mixkit-chef-cooking-in-a-busy-kitchen-41662-large.mp4"
-              type="video/mp4"
-            />
-            {/* Fallback de imagen si no carga el video */}
-            <img
-              src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80"
-              alt="Ambiente de restaurante alegre COCINET"
-              className="w-full h-full object-cover"
-            />
-          </video>
+            loading="eager"
+          />
 
           {/* Overlay informativo con métricas en tiempo real */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30 flex flex-col justify-between p-4 sm:p-6 text-left pointer-events-none">

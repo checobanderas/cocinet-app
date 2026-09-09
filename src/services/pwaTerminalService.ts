@@ -40,27 +40,27 @@ function createSvgAvatarIcon(avatar: string, bgColor: string): string {
 }
 
 /**
- * Resuelve el mejor icono disponible para el tenant (logoUrl, logo del dueño o avatar SVG)
+ * Resuelve el mejor icono disponible para el tenant (logoUrl, logo del dueño o icono restaurante)
  */
 export function resolveTenantIcon(tenant: CompanyTenant): string {
-  if (tenant.logoUrl && tenant.logoUrl.trim() !== "") {
-    return tenant.logoUrl;
+  if (tenant.logoUrl && tenant.logoUrl.trim() !== "" && (tenant.logoUrl.startsWith("http") || tenant.logoUrl.startsWith("/"))) {
+    return tenant.logoUrl.trim();
   }
-  if ((tenant as any).logo && (tenant as any).logo.trim() !== "") {
-    return (tenant as any).logo;
+  if ((tenant as any).logo && (tenant as any).logo.trim() !== "" && ((tenant as any).logo.startsWith("http") || (tenant as any).logo.startsWith("/"))) {
+    return (tenant as any).logo.trim();
   }
   try {
     const cachedOwnersRaw = localStorage.getItem("cocinet_custom_owners_v3");
     if (cachedOwnersRaw && tenant.ownerKey) {
       const ownersList = JSON.parse(cachedOwnersRaw);
       const ownerObj = ownersList.find((o: any) => o.key === tenant.ownerKey);
-      if (ownerObj && ownerObj.logo) {
-        return ownerObj.logo;
+      if (ownerObj && ownerObj.logo && (ownerObj.logo.startsWith("http") || ownerObj.logo.startsWith("/"))) {
+        return ownerObj.logo.trim();
       }
     }
   } catch (e) {}
 
-  return createSvgAvatarIcon(tenant.avatar || "🍽️", tenant.accentColor || "#2563eb");
+  return "/restaurant-512.png";
 }
 
 /**
@@ -130,10 +130,54 @@ export function updatePwaManifestForTenant(tenant: CompanyTenant): void {
     const tenantName = tenant.name || tenant.sucursalDefault || "COCINET";
     const appFullName = `COCINET - ${tenantName}`;
     const themeColor = tenant.accentColor || "#0f172a";
-    const tenantIcon = resolveTenantIcon(tenant);
+    let tenantIcon = resolveTenantIcon(tenant);
 
-    // URL HTTP canónica que Edge / Chrome reconocen 100% como PWA instalable
-    const canonicalManifestUrl = `/manifest-pwa.json?tenant=${encodeURIComponent(tenantParam)}&name=${encodeURIComponent(tenantName)}&color=${encodeURIComponent(themeColor)}${tenantIcon && tenantIcon.startsWith("http") ? `&logo=${encodeURIComponent(tenantIcon)}` : ""}`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://cocinet-prueba.web.app";
+    const absoluteIcon512 = tenantIcon.startsWith("http") ? tenantIcon : `${origin}${tenantIcon.startsWith("/") ? tenantIcon : `/${tenantIcon}`}`;
+    const absoluteRestaurant512 = `${origin}/restaurant-512.png`;
+    const absoluteRestaurant192 = `${origin}/restaurant-192.png`;
+
+    // Generar Manifest dinámico como Blob para compatibilidad 100% en Edge y Chrome Windows
+    const manifestData = {
+      id: `cocinet-pwa-${tenantParam || 'default'}`,
+      name: appFullName,
+      short_name: tenantName.length > 12 ? tenantName.slice(0, 12) : tenantName,
+      description: `Sistema punto de venta gastronómico inteligente COCINET Pro para ${appFullName}`,
+      start_url: `/?tenant=${encodeURIComponent(tenantParam)}`,
+      scope: '/',
+      display: 'standalone',
+      background_color: '#0f172a',
+      theme_color: themeColor,
+      orientation: 'portrait',
+      icons: [
+        {
+          src: absoluteIcon512,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any maskable'
+        },
+        {
+          src: absoluteRestaurant192,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any maskable'
+        },
+        {
+          src: absoluteRestaurant512,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any'
+        }
+      ]
+    };
+
+    let manifestHref = '/manifest.json';
+    try {
+      const blob = new Blob([JSON.stringify(manifestData, null, 2)], { type: "application/manifest+json" });
+      manifestHref = URL.createObjectURL(blob);
+    } catch (e) {
+      manifestHref = '/manifest.json';
+    }
 
     let manifestLink = document.getElementById("pwa-manifest-link") as HTMLLinkElement | null;
     if (!manifestLink) {
@@ -144,27 +188,37 @@ export function updatePwaManifestForTenant(tenant: CompanyTenant): void {
     }
 
     if (manifestLink) {
-      manifestLink.href = canonicalManifestUrl;
+      manifestLink.href = manifestHref;
     } else {
       const newLink = document.createElement("link");
       newLink.id = "pwa-manifest-link";
       newLink.rel = "manifest";
-      newLink.href = canonicalManifestUrl;
+      newLink.href = manifestHref;
       document.head.appendChild(newLink);
     }
 
     // Actualizar icono de pestaña y de Windows / Apple
     const iconLink = (document.getElementById("pwa-icon-link") || document.querySelector('link[rel="icon"]')) as HTMLLinkElement | null;
     if (iconLink) {
-      iconLink.href = tenantIcon;
+      iconLink.href = absoluteIcon512;
     }
     const appleIconLink = (document.getElementById("pwa-apple-icon-link") || document.querySelector('link[rel="apple-touch-icon"]')) as HTMLLinkElement | null;
     if (appleIconLink) {
-      appleIconLink.href = tenantIcon;
+      appleIconLink.href = absoluteIcon512;
     }
 
-    document.title = appFullName;
-    console.log(`✅ [PWA Service] Manifiesto canónico aplicado para: ${appFullName} -> ${canonicalManifestUrl}`);
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const action = (urlParams?.get("action") || urlParams?.get("modo") || urlParams?.get("view") || "").toLowerCase();
+    if (action === "config" || action === "edit" || action === "settings") {
+      document.title = `⚙️ Configurando ${tenantName} | COCINET`;
+    } else if (action === "users" || action === "usuarios") {
+      document.title = `👥 Usuarios: ${tenantName} | COCINET`;
+    } else if (action === "login") {
+      document.title = `🍽️ ${tenantName} | COCINET`;
+    } else {
+      document.title = appFullName;
+    }
+    console.log(`✅ [PWA Service] Manifiesto con icono aplicado para: ${document.title}`);
   } catch (err) {
     console.error("Error actualizando manifest dinámico:", err);
   }
@@ -177,7 +231,7 @@ export function resetToDefaultManifest(): void {
   if (typeof document === "undefined") return;
   const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   const defaultManifest = isDev ? "/manifest-dev.json" : "/manifest.json";
-  const defaultIcon = isDev ? "https://img.icons8.com/plasticine/128/restaurant.png" : "https://img.icons8.com/fluency/128/restaurant.png";
+  const defaultIcon = "/restaurant-512.png";
 
   let manifestLink = document.getElementById("pwa-manifest-link") as HTMLLinkElement | null;
   if (!manifestLink) {
@@ -187,10 +241,16 @@ export function resetToDefaultManifest(): void {
     manifestLink.href = defaultManifest;
   }
 
-  const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-  if (iconLink) iconLink.href = defaultIcon;
+  const iconLink = (document.getElementById("pwa-icon-link") || document.querySelector('link[rel="icon"]')) as HTMLLinkElement | null;
+  if (iconLink) {
+    iconLink.href = defaultIcon;
+  }
+  const appleIconLink = (document.getElementById("pwa-apple-icon-link") || document.querySelector('link[rel="apple-touch-icon"]')) as HTMLLinkElement | null;
+  if (appleIconLink) {
+    appleIconLink.href = defaultIcon;
+  }
 
-  document.title = isDev ? "COCINET [DEV]" : "COCINET Pro Version 2026";
+  document.title = "COCINET - Sistema Gastronómico";
 }
 
 /**

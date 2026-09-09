@@ -1,4 +1,4 @@
-import { updateCashierSessionInFirebase } from '../../utils/firestore';
+import { getMexicoISOString, updateCashierSessionInFirebase } from '../../utils/firestore';
 import React from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonIcon, IonItem, IonLabel, IonInput } from '@ionic/react';
 import { closeOutline, printOutline } from 'ionicons/icons';
@@ -43,6 +43,8 @@ interface TablaArqueoModalProps {
   tablaArqM2: any;
   tablaArqM5: any;
   triggerAppNotification: any;
+  setCashierSessions?: any;
+  setCorteTablaSessionSelected?: any;
 }
 
 export const TablaArqueoModal: React.FC<TablaArqueoModalProps> = ({
@@ -54,7 +56,9 @@ export const TablaArqueoModal: React.FC<TablaArqueoModalProps> = ({
   estimatedCashInBox = 0,
   tablaArqueoTotalMonedas = 0,
   tablaArqueoTotal = 0,
-  sessionToRender
+  sessionToRender,
+  setCashierSessions,
+  setCorteTablaSessionSelected
 }) => {
   return (
           <IonModal
@@ -436,18 +440,44 @@ export const TablaArqueoModal: React.FC<TablaArqueoModalProps> = ({
                           onClick={async () => {
                             try {
                               if (sessionToRender) {
-                                await updateCashierSessionInFirebase(
-                                  sessionToRender.id,
-                                  {
-                                    ...sessionToRender,
-                                    arqueoTotal: tablaArqueoTotal,
-                                    arqueoBilletes: tablaArqueoTotalBilletes,
-                                    arqueoMonedas: tablaArqueoTotalMonedas,
-                                    estimatedCash: estimatedCashInBox,
-                                    diferencia: diferenciaCaja,
-                                  }
-                                );
-                                triggerAppNotification("Arqueo 📊", "Conteo físico guardado correctamente. ✅", "success");
+                                const denoms = {
+                                  b1000: String(tablaArq1000 || "0"),
+                                  b500: String(tablaArq500 || "0"),
+                                  b200: String(tablaArq200 || "0"),
+                                  b100: String(tablaArq100 || "0"),
+                                  b50: String(tablaArq50 || "0"),
+                                  b20: String(tablaArq20 || "0"),
+                                  m10: String(tablaArqM10 || "0"),
+                                  m5: String(tablaArqM5 || "0"),
+                                  m2: String(tablaArqM2 || "0"),
+                                  m1: String(tablaArqM1 || "0"),
+                                  m05: String(tablaArqM05 || "0"),
+                                };
+
+                                const updatedSession = {
+                                  ...sessionToRender,
+                                  arqueoTotal: tablaArqueoTotal,
+                                  arqueoBilletes: tablaArqueoTotalBilletes,
+                                  arqueoMonedas: tablaArqueoTotalMonedas,
+                                  estimatedCash: estimatedCashInBox,
+                                  diferencia: diferenciaCaja,
+                                  denominations: denoms,
+                                  lastUpdate: getMexicoISOString(),
+                                  updatedAt: getMexicoISOString()
+                                };
+
+                                await updateCashierSessionInFirebase(sessionToRender.id, updatedSession);
+
+                                if (setCashierSessions) {
+                                  setCashierSessions((prev: any[]) =>
+                                    prev.map((s) => (s.id === sessionToRender.id ? updatedSession : s))
+                                  );
+                                }
+                                if (setCorteTablaSessionSelected) {
+                                  setCorteTablaSessionSelected(updatedSession);
+                                }
+
+                                triggerAppNotification("Arqueo 📊", `Conteo físico de $${tablaArqueoTotal.toFixed(2)} guardado correctamente. ✅`, "success");
                               }
                             } catch (err) {
                               console.error("Error saving physical count:", err);

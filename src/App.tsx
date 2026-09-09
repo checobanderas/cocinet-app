@@ -11,6 +11,7 @@ import { executeImportTenantMenu, executeReplicateMenuToTenants } from "./servic
 import {
   getLockedTerminalTenantId,
   updatePwaManifestForTenant,
+  resetToDefaultManifest,
   isTerminalLocked,
   lockTerminalToTenant,
   unlockTerminal
@@ -68,6 +69,7 @@ import { ExpenseModal } from './components/modals/ExpenseModal';
 import { ArqueoFormModal } from './components/modals/ArqueoFormModal';
 import { FolioModal } from './components/modals/FolioModal';
 import { InvoicePhoneModal } from './components/modals/InvoicePhoneModal';
+import { InvoiceModal } from './components/modals/InvoiceModal';
 import { SupplierPurchaseModal } from './components/modals/SupplierPurchaseModal';
 import { PrintPreviewModal } from './components/modals/PrintPreviewModal';
 import { TablaArqueoModal } from './components/modals/TablaArqueoModal';
@@ -115,6 +117,7 @@ const CustomerInvoicePortalView = React.lazy(() =>
 // Vistas de administración y reportes diferidas (bajo demanda)
 const AdminPanelView = React.lazy(() => import('./components/views/AdminPanelView').then(m => ({ default: m.AdminPanelView })));
 const ManageMenuView = React.lazy(() => import('./components/views/ManageMenuView').then(m => ({ default: m.ManageMenuView })));
+const ManageInventoryView = React.lazy(() => import('./components/views/ManageInventoryView').then(m => ({ default: m.ManageInventoryView })));
 const ReportsView = React.lazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
 const DashboardView = React.lazy(() => import('./components/views/DashboardView').then(m => ({ default: m.DashboardView })));
 const CorteNuevoView = React.lazy(() => import('./components/views/CorteNuevoView').then(m => ({ default: m.CorteNuevoView })));
@@ -932,6 +935,7 @@ export default function App() {
     } else {
       try {
         localStorage.removeItem("pos_selected_tenant");
+        resetToDefaultManifest();
       } catch (e) {}
     }
   }, [selectedTenant]);
@@ -980,17 +984,6 @@ export default function App() {
         }
       }
 
-      const reqParam = (params.get("req") || params.get("cancellation") || params.get("folio") || "").trim();
-      if (reqParam) {
-        setTargetCancellationFolio(reqParam);
-      }
-
-      const downloadParam = (params.get("download") || params.get("export") || "").trim().toLowerCase();
-      if (downloadParam === "excel" || downloadParam === "xlsx") {
-        const dayParam = (params.get("date") || params.get("day") || params.get("fecha") || "").trim();
-        setExcelDownloadDay(dayParam || "today");
-      }
-
       const actionParam = (params.get("action") || params.get("modo") || params.get("view") || "").trim().toLowerCase();
       if (actionParam === "facturacion" || actionParam === "factura") {
         setCustomerInvoicePortalData({
@@ -999,6 +992,17 @@ export default function App() {
           tenant: (params.get("tenant") || params.get("sucursal") || "").trim(),
           rfc: (params.get("rfc") || "").trim(),
         });
+      }
+
+      const reqParam = (params.get("req") || params.get("cancellation") || ((actionParam === "cancel" || actionParam === "cancellation" || actionParam === "cancelacion") ? params.get("folio") : "") || "").trim();
+      if (reqParam && actionParam !== "facturacion" && actionParam !== "factura") {
+        setTargetCancellationFolio(reqParam);
+      }
+
+      const downloadParam = (params.get("download") || params.get("export") || "").trim().toLowerCase();
+      if (downloadParam === "excel" || downloadParam === "xlsx") {
+        const dayParam = (params.get("date") || params.get("day") || params.get("fecha") || "").trim();
+        setExcelDownloadDay(dayParam || "today");
       }
 
       const ownerParam =
@@ -1126,7 +1130,8 @@ export default function App() {
                 } catch (e) {}
                 return false;
               };
-              if (!hasCustom()) {
+              const isDirectParam = params.get("direct") === "1" || params.get("direct") === "true";
+              if (!hasCustom() && !isDirectParam) {
                 setShowChangePinModal(true);
               }
 
@@ -1137,23 +1142,120 @@ export default function App() {
               );
             }
           } else {
-            // No token or invalid token: just pre-configure device to this sucursal
+            // No token or invalid token: pre-configure device to this sucursal and execute requested action
             setCurrentUser(null);
-            setIsOwnerUnlocked(false);
-            localStorage.setItem("cocinet_is_owner_unlocked", "false");
-            setIsSystemsMode(false);
-            localStorage.setItem("cocinet_is_systems", "false");
-            setRestrictedOwnerKey(null);
-            localStorage.removeItem("cocinet_restricted_owner_key");
+            setSelectedTenant(found);
+            localStorage.setItem("pos_selected_tenant", JSON.stringify(found));
 
-            setActiveOwnerFilter(found.ownerKey);
-            localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
-            setLoginSubStep("tenant");
-            triggerAppNotification(
-              "📱 Dispositivo Configurado",
-              `Este dispositivo ha sido asignado a la sucursal: ${found.name}. Seleccione su usuario para ingresar.`,
-              "success"
-            );
+            if (actionParam === "config" || actionParam === "edit" || actionParam === "settings") {
+              document.title = `⚙️ Configurando ${found.name || found.sucursalDefault} | COCINET`;
+              setIsMasterAdmin(true);
+              localStorage.setItem("pos_master_admin", "true");
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              setLoginSubStep("tenant");
+              
+              // Open Tenant Edit CRUD modal directly
+              setEditingTenant(found);
+              setFormTenantName(found.name);
+              setFormTenantRfc(found.rfc || "");
+              setFormTenantEmail(found.ownerEmail || "");
+              setFormTenantAvatar(found.avatar || "🏢");
+              setFormTenantAccentColor(found.accentColor || "#4f46e5");
+              setFormTenantSucursal(found.sucursalDefault || "");
+              setFormTenantType(found.type || "Matriz");
+              setFormTenantOwnerKey(found.ownerKey || "");
+              setFormTenantPropietario(found.propietario || "");
+              setFormTenantDireccion(found.direccion || "");
+              setFormTenantLat(found.lat ?? "");
+              setFormTenantLng(found.lng ?? "");
+              setFormTenantLogoUrl(found.logoUrl || "");
+              setFormTenantRequireInternalFolio(found.requireInternalFolio === true);
+              setFormTenantAllowEfectivo(found.allowEfectivo !== false);
+              setFormTenantAllowTarjeta(found.allowTarjeta !== false);
+              setFormTenantAllowTransferencia(found.allowTransferencia !== false);
+              setFormTenantAllowLupay(found.allowLupay !== false);
+              setFormTenantRequireCardDigits(found.requireCardDigits !== false);
+              setFormTenantCancellationTimeoutMinutes(Number(found.cancellationTimeoutMinutes) || 7);
+              setFormTenantShowFiscalData(found.showFiscalData !== false);
+              setFormTenantInvoicingApiUrl(found.invoicingApiUrl || "");
+              setShowTenantCrudModal(true);
+
+              triggerAppNotification(
+                "⚙️ Configuración del Inquilino",
+                `Panel de configuración abierto para ${found.name}.`,
+                "info"
+              );
+            } else if (actionParam === "users" || actionParam === "usuarios") {
+              document.title = `👥 Usuarios: ${found.name || found.sucursalDefault} | COCINET`;
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              setLoginSubStep("tenant");
+              setModalTenant(found);
+              setModalUsers(getTenantUsers(found.id));
+              setShowTenantUsersModal(true);
+              triggerAppNotification(
+                "👥 Gestión de Usuarios",
+                `Directorio de usuarios y roles para ${found.name}.`,
+                "info"
+              );
+            } else if (actionParam === "login" || actionParam === "pos" || actionParam === "enter") {
+              document.title = `🍽️ ${found.name || found.sucursalDefault} | COCINET`;
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
+
+              // ⚡ Automatic 1-Click Login into POS with tenant admin user
+              const tempUsers = getTenantUsers(found.id);
+              const targetUser = tempUsers.find((u) => u.id === `${found.id}-admin`) || 
+                                 tempUsers.find((u) => u.id === `${found.id}-sistemas`) ||
+                                 tempUsers.find((u) => u.role === "admin") ||
+                                 tempUsers[0];
+              if (targetUser) {
+                setCurrentUser(targetUser);
+                if (targetUser.role === "admin" || targetUser.id.endsWith("-sistemas")) {
+                  setAppMode("corte-tabla");
+                } else {
+                  setAppMode(getPreferredTablesMode());
+                }
+              } else {
+                setAppMode(getPreferredTablesMode());
+              }
+
+              setLoginSubStep("tenant");
+              triggerAppNotification(
+                "⚡ Punto de Venta Conectado",
+                `Has ingresado a la sucursal: ${found.name} ⭐ (Cargando datos en vivo)`,
+                "success"
+              );
+            } else if (actionParam === "facturacion" || actionParam === "factura") {
+              document.title = `🧾 Facturación CFDI: ${found.name || found.sucursalDefault} | COCINET`;
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
+              setLoginSubStep("tenant");
+            } else {
+              document.title = `COCINET - ${found.name || found.sucursalDefault}`;
+              setIsOwnerUnlocked(false);
+              localStorage.setItem("cocinet_is_owner_unlocked", "false");
+              setIsSystemsMode(false);
+              localStorage.setItem("cocinet_is_systems", "false");
+              setRestrictedOwnerKey(null);
+              localStorage.removeItem("cocinet_restricted_owner_key");
+
+              setActiveOwnerFilter(found.ownerKey);
+              localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
+              setLoginSubStep("tenant");
+              triggerAppNotification(
+                "📱 Dispositivo Configurado",
+                `Este dispositivo ha sido asignado a la sucursal: ${found.name}. Seleccione su usuario para ingresar.`,
+                "success"
+              );
+            }
           }
         }
       } else if (ownerParam) {
@@ -2008,6 +2110,7 @@ export default function App() {
         const tel = data?.telefono ?? selectedTenant.telefono ?? "";
         const eml = sanitizeEmail(data?.email ?? selectedTenant.email ?? "");
         const showFiscalVal = (data?.showFiscalData !== undefined ? data.showFiscalData : selectedTenant?.showFiscalData) !== false;
+        const invApiUrl = data?.invoicingApiUrl ?? selectedTenant?.invoicingApiUrl ?? "";
 
         if (data?.printerConfig) {
           saveTenantPrinterSettingsToLocal(selectedTenant.id, data.printerConfig);
@@ -2036,6 +2139,7 @@ export default function App() {
           telefono: tel,
           email: eml,
           showFiscalData: showFiscalVal,
+          invoicingApiUrl: invApiUrl,
         }));
 
         setSystemUseRawBt(u);
@@ -2050,6 +2154,7 @@ export default function App() {
         setTicketTelefono(tel);
         setTicketEmail(eml);
         setTicketShowFiscalData(showFiscalVal);
+        setTicketInvoicingApiUrl(invApiUrl);
 
         try {
           localStorage.setItem(
@@ -2067,6 +2172,7 @@ export default function App() {
               telefono: tel,
               email: eml,
               showFiscalData: showFiscalVal,
+              invoicingApiUrl: invApiUrl,
             }),
           );
           localStorage.setItem("system_use_rawbt", u ? "true" : "false");
@@ -2827,6 +2933,7 @@ export default function App() {
   const [formTenantRequireCardDigits, setFormTenantRequireCardDigits] = useState<boolean>(true);
   const [formTenantCancellationTimeoutMinutes, setFormTenantCancellationTimeoutMinutes] = useState<number>(7);
   const [formTenantShowFiscalData, setFormTenantShowFiscalData] = useState<boolean>(true);
+  const [formTenantInvoicingApiUrl, setFormTenantInvoicingApiUrl] = useState<string>("");
 
   // Tenant Transfer States (Traspaso de Inquilino inline)
   const [transferStep, setTransferStep] = useState<0 | 1 | 2>(0);
@@ -2858,6 +2965,7 @@ export default function App() {
     setFormTenantRequireCardDigits(true);
     setFormTenantCancellationTimeoutMinutes(7);
     setFormTenantShowFiscalData(true);
+    setFormTenantInvoicingApiUrl("");
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(true);
@@ -2886,6 +2994,7 @@ export default function App() {
     setFormTenantRequireCardDigits(tenant.requireCardDigits !== false);
     setFormTenantCancellationTimeoutMinutes(Number(tenant.cancellationTimeoutMinutes) || 7);
     setFormTenantShowFiscalData(tenant.showFiscalData !== false);
+    setFormTenantInvoicingApiUrl(tenant.invoicingApiUrl || "");
     setTransferStep(0);
     setTransferTargetOwnerKey("");
     setTransferIncludeBranches(tenant.type === "Matriz");
@@ -2923,6 +3032,7 @@ export default function App() {
       requireCardDigits: formTenantRequireCardDigits,
       cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
       showFiscalData: formTenantShowFiscalData !== false,
+      invoicingApiUrl: formTenantInvoicingApiUrl.trim() || editingTenant.invoicingApiUrl,
       updatedAt: getMexicoISOString(),
     };
 
@@ -3049,6 +3159,7 @@ export default function App() {
         requireCardDigits: formTenantRequireCardDigits,
         cancellationTimeoutMinutes: formTenantCancellationTimeoutMinutes || 7,
         showFiscalData: formTenantShowFiscalData !== false,
+        invoicingApiUrl: formTenantInvoicingApiUrl.trim(),
         createdAt: editingTenant?.createdAt || getMexicoISOString(),
         updatedAt: getMexicoISOString(),
       };
@@ -5732,6 +5843,9 @@ export default function App() {
   const [ticketTelefono, setTicketTelefono] = useState<string>("");
   const [ticketEmail, setTicketEmail] = useState<string>("");
   const [ticketShowFiscalData, setTicketShowFiscalData] = useState<boolean>(true);
+  const [ticketInvoicingApiUrl, setTicketInvoicingApiUrl] = useState<string>("");
+  const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
+  const [invoiceModalData, setInvoiceModalData] = useState<any>(null);
 
   const [companyConfig, setCompanyConfig] = useState<{
     businessName: string;
@@ -5739,6 +5853,7 @@ export default function App() {
     sucursal: string;
     footerMessage: string;
     geminiApiKey: string;
+    invoicingApiUrl?: string;
     regimenFiscal?: string;
     direccionFiscal?: string;
     lugarExpedicion?: string;
@@ -5761,6 +5876,7 @@ export default function App() {
             telefono: "",
             email: "",
             showFiscalData: true,
+            invoicingApiUrl: "",
             ...JSON.parse(cached),
           }
         : {
@@ -5776,6 +5892,7 @@ export default function App() {
             email: "",
             logoUrl: "",
             useRawBt: false,
+            invoicingApiUrl: "",
           };
     } catch {
       return {
@@ -5786,6 +5903,7 @@ export default function App() {
         geminiApiKey: "",
         logoUrl: "",
         useRawBt: false,
+        invoicingApiUrl: "",
       };
     }
   });
@@ -7318,7 +7436,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         openedAt: `${currentOpDay}T05:00:00.000Z`,
         closedAt: null,
         status: "open",
-        dotacionInicial: Number(selectedTenant?.defaultStartingCash || 1000),
+        dotacionInicial: Number(selectedTenant?.defaultStartingCash || 0),
         cashSales: 0,
         cardSales: 0,
         transSales: 0,
@@ -7344,7 +7462,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     if (activeSessionForCorte) {
       setCorteXFondoApertura(Number(activeSessionForCorte.dotacionInicial || 0));
     } else if (selectedTenant) {
-      setCorteXFondoApertura(Number(selectedTenant.defaultStartingCash || 1000));
+      setCorteXFondoApertura(Number(selectedTenant.defaultStartingCash || 0));
     }
   }, [activeSessionForCorte, selectedTenant]);
 
@@ -7383,16 +7501,6 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
         };
         await addCashierSessionToFirebase(newSession as any);
         setCashierSessions((prev) => [...prev, newSession as any]);
-      }
-      
-      // Also update defaultStartingCash in selectedTenant
-      if (selectedTenant) {
-        const updatedTenant = {
-          ...selectedTenant,
-          defaultStartingCash: val
-        };
-        await addTenantToFirebase(updatedTenant);
-        setSelectedTenant(updatedTenant);
       }
       
       triggerAppNotification("💰 Fondo Guardado", `El fondo de caja inicial se actualizó a $${val.toFixed(2)}`, "success");
@@ -8372,6 +8480,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       setFormTenantCancellationTimeoutMinutes={setFormTenantCancellationTimeoutMinutes}
       formTenantShowFiscalData={formTenantShowFiscalData}
       setFormTenantShowFiscalData={setFormTenantShowFiscalData}
+      formTenantInvoicingApiUrl={formTenantInvoicingApiUrl}
+      setFormTenantInvoicingApiUrl={setFormTenantInvoicingApiUrl}
       formTenantRfc={formTenantRfc}
       formTenantSucursal={formTenantSucursal}
       formTenantType={formTenantType}
@@ -9751,6 +9861,24 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     }
   };
 
+  const handleOpenCfdiInvoiceModal = (account: any) => {
+    const cleanPhone = (account?.invoicePhone || invoicePhone || "").replace(/\D/g, "").slice(-10);
+    const matchedCustomer = (customers || []).find((c: any) => 
+      (cleanPhone && (c.phone || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
+      (account?.customerName && c.name?.toLowerCase() === account.customerName?.toLowerCase())
+    );
+
+    const targetFolio = account?.folio || account?.folioInterno || account?.id || "";
+    const targetPhone = cleanPhone || (matchedCustomer?.phone || "").replace(/\D/g, "").slice(-10) || "";
+    const targetRfc = matchedCustomer?.rfc || account?.rfc || "";
+    const targetTenant = selectedTenant?.id || "";
+
+    const invoiceUrl = `/?tenant=${encodeURIComponent(targetTenant)}&action=facturacion&folio=${encodeURIComponent(targetFolio)}&phone=${encodeURIComponent(targetPhone)}&rfc=${encodeURIComponent(targetRfc)}`;
+
+    // Open in a new tab directly without modal darkening or requiring login
+    window.open(invoiceUrl, "_blank");
+  };
+
   const handleOpenInvoicePhoneModal = (targetType: "activeTable" | "closedAccount", account?: any) => {
     setPendingInvoiceTarget({ type: targetType, account });
     setInputInvoicePhone(invoicePhone || account?.invoicePhone || "");
@@ -10871,6 +10999,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       historyForCuentasTab={historyForCuentasTab}
       markAsPaid={markAsPaid}
       reprintAccount={reprintAccount}
+      handleOpenCfdiInvoiceModal={handleOpenCfdiInvoiceModal}
     />
   );
 
@@ -11938,6 +12067,7 @@ Instrucciones:
       setTicketSucursal={setTicketSucursal}
       setTicketTelefono={setTicketTelefono}
       setTicketShowFiscalData={setTicketShowFiscalData}
+      setTicketInvoicingApiUrl={setTicketInvoicingApiUrl}
       setWebsocketSyncLog={setWebsocketSyncLog}
       showCorteModal={showCorteModal}
       showResetSalesConfirm={showResetSalesConfirm}
@@ -11957,6 +12087,7 @@ Instrucciones:
       ticketSucursal={ticketSucursal}
       ticketTelefono={ticketTelefono}
       ticketShowFiscalData={ticketShowFiscalData}
+      ticketInvoicingApiUrl={ticketInvoicingApiUrl}
       triggerAppNotification={triggerAppNotification}
       users={users}
       websocketSyncLog={websocketSyncLog}
@@ -11969,9 +12100,10 @@ Instrucciones:
           efectivoCount={efectivoCount}
           setEfectivoCount={setEfectivoCount}
           totalArqueo={totalArqueo}
-      
+          cashierSessions={cashierSessions}
+          expenses={expenses}
     />
-  );;
+  );
 
 
 
@@ -13089,6 +13221,22 @@ Instrucciones:
     />
   );;
 
+  const renderManageInventory = () => (
+    <ManageInventoryView
+      renderMaterialHeader={renderMaterialHeader}
+      setAppMode={setAppMode}
+      currentUser={currentUser}
+      selectedTenant={selectedTenant}
+      inventory={inventory}
+      products={products}
+      suppliers={suppliers}
+      purchases={purchases}
+      inventoryMovements={inventoryMovements}
+      cashierSessions={cashierSessions}
+      triggerAppNotification={triggerAppNotification}
+    />
+  );
+
   const renderSuppliers = () => (
     <SuppliersView
       renderMaterialHeader={renderMaterialHeader}
@@ -13993,7 +14141,24 @@ Instrucciones:
         }}
       />
       {/* Master Render */}
-      {targetCancellationFolio ? (
+      {customerInvoicePortalData !== null ? (
+        <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Cargando portal de facturación...</p></div>}>
+          <CustomerInvoicePortalView
+            initialPhone={customerInvoicePortalData.phone}
+            initialFolio={customerInvoicePortalData.folio}
+            initialTenantId={customerInvoicePortalData.tenant}
+            initialRfc={customerInvoicePortalData.rfc}
+            customers={customers}
+            history={history}
+            selectedTenant={selectedTenant}
+            invoicingApiUrl={selectedTenant?.invoicingApiUrl || companyConfig.invoicingApiUrl || ""}
+            onClose={() => {
+              setCustomerInvoicePortalData(null);
+              window.location.href = window.location.origin + window.location.pathname;
+            }}
+          />
+        </React.Suspense>
+      ) : targetCancellationFolio ? (
         <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Cargando portal de cancelación...</p></div>}>
           <DirectCancellationPortalView
             folio={targetCancellationFolio}
@@ -14023,22 +14188,6 @@ Instrucciones:
             }}
           />
         </React.Suspense>
-      ) : customerInvoicePortalData !== null ? (
-        <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white"><div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-slate-400">Cargando portal de facturación...</p></div>}>
-          <CustomerInvoicePortalView
-            initialPhone={customerInvoicePortalData.phone}
-            initialFolio={customerInvoicePortalData.folio}
-            initialTenantId={customerInvoicePortalData.tenant}
-            initialRfc={customerInvoicePortalData.rfc}
-            customers={customers}
-            history={history}
-            selectedTenant={selectedTenant}
-            onClose={() => {
-              setCustomerInvoicePortalData(null);
-              window.location.href = window.location.origin + window.location.pathname;
-            }}
-          />
-        </React.Suspense>
       ) : !currentUser ? (
         renderLogin()
       ) : (
@@ -14052,6 +14201,7 @@ Instrucciones:
             {appMode === "admin" && renderAdminPanel()}
 
             {appMode === "manage-menu" && renderManageMenu()}
+            {appMode === "inventory" && renderManageInventory()}
             {appMode === "suppliers" && renderSuppliers()}
             {appMode === "customers" && renderCustomers()}
             {appMode === "reports" && renderReports()}
@@ -14495,6 +14645,26 @@ Instrucciones:
           setPendingInvoiceTarget={setPendingInvoiceTarget}
           allCustomers={customers}
         />
+
+      {/* Modal interactivo de 2 pasos para Facturación CFDI 4.0 (Pre-factura y Timbrado) */}
+      <InvoiceModal
+        showInvoiceModal={showInvoiceModal}
+        setShowInvoiceModal={setShowInvoiceModal}
+        invoicingApiUrl={ticketInvoicingApiUrl || selectedTenant?.invoicingApiUrl || companyConfig.invoicingApiUrl || ""}
+        ticketData={invoiceModalData}
+        triggerAppNotification={triggerAppNotification}
+        onInvoiceSuccess={(uuid, folio, pdfUrl) => {
+          if (invoiceModalData?.ticketId) {
+            setHistory((prev) =>
+              prev.map((acc) =>
+                (acc.folio === invoiceModalData.ticketId || acc.folioInterno === invoiceModalData.ticketId || acc.id === invoiceModalData.ticketId)
+                  ? { ...acc, invoiced: true, invoiceUuid: uuid, invoiceFolio: folio, invoicePdfUrl: pdfUrl }
+                  : acc
+              )
+            );
+          }
+        }}
+      />
 
       <IonAlert
         isOpen={deleteConfirmation.isOpen}

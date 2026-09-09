@@ -1345,7 +1345,7 @@ Retorna EXCLUSIVAMENTE el JSON directo, sin bloques markdown de código (como \`
       let shortName = 'COCINET Pro';
       let startUrl = '/';
       let themeColor = '#0f172a';
-      let iconSrc = 'https://img.icons8.com/fluency/512/restaurant.png';
+      let iconSrc = '/restaurant-512.png';
 
       if (tenantParam) {
         const cleanId = tenantParam.replace(/^tenant-/, '');

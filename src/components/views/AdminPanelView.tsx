@@ -1,19 +1,22 @@
 import { CorteModal } from '../modals/CorteModal';
+import { ShiftBackupModal } from '../modals/ShiftBackupModal';
 import DatabaseDeveloperPanel from '../DatabaseDeveloperPanel';
 import { addPedidoToPrinter, addTenantToFirebase, deletePedidoFromPrinter, saveCompanyConfigInFirebase } from '../../utils/firestore';
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAlert, IonButton, IonContent, IonIcon, IonPage } from '@ionic/react';
 import { addOutline, calculatorOutline, closeCircleOutline, closeOutline, cloudUploadOutline, hardwareChipOutline, listOutline, lockClosedOutline, printOutline, refreshCircleOutline, restaurantOutline, shieldCheckmarkOutline } from 'ionicons/icons';
 
 interface AdminPanelViewProps {
   adminViewOnlyCorte: any;
+  cashierSessions?: any[];
   checkoutReturnMode: any;
   companyConfig: any;
   configActiveTab: any;
   connectedBtDeviceName: any;
   corteTab: any;
   currentUser: any;
+  expenses?: any[];
   handleDownloadCorteReport: any;
   handleDownloadPrecorteReport: any;
   handlePrintCorte: any;
@@ -68,6 +71,7 @@ interface AdminPanelViewProps {
   setTicketSucursal: any;
   setTicketTelefono: any;
   setTicketShowFiscalData?: any;
+  setTicketInvoicingApiUrl?: any;
   setWebsocketSyncLog: any;
   showCorteModal: any;
   showResetSalesConfirm: any;
@@ -87,6 +91,7 @@ interface AdminPanelViewProps {
   ticketSucursal: any;
   ticketTelefono: any;
   ticketShowFiscalData?: any;
+  ticketInvoicingApiUrl?: any;
   triggerAppNotification: any;
   users: any;
   websocketSyncLog: any;
@@ -165,6 +170,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   setTicketSucursal,
   setTicketTelefono,
   setTicketShowFiscalData,
+  setTicketInvoicingApiUrl,
   setWebsocketSyncLog,
   showCorteModal,
   showResetSalesConfirm,
@@ -184,13 +190,17 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({
   ticketSucursal,
   ticketTelefono,
   ticketShowFiscalData,
+  ticketInvoicingApiUrl,
   triggerAppNotification,
   users,
   websocketSyncLog,
   cancelEntireComanda, cancelled, corteData, generateCorteTicketText, generatePrecorteTicketText, sanitizeBusinessName, sanitizeEmail, topSold,
-  efectivoCount, setEfectivoCount, totalArqueo
+  efectivoCount, setEfectivoCount, totalArqueo,
+  cashierSessions = [],
+  expenses = []
 }) => {
-const pendingItemsList: any[] = [];
+  const [showShiftBackupModal, setShowShiftBackupModal] = useState(false);
+  const pendingItemsList: any[] = [];
     tables.forEach((t) => {
       (t.comandas || []).forEach((c) => {
         (c.items || []).forEach((item) => {
@@ -356,6 +366,38 @@ setCheckoutReturnMode(null);
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-2xl transition duration-200 shadow-sm cursor-pointer"
                   >
                     Administrar Menú
+                  </button>
+                </div>
+
+                {/* Card 2: Respaldo de Movimientos del Turno 🗄️📦 */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                  <div>
+                    <div className="w-12 h-12 bg-slate-900 text-sky-400 rounded-2xl flex items-center justify-center mb-4 text-2xl shadow-sm">
+                      🗄️
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg font-bold text-slate-800 m-0">
+                        Respaldo de Movimientos del Turno
+                      </h3>
+                      <span className="bg-sky-100 text-sky-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        JSON Local
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-4">
+                      Línea del tiempo y respaldos en formato JSON de cada turno y sus ventas en <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-bold text-slate-700">C:\buzon\respaldos\turnos</code>.
+                    </p>
+
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 text-slate-700 text-xs font-semibold rounded-full border border-slate-200 mb-6">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      {(cashierSessions || []).length} turnos en memoria · Localhost 3010
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowShiftBackupModal(true)}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-2xl transition duration-200 shadow-sm cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>🗄️</span>
+                    <span>Abrir Respaldo de Turnos</span>
                   </button>
                 </div>
 
@@ -669,6 +711,22 @@ setCheckoutReturnMode(null);
                       </p>
                     </div>
 
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        URL de Facturación Web API (CFDI 4.0 PHP) 🧾
+                      </label>
+                      <input
+                        type="url"
+                        value={ticketInvoicingApiUrl || ""}
+                        onChange={(e) => setTicketInvoicingApiUrl && setTicketInvoicingApiUrl(e.target.value)}
+                        className="w-full bg-slate-55 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl focus:border-indigo-500 outline-none transition shadow-sm font-mono"
+                        placeholder="https://midominio.com/empresa/frm"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1">
+                        Endpoint de tu servidor PHP con timbrado Finkok/SAT para emitir borradores y timbrar facturas CFDI 4.0 directamente desde Cocinet POS.
+                      </p>
+                    </div>
+
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mt-3 flex items-center justify-between">
                       <div className="pr-4">
                         <label className="text-xs font-black text-slate-800 flex items-center gap-1.5 cursor-pointer">
@@ -715,6 +773,9 @@ setCheckoutReturnMode(null);
                           `¡Gracias por su visita! Vuelva pronto 🌮 (${selectedTenant.ownerEmail})`,
                         );
                         setTicketGeminiApiKey(companyConfig.geminiApiKey || "");
+                        if (setTicketInvoicingApiUrl) {
+                          setTicketInvoicingApiUrl(selectedTenant.invoicingApiUrl || "");
+                        }
                         setTicketRequireInternalFolio(selectedTenant.requireInternalFolio ?? true);
                         if (setTicketShowFiscalData) {
                           setTicketShowFiscalData(selectedTenant.showFiscalData !== false);
@@ -735,12 +796,14 @@ setCheckoutReturnMode(null);
                         try {
                           const cleanName = sanitizeBusinessName(ticketBusinessName.trim() || selectedTenant.name);
                           const cleanEmail = sanitizeEmail(ticketEmail.trim());
+                          const cleanInvoicingUrl = (ticketInvoicingApiUrl || "").trim();
                           const updatedCfg = {
                             businessName: cleanName,
                             rfc: ticketRfc.trim() || selectedTenant.rfc,
                             sucursal: ticketSucursal.trim() || selectedTenant.sucursalDefault,
                             footerMessage: ticketFooterMessage.trim() || "¡Gracias por su visita! Vuelva pronto 🌮",
                             geminiApiKey: ticketGeminiApiKey.trim(),
+                            invoicingApiUrl: cleanInvoicingUrl,
                             regimenFiscal: ticketRegimenFiscal.trim(),
                             direccionFiscal: ticketDireccionFiscal.trim(),
                             lugarExpedicion: ticketLugarExpedicion.trim(),
@@ -767,6 +830,7 @@ setCheckoutReturnMode(null);
                               rfc: ticketRfc.trim() || selectedTenant.rfc,
                               sucursalDefault: ticketSucursal.trim() || selectedTenant.sucursalDefault,
                               geminiApiKey: ticketGeminiApiKey.trim(),
+                              invoicingApiUrl: cleanInvoicingUrl,
                               requireInternalFolio: ticketRequireInternalFolio,
                               regimenFiscal: ticketRegimenFiscal.trim(),
                               direccionFiscal: ticketDireccionFiscal.trim(),
@@ -1646,6 +1710,17 @@ setCheckoutReturnMode(null);
                 }
               }
             ]}
+          />
+
+          <ShiftBackupModal
+            isOpen={showShiftBackupModal}
+            onClose={() => setShowShiftBackupModal(false)}
+            selectedTenant={selectedTenant}
+            cashierSessions={cashierSessions}
+            history={history}
+            expenses={expenses}
+            currentUser={currentUser}
+            triggerAppNotification={triggerAppNotification}
           />
         </IonContent>
       </IonPage>

@@ -28,6 +28,7 @@ export interface CompanyTenant {
   requireCardDigits?: boolean;
   cancellationTimeoutMinutes?: number;
   showFiscalData?: boolean;
+  invoicingApiUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }

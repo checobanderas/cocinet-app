@@ -272,7 +272,7 @@ export const ManageMenuView: React.FC<ManageMenuViewProps> = ({
               <span style={{ fontSize: "5rem", marginBottom: "16px", display: "block" }}>🔒</span>
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">Acceso Restringido</h2>
               <p className="text-slate-500 text-sm font-semibold leading-relaxed mt-3">
-                Solo el administrador principal (2052) o personal de sistemas tienen autorización para gestionar el menú.
+                Solo el administrador principal o personal de sistemas tienen autorización para gestionar el menú.
               </p>
               <button
                 type="button"

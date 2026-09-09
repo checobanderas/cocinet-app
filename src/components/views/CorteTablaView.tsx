@@ -1,4 +1,5 @@
 import { TenantBackupConfirm } from '../modals/TenantBackupConfirm';
+import { ShiftBackupModal } from '../modals/ShiftBackupModal';
 import { SystemsChoiceAlert } from '../modals/SystemsChoiceAlert';
 import { TablaArqueoModal } from '../modals/TablaArqueoModal';
 import { EditFondoModal } from '../modals/EditFondoModal';
@@ -234,6 +235,41 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   const [showTestWhatsappModal, setShowTestWhatsappModal] = useState(false);
   const [testWhatsappPhone, setTestWhatsappPhone] = useState("");
   const [pendingTablesList, setPendingTablesList] = useState<any[]>([]);
+  const [showShiftBackupModal, setShowShiftBackupModal] = useState(false);
+
+  const sessionToRender = activeSessionForCorte;
+  const openSessions = cashierSessions?.filter((s) => s.status === "open") || [];
+  const shouldShowSelector = !sessionToRender;
+
+  // Synchronize denomination inputs when sessionToRender changes or loads from database
+  React.useEffect(() => {
+    if (sessionToRender?.denominations) {
+      const d = sessionToRender.denominations;
+      if (setTablaArq1000) setTablaArq1000(String(d.b1000 ?? "0"));
+      if (setTablaArq500) setTablaArq500(String(d.b500 ?? "0"));
+      if (setTablaArq200) setTablaArq200(String(d.b200 ?? "0"));
+      if (setTablaArq100) setTablaArq100(String(d.b100 ?? "0"));
+      if (setTablaArq50) setTablaArq50(String(d.b50 ?? "0"));
+      if (setTablaArq20) setTablaArq20(String(d.b20 ?? "0"));
+      if (setTablaArqM10) setTablaArqM10(String(d.m10 ?? "0"));
+      if (setTablaArqM5) setTablaArqM5(String(d.m5 ?? "0"));
+      if (setTablaArqM2) setTablaArqM2(String(d.m2 ?? "0"));
+      if (setTablaArqM1) setTablaArqM1(String(d.m1 ?? "0"));
+      if (setTablaArqM05) setTablaArqM05(String(d.m05 ?? "0"));
+    } else if (!sessionToRender || (sessionToRender?.arqueoTotal === undefined || sessionToRender?.arqueoTotal === 0)) {
+      if (setTablaArq1000) setTablaArq1000("0");
+      if (setTablaArq500) setTablaArq500("0");
+      if (setTablaArq200) setTablaArq200("0");
+      if (setTablaArq100) setTablaArq100("0");
+      if (setTablaArq50) setTablaArq50("0");
+      if (setTablaArq20) setTablaArq20("0");
+      if (setTablaArqM10) setTablaArqM10("0");
+      if (setTablaArqM5) setTablaArqM5("0");
+      if (setTablaArqM2) setTablaArqM2("0");
+      if (setTablaArqM1) setTablaArqM1("0");
+      if (setTablaArqM05) setTablaArqM05("0");
+    }
+  }, [sessionToRender?.id, sessionToRender?.updatedAt]);
 
   // Memorize grouped closed sessions by day at the top level (Rules of Hooks)
   const { groupedClosedSessions, sortedGroupKeys } = React.useMemo(() => {
@@ -453,11 +489,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         dif,
       };
     };
-
-    const openSessions = cashierSessions.filter((s) => s.status === "open");
-    const sessionToRender = activeSessionForCorte;
-    const shouldShowSelector = !sessionToRender;
-
+ 
     const handleReiniciarCorte = async () => {
     if (!selectedTenant) {
       triggerAppNotification("Error", "No hay inquilino seleccionado", "warning");
@@ -626,6 +658,16 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
               >
                 <IonIcon icon={statsChartOutline} style={{ fontSize: "14px" }} />
                 <span>📊 Reporte del Día</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowShiftBackupModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition border border-slate-700 cursor-pointer bg-slate-900 hover:bg-slate-800 text-sky-400 shadow-md ml-2"
+                title="Abrir respaldo de turnos y línea de tiempo JSON (C:\buzon\respaldos\turnos)"
+              >
+                <span>🗄️</span>
+                <span>Respaldar Turnos (.JSON)</span>
               </button>
             </div>
           </IonHeader>
@@ -1285,11 +1327,17 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       (parseInt(tablaArqM1) || 0) * 1 +
       (parseInt(tablaArqM05) || 0) * 0.5;
 
-    const tablaArqueoTotal = tablaArqueoTotalBilletes + tablaArqueoTotalMonedas;
+    const rawDenomTotal = tablaArqueoTotalBilletes + tablaArqueoTotalMonedas;
+    const hasLiveCount = rawDenomTotal > 0;
+    const hasSavedCount = (sessionToRender?.arqueoTotal !== undefined && Number(sessionToRender?.arqueoTotal) > 0);
+    const tablaArqueoTotal = hasLiveCount
+      ? rawDenomTotal
+      : (hasSavedCount ? Number(sessionToRender.arqueoTotal) : 0);
 
-    const diferenciaCaja = tablaArqueoTotal - estimatedCashInBox;
-    const esFaltante = diferenciaCaja < 0;
-    const esSobrante = diferenciaCaja > 0;
+    const isCountRegistered = hasLiveCount || hasSavedCount;
+    const diferenciaCaja = isCountRegistered ? (tablaArqueoTotal - estimatedCashInBox) : 0;
+    const esFaltante = isCountRegistered && diferenciaCaja < 0;
+    const esSobrante = isCountRegistered && diferenciaCaja > 0;
 
     const generateCorteText = (customCajeroName?: string, customRole?: string, isReopenedNotice?: boolean) => {
       const dateStr = new Date().toLocaleString("es-MX");
@@ -1323,7 +1371,7 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
         text += `⚠️ (Actualiza el reporte previo por ventas/movimientos adicionales)\n`;
       } else {
         text += `📤 REPORTE DE FIN DE JORNADA (TURNO DEL CAJERO)\n`;
-        text += `ℹ️ Nota: Reporte emitido por el cajero. El corte final definitivo consolidado se emite a las 5:00 AM.\n`;
+        text += `ℹ️ Nota: Reporte emitido por el cajero.\n`;
       }
       text += `📅 Fecha: ${dateStr}\n`;
       text += `👤 Responsable: ${cajeroNombre} (${(customRole === "automated_5am" ? "SISTEMA COCINET" : rolStr).toUpperCase()})\n`;
@@ -1347,11 +1395,17 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       text += `🛒 Compras Pagadas:      -$${Number(corteData.totalPurchasesPaid || 0).toFixed(2)}\n`;
       text += `---------------------------------\n`;
       text += `💵 EFECTIVO ESPERADO:     $${estimatedCashInBox.toFixed(2)}\n`;
-      text += `⭐ CONTEO FÍSICO (ARQUEO):$${tablaArqueoTotal.toFixed(2)}\n`;
+      if (isCountRegistered) {
+        text += `⭐ CONTEO FÍSICO (ARQUEO):$${tablaArqueoTotal.toFixed(2)}\n`;
+      } else {
+        text += `⭐ CONTEO FÍSICO (ARQUEO): $0.00 ⚠️ (Sin conteo registrado por cajero)\n`;
+      }
       text += `---------------------------------\n`;
 
       const absDif = Math.abs(diferenciaCaja).toFixed(2);
-      if (esFaltante) {
+      if (!isCountRegistered) {
+        text += `⚠️ ESTADO: PENDIENTE DE CONTEO FÍSICO\n`;
+      } else if (esFaltante) {
         text += `🔴 FALTANTE EN CAJA:     -$${absDif}\n`;
       } else if (esSobrante) {
         text += `🟢 SOBRANTE EN CAJA:     +$${absDif}\n`;
@@ -1847,12 +1901,23 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                   setDailyReportTargetDate(undefined);
                   setShowDailyReportModal(true);
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm transition duration-150 flex items-center gap-1.5 border border-emerald-500/25 mr-2 cursor-pointer shadow-sm shadow-emerald-600/20"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm transition duration-150 flex items-center gap-1.5 border border-emerald-500/25 mr-1.5 cursor-pointer shadow-sm shadow-emerald-600/20"
                 title="Abrir Reporte del Día"
               >
                 <IonIcon icon={statsChartOutline} className="text-sm" />
                 <span className="hidden sm:inline">Reporte del Día 📊</span>
                 <span className="inline sm:hidden">Reporte 📊</span>
+              </button>
+              <button
+                type="button"
+                onClick={sendCorteTablaToWhatsApp}
+                className="bg-green-600 hover:bg-green-700 text-white font-black py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm transition duration-150 flex items-center gap-1.5 border border-green-500/25 mr-2 cursor-pointer shadow-sm shadow-green-600/20"
+                style={{ backgroundColor: "#25D366" }}
+                title="Enviar Corte de Caja por WhatsApp"
+              >
+                <IonIcon icon={logoWhatsapp} className="text-base" />
+                <span className="hidden sm:inline">WhatsApp Corte 📲</span>
+                <span className="inline sm:hidden">WhatsApp 📲</span>
               </button>
               <div className="flex items-center gap-1 bg-slate-800/80 p-1 md:p-1.5 rounded-full border border-slate-700/60 mr-1 md:mr-3">
                 <button
@@ -2258,35 +2323,6 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                   </button>
                 )}
 
-                {sessionToRender?.status === "open" ? (
-                  <button
-                    onClick={handleInitiateCloseShift}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 border-none cursor-pointer text-[13px] uppercase tracking-wider animate-pulse hover:animate-none"
-                  >
-                    <span>📤 Enviar Reportes por Fin de Jornada</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="bg-slate-100 text-slate-500 font-bold py-2.5 px-3 rounded-xl flex items-center gap-1.5 text-[12px] border border-slate-200 uppercase tracking-widest select-none">
-                      <span>✅ Reportes Enviados</span>
-                    </div>
-                    <button
-                      onClick={handleReopenShift}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3.5 rounded-xl transition duration-200 shadow-md shadow-emerald-600/20 flex items-center gap-1.5 border-none cursor-pointer text-[12px] uppercase tracking-wider"
-                    >
-                      <span>🔓 Reabrir y Actualizar</span>
-                    </button>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setShowTestWhatsappModal(true)}
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 px-3 rounded-xl transition duration-200 shadow-md shadow-sky-600/25 flex items-center gap-1.5 border-none cursor-pointer text-[13px]"
-                  title="Enviar mensaje de corte de prueba a cualquier WhatsApp"
-                >
-                  <span>🧪 Probar WhatsApp</span>
-                </button>
-
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -2306,14 +2342,6 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                 >
                   <IonIcon icon={logoWhatsapp} className="text-base" />
                   <span>WhatsApp 📲</span>
-                </button>
-
-                <button
-                  onClick={exportCorteTablaToTXT}
-                  className="bg-slate-700 hover:bg-slate-850 text-white font-bold py-2.5 px-3.5 rounded-xl transition duration-200 shadow-md shadow-slate-700/25 flex items-center gap-1.5 border-none cursor-pointer text-[14px]"
-                >
-                  <IonIcon icon={downloadOutline} className="text-base" />
-                  <span>Exportar TXT 📄</span>
                 </button>
               </div>
             </div>
@@ -2657,37 +2685,50 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {/* Arqueo Físico Card */}
-                    <div className="p-2 bg-slate-50 rounded border border-slate-100 text-center flex flex-col justify-center">
-                      <span className="text-[15px] font-bold text-slate-400 uppercase tracking-wider block">CONTEO FÍSICO (ARQUEO)</span>
-                      <span className="text-xl font-black text-slate-800 mt-0.5">${tablaArqueoTotal.toFixed(2)}</span>
-                      <span className="text-[14px] text-indigo-600 font-bold mt-0.5 cursor-pointer hover:underline" onClick={() => setShowTablaArqueoModal(true)}>
-                        Haz clic para registrar billetes/monedas
+                    <div className={`p-2.5 rounded border text-center flex flex-col justify-center ${
+                      !isCountRegistered ? "bg-amber-50/70 border-amber-200" : "bg-slate-50 border-slate-100"
+                    }`}>
+                      <span className={`text-[13px] font-bold uppercase tracking-wider block ${
+                        !isCountRegistered ? "text-amber-700" : "text-slate-400"
+                      }`}>
+                        {!isCountRegistered ? "⚠️ CONTEO FÍSICO PENDIENTE" : "CONTEO FÍSICO (ARQUEO)"}
+                      </span>
+                      <span className={`text-xl font-black mt-0.5 ${
+                        !isCountRegistered ? "text-amber-800" : "text-slate-800"
+                      }`}>
+                        ${tablaArqueoTotal.toFixed(2)}
+                      </span>
+                      <span
+                        className="text-[13px] text-indigo-600 font-bold mt-0.5 cursor-pointer hover:underline"
+                        onClick={() => setShowTablaArqueoModal(true)}
+                      >
+                        {!isCountRegistered ? "👉 Haz clic aquí para Contar Caja 🪙" : "Haz clic para editar billetes/monedas"}
                       </span>
                     </div>
 
                     {/* Diferencia Card */}
-                    <div className={`p-2 rounded border text-center flex flex-col justify-center ${
-                      tablaArqueoTotal === 0 ? "bg-slate-50 border-slate-100 text-slate-400" :
+                    <div className={`p-2.5 rounded border text-center flex flex-col justify-center ${
+                      !isCountRegistered ? "bg-slate-50 border-slate-200 text-slate-400" :
                       esFaltante ? "bg-rose-50 border-rose-200 text-rose-900" :
                       esSobrante ? "bg-blue-50 border-blue-200 text-blue-900" :
                       "bg-emerald-50 border-emerald-200 text-emerald-950"
                     }`}>
-                      <span className="text-[15px] font-bold uppercase tracking-wider block">
-                        {tablaArqueoTotal === 0 ? "DIFERENCIA (SIN ARQUEO)" :
+                      <span className="text-[13px] font-bold uppercase tracking-wider block">
+                        {!isCountRegistered ? "DIFERENCIA (SIN CONTEO)" :
                          esFaltante ? "⚠️ FALTANTE DETECTADO" : 
                          esSobrante ? "💰 SOBRANTE DETECTADO" : 
                          "✅ CAJA CUADRADA"}
                       </span>
                       <span className={`text-xl font-black mt-0.5 ${
-                        tablaArqueoTotal === 0 ? "text-slate-400" :
+                        !isCountRegistered ? "text-slate-400" :
                         esFaltante ? "text-rose-700" :
                         esSobrante ? "text-blue-700" :
                         "text-emerald-700"
                       }`}>
-                        {tablaArqueoTotal === 0 ? "$0.00" : `${esFaltante ? "-" : esSobrante ? "+" : ""}$${Math.abs(diferenciaCaja).toFixed(2)}`}
+                        {!isCountRegistered ? "$0.00" : `${esFaltante ? "-" : esSobrante ? "+" : ""}$${Math.abs(diferenciaCaja).toFixed(2)}`}
                       </span>
-                      <span className="text-[14px] font-bold mt-0.5 uppercase tracking-wider">
-                        {tablaArqueoTotal === 0 ? "Conteo Físico en cero" :
+                      <span className="text-[12px] font-bold mt-0.5 uppercase tracking-wider">
+                        {!isCountRegistered ? "Captura el conteo para ver diferencia" :
                          esFaltante ? "Diferencia negativa en caja" : 
                          esSobrante ? "Diferencia positiva detectada" : 
                          "¡Conciliación exacta!"}
@@ -2734,18 +2775,18 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                 {/* SEPARADOR DE SECCIONES (LÍNEA SUTIL) */}
                 <div className="border-t border-slate-100 my-1" />
 
-                {/* SECCIÓN: CUENTAS DE LUPAY */}
+                {/* SECCIÓN: VENTAS LUPAY */}
                 <div className="bg-slate-50 p-2 rounded border border-slate-150/60">
                   <div 
                     onClick={() => setExpandedCorteTablaRows(prev => ({ ...prev, lupay: !prev.lupay }))}
                     className="flex justify-between items-center cursor-pointer"
                   >
                     <div className="text-left flex items-center gap-1.5">
-                      <span className="text-[15px] font-bold text-indigo-700 block uppercase tracking-wide">📱 4. Cuentas de LUPAY</span>
-                      <span className="text-[14px] text-slate-400 font-bold">({corteData.lupaySalesCount || 0} cobros - informativo, no entran a caja)</span>
+                      <span className="text-[15px] font-bold text-purple-700 block uppercase tracking-wide">📱 4. Cobros QR / Lupay</span>
+                      <span className="text-[14px] text-slate-400 font-bold">({corteData.lupaySalesCount} cobros - informativo)</span>
                       <IonIcon icon={expandedCorteTablaRows.lupay ? chevronUpOutline : chevronDownOutline} className="text-slate-400 text-xs" />
                     </div>
-                    <span className="text-base font-black text-indigo-700">${(corteData.lupaySales || 0).toFixed(2)}</span>
+                    <span className="text-base font-black text-purple-700">${corteData.lupaySales.toFixed(2)}</span>
                   </div>
 
                   {expandedCorteTablaRows.lupay && (
@@ -2754,13 +2795,13 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                         .filter(h => (h.status === "completed" || h.isPaid) && (h.paymentMethod || "").toLowerCase() === "lupay")
                         .map((h, i) => (
                           <div key={`c-lupay-${h.id}-${i}`} className="flex justify-between items-center text-[16px] text-slate-600 bg-white py-1.5 px-2 rounded border border-slate-100">
-                            <span className="font-semibold text-slate-700">Mesa {h.tableLabel || "0"} <span className="text-indigo-650 font-bold bg-indigo-50 px-1.5 py-1 rounded text-[14px] uppercase">{h.paymentMethod}</span></span>
+                            <span className="font-semibold text-slate-700">Mesa {h.tableLabel || "0"} <span className="text-purple-650 font-bold bg-purple-50 px-1.5 py-1 rounded text-[14px] uppercase">LUPAY</span></span>
                             <span className="text-slate-400">{new Date(h.timestamp || Date.now()).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" })}</span>
                             <span className="font-bold text-slate-800">${Number(h.total || 0).toFixed(2)}</span>
                           </div>
                         ))}
                       {(filteredHistoryForCorte || []).filter(h => (h.status === "completed" || h.isPaid) && (h.paymentMethod || "").toLowerCase() === "lupay").length === 0 && (
-                        <p className="text-[16px] text-slate-400 font-semibold italic text-center py-1">Sin cobros LUPAY en este turno.</p>
+                        <p className="text-[16px] text-slate-400 font-semibold italic text-center py-1">Sin cobros Lupay registrados en este turno.</p>
                       )}
                     </div>
                   )}
@@ -2811,6 +2852,8 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
           tablaArqM2={tablaArqM2}
           tablaArqM5={tablaArqM5}
           triggerAppNotification={triggerAppNotification}
+          setCashierSessions={setCashierSessions}
+          setCorteTablaSessionSelected={setCorteTablaSessionSelected}
         />
 
 <SystemsChoiceAlert
@@ -2872,11 +2915,24 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
           {/* ╔══════════════════════════════════════════════════════════════╗
               ║  📦 MODAL RESPALDO COMPLETO DEL TENANT                       ║
               ╚══════════════════════════════════════════════════════════════╝ */}
-<TenantBackupConfirm
-          tenantBackupConfirm={tenantBackupConfirm}
-          setTenantBackupConfirm={setTenantBackupConfirm}
-        />
+          <TenantBackupConfirm
+            tenantBackupConfirm={tenantBackupConfirm}
+            setTenantBackupConfirm={setTenantBackupConfirm}
+          />
 
+          {/* ╔══════════════════════════════════════════════════════════════╗
+              ║  🗄️ MODAL RESPALDO DE MOVIMIENTOS DEL TURNO (.JSON)          ║
+              ╚══════════════════════════════════════════════════════════════╝ */}
+          <ShiftBackupModal
+            isOpen={showShiftBackupModal}
+            onClose={() => setShowShiftBackupModal(false)}
+            selectedTenant={selectedTenant}
+            cashierSessions={cashierSessions || []}
+            history={history || []}
+            expenses={expenses || []}
+            currentUser={currentUser}
+            triggerAppNotification={triggerAppNotification}
+          />
         </IonContent>
       </IonPage>
     );

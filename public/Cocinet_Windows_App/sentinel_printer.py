@@ -1380,6 +1380,148 @@ def backup_sale():
         notify_step("BACKUP_ERROR", f"Error guardando respaldo de venta: {e}", status="ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ─── Respaldo de Movimientos del Turno (C:\buzon\respaldos\turnos) ─────────────
+@app.route("/backup-turno", methods=["POST"])
+@app.route("/api/backup-turno", methods=["POST"])
+def backup_turno():
+    """
+    Guarda el respaldo completo del turno (sesión, corte, cuentas, gastos y movimientos)
+    en formato JSON legible en la subcarpeta C:\buzon\respaldos\turnos\.
+    """
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"success": False, "error": "No data received"}), 400
+            
+        tenant_id = data.get("tenantId", "general")
+        session_id = str(data.get("sessionId", "turno_sin_id")).replace(":", "-").replace("/", "-")
+        op_date = data.get("opDate") or datetime.now().strftime("%Y-%m-%d")
+        
+        # Carpeta C:\buzon\respaldos\turnos
+        turnos_dir = os.path.join(BACKUP_FOLDER, "turnos")
+        os.makedirs(turnos_dir, exist_ok=True)
+        
+        now = datetime.now()
+        
+        # Limpieza de nombre de archivo
+        clean_tenant = re.sub(r'[^a-zA-Z0-9_-]', '_', str(tenant_id))
+        clean_session = re.sub(r'[^a-zA-Z0-9_-]', '_', str(session_id))
+        clean_date = re.sub(r'[^a-zA-Z0-9_-]', '_', str(op_date))
+        
+        filename = f"turno_{clean_tenant}_{clean_date}_{clean_session}.json"
+        filepath = os.path.join(turnos_dir, filename)
+        
+        # Metadata de auditoría
+        data["_savedLocallyAt"] = now.isoformat()
+        data["_savedFilename"] = filename
+        data["_localPath"] = filepath
+        
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            
+        file_size = os.path.getsize(filepath)
+        
+        notify_step("BACKUP_TURNO", f"📦 Turno [{clean_session}] respaldado exitosamente en C:\\buzon\\respaldos\\turnos\\{filename} ({file_size} bytes)", status="SUCCESS")
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "filepath": filepath,
+            "size": file_size,
+            "turnos_dir": turnos_dir,
+            "savedAt": now.isoformat()
+        })
+    except Exception as e:
+        notify_step("BACKUP_TURNO_ERR", f"Error guardando respaldo de turno: {e}", status="ERROR")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/backup-turnos", methods=["GET"])
+@app.route("/api/backup-turnos", methods=["GET"])
+def list_backup_turnos():
+    """
+    Lista todos los respaldos de turnos existentes en C:\buzon\respaldos\turnos\
+    con sus metadatos para visualizarlos en la línea del tiempo.
+    """
+    try:
+        turnos_dir = os.path.join(BACKUP_FOLDER, "turnos")
+        os.makedirs(turnos_dir, exist_ok=True)
+        
+        backups = []
+        for fname in os.listdir(turnos_dir):
+            if fname.endswith(".json"):
+                fpath = os.path.join(turnos_dir, fname)
+                try:
+                    stat = os.stat(fpath)
+                    summary = {
+                        "filename": fname,
+                        "filepath": fpath,
+                        "size": stat.st_size,
+                        "modifiedAt": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "tenantId": "",
+                        "tenantName": "",
+                        "sessionId": "",
+                        "openedAt": "",
+                        "closedAt": "",
+                        "userName": "",
+                        "totalVentas": 0,
+                        "ticketsCount": 0,
+                        "note": "",
+                        "status": "closed",
+                    }
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        content = json.load(f)
+                        summary["tenantId"] = content.get("tenantId", "")
+                        summary["tenantName"] = content.get("tenantName", "")
+                        summary["sessionId"] = content.get("sessionId", "")
+                        summary["openedAt"] = content.get("openedAt", "")
+                        summary["closedAt"] = content.get("closedAt", "")
+                        summary["userName"] = content.get("userName") or content.get("cajero", "")
+                        summary["totalVentas"] = content.get("totalVentas", 0)
+                        summary["ticketsCount"] = len(content.get("sales", [])) if "sales" in content else content.get("ticketsCount", 0)
+                        summary["note"] = content.get("note", "")
+                        summary["status"] = content.get("status", "closed")
+                    backups.append(summary)
+                except Exception as ex:
+                    backups.append({
+                        "filename": fname,
+                        "filepath": fpath,
+                        "size": os.path.getsize(fpath) if os.path.exists(fpath) else 0,
+                        "error": str(ex)
+                    })
+                    
+        # Ordenar por fecha de modificación más reciente primero
+        backups.sort(key=lambda x: x.get("modifiedAt", ""), reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "turnos_dir": turnos_dir,
+            "count": len(backups),
+            "backups": backups
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/backup-turno/<filename>", methods=["GET", "DELETE"])
+@app.route("/api/backup-turno/<filename>", methods=["GET", "DELETE"])
+def manage_single_backup_turno(filename):
+    try:
+        clean_filename = os.path.basename(filename)
+        turnos_dir = os.path.join(BACKUP_FOLDER, "turnos")
+        filepath = os.path.join(turnos_dir, clean_filename)
+        
+        if not os.path.exists(filepath):
+            return jsonify({"success": False, "error": "Archivo no encontrado"}), 404
+            
+        if request.method == "DELETE":
+            os.remove(filepath)
+            notify_step("BACKUP_TURNO_DEL", f"Respaldo eliminado: {clean_filename}", status="WARNING")
+            return jsonify({"success": True, "deleted": clean_filename})
+            
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({"success": True, "data": data, "filename": clean_filename})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/test-print", methods=["POST"])
 def test_print():
     try:

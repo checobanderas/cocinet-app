@@ -348,41 +348,43 @@ return (
                     {currentUser?.role !== "mesero" && (
                       <>
                         {(isMasterAdmin || isOwnerUnlocked || currentUser?.role === "admin" || currentUser?.role === "sistemas" || currentUser?.id.endsWith("-sistemas")) && (
-                          <button
-                            onClick={() => {
-                              setAppMode("manage-menu");
-                              setManageMenuTab(null);
-                              setShowSidebar(false);
-                            }}
-                            className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                              appMode === "manage-menu"
-                                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]"
-                                : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                            }`}
-                          >
-                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
-                              🏷️
-                            </span>
-                            <span>Productos</span>
-                          </button>
-                        )}
+                          <>
+                            <button
+                              onClick={() => {
+                                setAppMode("manage-menu");
+                                setManageMenuTab(null);
+                                setShowSidebar(false);
+                              }}
+                              className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                                appMode === "manage-menu"
+                                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]"
+                                  : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                              }`}
+                            >
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-base">
+                                🏷️
+                              </span>
+                              <span>Productos</span>
+                            </button>
 
-                        <button
-                          onClick={() => {
-                            setAppMode("suppliers");
-                            setShowSidebar(false);
-                          }}
-                          className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
-                            appMode === "suppliers"
-                              ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20 scale-[1.02]"
-                              : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
-                          }`}
-                        >
-                          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-base">
-                            🤝
-                          </span>
-                          <span>Proveedores</span>
-                        </button>
+                            <button
+                              onClick={() => {
+                                setAppMode("inventory");
+                                setShowSidebar(false);
+                              }}
+                              className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                                appMode === "inventory"
+                                  ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/20 scale-[1.02]"
+                                  : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                              }`}
+                            >
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-orange-500/10 text-base">
+                                📦
+                              </span>
+                              <span>Inventarios</span>
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
 

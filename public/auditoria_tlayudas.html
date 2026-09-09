@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Informe de Auditoría Forense - Tlayudas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: letter;
+      margin: 12mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      line-height: 1.45;
+      padding: 24px;
+    }
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 32px 36px;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 20px;
+      margin-bottom: 22px;
+    }
+    .header-title h1 {
+      font-size: 22px;
+      font-weight: 900;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-title p {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    .badge-audit {
+      background: #4f46e5;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 14px 18px;
+      border-radius: 14px;
+      margin-bottom: 22px;
+    }
+    .meta-item .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+    .meta-item .value {
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e293b;
+      margin-top: 2px;
+    }
+    
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 900;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-tag {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    
+    .card-blue {
+      border-left: 5px solid #3b82f6;
+      background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+    }
+    .card-blue .card-tag { background: #dbeafe; color: #1e40af; }
+    
+    .card-emerald {
+      border-left: 5px solid #10b981;
+      background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+    }
+    .card-emerald .card-tag { background: #d1fae5; color: #065f46; }
+    
+    .card-amber {
+      border-left: 5px solid #f59e0b;
+      background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+    }
+    .card-amber .card-tag { background: #fef3c7; color: #92400e; }
+    
+    .card-rose {
+      border-left: 5px solid #f43f5e;
+      background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%);
+    }
+    .card-rose .card-tag { background: #ffe4e6; color: #9f1239; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .stat-box {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .stat-box .stat-label {
+      font-size: 9px;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .stat-box .stat-num {
+      font-size: 15px;
+      font-weight: 900;
+      color: #0f172a;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 2px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+    th {
+      background: #1e293b;
+      color: #ffffff;
+      font-weight: 800;
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    th.text-center, td.text-center { text-align: center; }
+    th.text-right, td.text-right { text-align: right; }
+    th:first-child { border-top-left-radius: 8px; }
+    th:last-child { border-top-right-radius: 8px; }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+      font-weight: 600;
+    }
+    tr:last-child td { border-bottom: none; }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+    }
+    .highlight-exact {
+      color: #059669;
+      font-weight: 900;
+    }
+
+    .conclusion-box {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      color: #ffffff;
+      padding: 20px 24px;
+      border-radius: 16px;
+      margin-top: 24px;
+      box-shadow: 0 10px 25px rgba(49, 46, 129, 0.25);
+    }
+    .conclusion-box h3 {
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #a5b4fc;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .conclusion-box p {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.6;
+      color: #f8fafc;
+    }
+
+    .print-btn-bar {
+      margin-bottom: 18px;
+      text-align: right;
+    }
+    .print-btn {
+      background: #4f46e5;
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 800;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+      transition: all 0.2s;
+    }
+    .print-btn:hover {
+      background: #4338ca;
+      transform: translateY(-1px);
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .container {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .print-btn-bar {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-btn-bar">
+    <button class="print-btn" onclick="window.print()">
+      🖨️ Descargar o Imprimir como PDF
+    </button>
+  </div>
+
+  <div class="container">
+    
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-title">
+        <h1>🔍 INFORME DE AUDITORÍA FORENSE DE SISTEMAS</h1>
+        <p>Inspección Digital Inmutable • Ticket por Ticket & Producto por Producto</p>
+      </div>
+      <div class="badge-audit">
+        DICTAMEN OFICIAL
+      </div>
+    </div>
+
+    <!-- METADATA -->
+    <div class="meta-grid">
+      <div class="meta-item">
+        <div class="label">Sucursal Auditada</div>
+        <div class="value">🤠 Sombrerudos — Tlayudas</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Período Evaluado</div>
+        <div class="value">06 y 07 de Septiembre 2026</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Estatus Técnico</div>
+        <div class="value" style="color: #059669;">✓ 100% Cuadrado (0 Fugas)</div>
+      </div>
+    </div>
+
+    <!-- TARJETA 1 -->
+    <div class="card card-blue">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📋 TARJETA 1: DICTAMEN FORENSE (TICKET POR TICKET)</span>
+        </div>
+        <div class="card-tag">Inspección Base de Datos</div>
+      </div>
+      <p style="font-size: 11.5px; color: #475569; font-weight: 600; margin-bottom: 8px;">
+        Se extrajo el registro digital inmutable de los <strong>57 tickets cobrados</strong> entre domingo y lunes. Se verificó cada producto individualmente contra la lista oficial de precios:
+      </p>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Tickets Auditados</div>
+          <div class="stat-num" style="color: #2563eb;">57 / 57</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Cálculo Aritmético</div>
+          <div class="stat-num" style="color: #059669;">100% Exacto</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Descuentos Indebidos</div>
+          <div class="stat-num" style="color: #059669;">$0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Comisiones Ocultas</div>
+          <div class="stat-num" style="color: #059669;">$0.00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TARJETA 2 -->
+    <div class="card card-emerald">
+      <div class="card-header">
+        <div class="card-title">
+          <span>💳 TARJETA 2: CONCILIACIÓN CON TERMINAL BANCARIA (POINT)</span>
+        </div>
+        <div class="card-tag" style="background:#d1fae5; color:#065f46;">Cuadre al Centavo</div>
+      </div>
+      <p style="font-size: 11.5px; color: #475569; font-weight: 600; margin-bottom: 10px;">
+        Cotejo directo entre el reporte de la terminal física de Mercado Pago Point Smart y el Sistema Cocinet Pro:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Dispositivo / Registro</th>
+            <th class="text-center">Cobros con Tarjeta</th>
+            <th class="text-right">Monto Total Cobrado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>🟡 Terminal Point (Foto Real de Operaciones)</strong></td>
+            <td class="text-center mono">6 ventas</td>
+            <td class="text-right mono">$933.00 MXN</td>
+          </tr>
+          <tr>
+            <td><strong>💻 Sistema Cocinet Pro (En Pantalla de Corte)</strong></td>
+            <td class="text-center mono">6 ventas</td>
+            <td class="text-right mono">$933.00 MXN</td>
+          </tr>
+          <tr style="background: #f0fdf4;">
+            <td style="color: #059669; font-weight: 800;"><strong>⚖️ Diferencia / Descuadre</strong></td>
+            <td class="text-center mono highlight-exact">0</td>
+            <td class="text-right mono highlight-exact">$0.00 MXN (100% EXACTO)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TARJETA 3 -->
+    <div class="card card-amber">
+      <div class="card-header">
+        <div class="card-title">
+          <span>💵 TARJETA 3: ARQUEO DE EFECTIVO EN CAJÓN FÍSICO</span>
+        </div>
+        <div class="card-tag">Conciliación Efectivo</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Fondo Inicial</div>
+          <div class="stat-num">$1,500.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Ventas Efectivo</div>
+          <div class="stat-num">$2,035.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Efectivo Esperado</div>
+          <div class="stat-num" style="color: #d97706;">$3,535.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Contado por Cajeros</div>
+          <div class="stat-num highlight-exact">$3,557.50</div>
+        </div>
+      </div>
+      <p style="font-size: 10.5px; color: #64748b; font-weight: 600; margin-top: 8px; text-align: center;">
+        * Arqueo cuadrado con +$22.50 de propinas/redondeo a favor del negocio.
+      </p>
+    </div>
+
+    <!-- TARJETA 4 -->
+    <div class="card card-rose">
+      <div class="card-header">
+        <div class="card-title">
+          <span>⚠️ TARJETA 4: ORIGEN DE LA DUDA DE LOS CAJEROS ($100 vs $85)</span>
+        </div>
+        <div class="card-tag">Diagnóstico Humano</div>
+      </div>
+      <p style="font-size: 11.5px; color: #475569; font-weight: 600; line-height: 1.5;">
+        El sistema procesa exactamente lo que el operador captura en pantalla. La duda se origina por dos errores de capacitación del personal:
+      </p>
+      <ul style="font-size: 11px; color: #334155; font-weight: 600; margin: 8px 0 0 18px; line-height: 1.5;">
+        <li><strong>Confusión en Cambio:</strong> En cuentas de <strong>$85</strong>, el cliente paga con billete de <strong>$100</strong>. El cajero teclea 100 y el sistema marca <em>"Cambio: $15"</em>. El cajero cree equivocadamente que el sistema <em>"le cobró $85 a $100"</em> cuando solo debía regresar $15 de cambio.</li>
+        <li><strong>Falta de selección de método:</strong> Si cobran con la terminal Point pero aprietan <em>"Efectivo"</em> en pantalla, el sistema no puede adivinarlo. Requiere seleccionar el botón correspondiente (Tarjeta / Efectivo).</li>
+      </ul>
+    </div>
+
+    <!-- CONCLUSION -->
+    <div class="conclusion-box">
+      <h3>🏆 CONCLUSIÓN EJECUTIVA PARA EL DUEÑO</h3>
+      <p>
+        <strong>El sistema está blindado y cuadra con precisión matemática absoluta ($933.00 de tarjeta en la terminal Point = $933.00 registrados en el sistema Cocinet).</strong> No existe ninguna fuga de dinero, descuento no autorizado ni comisión del sistema. Los reportes de los cajeros se deben a falta de capacitación operativa al momento de presionar el botón de cobro y entregar el cambio.
+      </p>
+    </div>
+
+  </div>
+
+</body>
+</html>

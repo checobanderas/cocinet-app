@@ -59,6 +59,8 @@ interface TenantCrudModalProps {
   setFormTenantCancellationTimeoutMinutes?: (v: number) => void;
   formTenantShowFiscalData?: boolean;
   setFormTenantShowFiscalData?: (v: boolean) => void;
+  formTenantInvoicingApiUrl?: string;
+  setFormTenantInvoicingApiUrl?: (v: string) => void;
   transferStep: number;
   setTransferStep: (v: number) => void;
   transferTargetOwnerKey: string;
@@ -124,6 +126,8 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
   setFormTenantCancellationTimeoutMinutes,
   formTenantShowFiscalData,
   setFormTenantShowFiscalData,
+  formTenantInvoicingApiUrl,
+  setFormTenantInvoicingApiUrl,
   transferStep,
   setTransferStep,
   transferTargetOwnerKey,
@@ -178,7 +182,7 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
         <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
           <div className="space-y-5 pb-8">
             <p className="text-xs font-bold text-slate-600 leading-relaxed bg-amber-50 border border-amber-200 p-3.5 rounded-2xl">
-              🔑 <span className="text-amber-800">Consola de Control de Red (PIN 2052):</span> Configura, edita o elimina inquilinos y sus sucursales. Las sucursales asignadas se asociarán automáticamente con su respectiva matriz de red heredando su propietario y clave.
+              🔑 <span className="text-amber-800 font-extrabold">Consola de Control de Red:</span> Configura, edita o elimina inquilinos y sus sucursales. Las sucursales asignadas se asociarán automáticamente con su respectiva matriz de red heredando su propietario y clave.
             </p>
 
             <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5 space-y-4">
@@ -689,6 +693,30 @@ export const TenantCrudModal: React.FC<TenantCrudModalProps> = ({
                   onChange={(e) => setFormTenantShowFiscalData && setFormTenantShowFiscalData(e.target.checked)}
                   className="w-6 h-6 accent-indigo-600 rounded cursor-pointer shrink-0"
                 />
+              </div>
+
+              {/* URL de Facturación Web API (CFDI 4.0 PHP) */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
+                <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <span>🧾</span> URL de Facturación Web API (CFDI 4.0 PHP)
+                </label>
+                <input
+                  type="text"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="https://midominio.com/empresa/frm"
+                  value={formTenantInvoicingApiUrl || ""}
+                  onChange={(e) => {
+                    if (setFormTenantInvoicingApiUrl) {
+                      setFormTenantInvoicingApiUrl(e.target.value);
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all shadow-2xs select-text"
+                />
+                <p className="text-[10px] text-slate-500 font-medium mt-1.5 leading-normal">
+                  Ruta absoluta a tu script <code>api_facturar.php</code> para generar borradores y timbrar facturas electrónicas CFDI 4.0 en esta sucursal.
+                </p>
               </div>
 
               {/* Sección Terminal Windows & Instalación PWA (Aislamiento de Sucursal) */}

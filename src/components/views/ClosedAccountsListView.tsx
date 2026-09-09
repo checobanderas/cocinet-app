@@ -42,6 +42,7 @@ interface ClosedAccountsListViewProps {
   historyForCuentasTab: any;
   markAsPaid: any;
   reprintAccount: any;
+  handleOpenCfdiInvoiceModal?: any;
 }
 
 export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
@@ -76,7 +77,8 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   setTempPaymentCardType,
   setTempPaymentMethod,
   triggerAppNotification,
-  cancelled, historyForCuentasTab, markAsPaid, reprintAccount
+  cancelled, historyForCuentasTab, markAsPaid, reprintAccount,
+  handleOpenCfdiInvoiceModal
 }) => {
   const [showSummaryPanel, setShowSummaryPanel] = React.useState(false);
 
@@ -1085,6 +1087,20 @@ return (
                                          </button>
                                        )
                                      )}
+
+                                      {handleOpenCfdiInvoiceModal && account.status !== "cancelled" && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenCfdiInvoiceModal(account);
+                                          }}
+                                          className="px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700"
+                                          title="Emitir o Timbrar Factura CFDI 4.0 ante el SAT"
+                                        >
+                                          ⚡ Facturar CFDI
+                                        </button>
+                                      )}
 
                                     {account.status !== "cancelled" && (
                                       <IonButton

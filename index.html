@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-    <title>COCINET Pro | Software y Programa Punto de Venta para Restaurantes y Taquerías</title>
+    <title>COCINET - Sistema Gastronómico</title>
     <meta name="description" content="El mejor software y programa punto de venta (POS) para restaurantes, taquerías, bares y cafeterías en México. Control de mesas, comandas móviles para meseros, inventarios con IA, reportes de corte vía WhatsApp y facturación CFDI 4.0." />
     <meta name="keywords" content="software punto de venta, programa punto de venta, punto de venta restaurantes, sistema pos para restaurantes, software taquerias, sistema de comandas para meseros, software punto de venta mexico, software comandero movil, control de inventarios restaurante, facturacion cfdi 4.0 restaurante, cocinet pro, sistema punto de venta bares, software cafeterias" />
     <meta name="author" content="COCINET Pro" />
@@ -14,24 +14,24 @@
     <!-- Open Graph / Facebook / WhatsApp SEO -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://cocinet-prueba.web.app/" />
-    <meta property="og:title" content="COCINET Pro | Software y Programa Punto de Venta para Restaurantes" />
+    <meta property="og:title" content="COCINET - Sistema Gastronómico" />
     <meta property="og:description" content="Software y programa punto de venta gastronómico líder. Comandas táctiles, corte de caja automático por WhatsApp, control de inventarios y facturación CFDI 4.0." />
-    <meta property="og:image" content="https://img.icons8.com/fluency/192/restaurant.png" />
+    <meta property="og:image" content="https://cocinet-prueba.web.app/restaurant-512.png" />
     <meta property="og:locale" content="es_MX" />
     <meta property="og:site_name" content="COCINET Pro" />
 
     <!-- Twitter Card SEO -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="COCINET Pro | Software y Programa Punto de Venta para Restaurantes" />
+    <meta name="twitter:title" content="COCINET - Sistema Gastronómico" />
     <meta name="twitter:description" content="Software y programa punto de venta gastronómico líder. Comandas táctiles, corte de caja automático por WhatsApp, inventarios y facturación." />
-    <meta name="twitter:image" content="https://img.icons8.com/fluency/192/restaurant.png" />
+    <meta name="twitter:image" content="https://cocinet-prueba.web.app/restaurant-512.png" />
 
     <!-- Schema.org JSON-LD Structured Data for Google Robot Ranking -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      "name": "COCINET Pro - Software Punto de Venta Gastronómico",
+      "name": "COCINET - Sistema Gastronómico",
       "operatingSystem": "Web, Windows 10/11, Android, iOS",
       "applicationCategory": "BusinessApplication",
       "description": "Software y programa punto de venta (POS) para restaurantes, taquerías, cafeterías y bares en México. Incluye comandas móviles para meseros, control de inventarios con IA, reportes de corte automáticos por WhatsApp y facturación electrónica CFDI 4.0.",
@@ -56,7 +56,7 @@
     <!-- Meta tags for PWA mobile app behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="COCINET Pro" />
+    <meta name="apple-mobile-web-app-title" content="COCINET" />
     <script>
       window.__COCINET_PWA_PROMPT__ = null;
       window.addEventListener('beforeinstallprompt', function(e) {
@@ -69,18 +69,11 @@
         console.log('🎉 [PWA Early Listener] App instalada exitosamente.');
       });
 
-      // Detectar tenant desde URL o candado de terminal de Windows
+      // Detectar tenant desde URL
       var params = new URLSearchParams(window.location.search);
-      var tenantParam = params.get('tenant') || params.get('sucursal') || params.get('company') || params.get('id');
-      var lockedTenant = localStorage.getItem('cocinet_locked_terminal_tenant_id');
-      var activeTenant = tenantParam || (lockedTenant ? lockedTenant.replace(/^tenant-/, '') : null);
-
-      var manifestHref = activeTenant 
-        ? ('/manifest-pwa.json?tenant=' + encodeURIComponent(activeTenant)) 
-        : ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '/manifest-dev.json' : '/manifest.json');
-      var iconHref = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
-        ? 'https://img.icons8.com/plasticine/128/restaurant.png' 
-        : 'https://img.icons8.com/fluency/128/restaurant.png';
+      var isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      var manifestHref = isDev ? '/manifest-dev.json' : '/manifest.json';
+      var iconHref = '/restaurant-512.png';
 
       document.write('<link id="pwa-manifest-link" rel="manifest" href="' + manifestHref + '" />');
       document.write('<link id="pwa-icon-link" rel="icon" href="' + iconHref + '" type="image/png" />');
