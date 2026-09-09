@@ -13239,7 +13239,6 @@ Instrucciones:
       customOwners={customOwners}
       activeOwnerFilter={activeOwnerFilter}
       restrictedOwnerKey={restrictedOwnerKey}
-      ownerBranches={ownerBranches}
       triggerAppNotification={triggerAppNotification}
     />
   );
