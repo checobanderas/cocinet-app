@@ -14,10 +14,9 @@
  *   8. 'test_conexion' / 'ping': Verifica el estado del servidor y la base de datos MySQL.
  */
 
-// Mostrar errores para diagnosticar cualquier fallo de inmediato en el navegador
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-error_reporting(E_ALL);
+// Silenciar warnings para garantizar respuesta JSON limpia
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
+ini_set('display_errors', '0');
 
 // Encabezados CORS universales
 header('Access-Control-Allow-Origin: *');
@@ -54,6 +53,7 @@ if (function_exists('mysqli_connect')) {
     }
     $con = @mysqli_connect($dbHost, $dbUser, $dbPass, $dbName);
     if (!$con) {
+        // Fallback a IP remota si localhost no responde
         $con = @mysqli_connect("109.106.251.99", "abast115_super", "checo2100", $dbName);
     }
     if ($con) {
@@ -61,20 +61,12 @@ if (function_exists('mysqli_connect')) {
     }
 }
 
-// Fallback a PDO
-if (!$con && class_exists('PDO')) {
-    try {
-        $con = new PDO("mysql:host=$dbHost;dbname=$dbName;charset=utf8", $dbUser, $dbPass);
-        $con->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
-    } catch (Exception $e) {}
-}
-
-// Fallback a conex2.php si mysqli y PDO fallaron
+// Fallback a conex2.php si mysqli falló o no está disponible
 if (!$con) {
     if (file_exists(__DIR__ . '/plugin/conex2.php')) {
-        @require_once __DIR__ . '/plugin/conex2.php';
+        require_once __DIR__ . '/plugin/conex2.php';
     } elseif (file_exists(__DIR__ . '/conex2.php')) {
-        @require_once __DIR__ . '/conex2.php';
+        require_once __DIR__ . '/conex2.php';
     }
     if (function_exists('conectarse')) {
         $con = @conectarse($dbName);
@@ -88,23 +80,19 @@ function dbQuery($queryStr, $dbCon = null) {
     if (!$conn) return false;
 
     if (is_object($conn) && get_class($conn) === 'mysqli') {
-        return @mysqli_query($conn, $queryStr);
-    } elseif (is_object($conn) && get_class($conn) === 'PDO') {
-        return $conn->query($queryStr);
+        return mysqli_query($conn, $queryStr);
     } elseif (function_exists('mysql_query')) {
-        return @mysql_query($queryStr, $conn);
+        return mysql_query($queryStr, $conn);
     }
     return false;
 }
 
 function dbFetchAssoc($result) {
     if (!$result) return null;
-    if (is_object($result) && function_exists('mysqli_fetch_assoc') && get_class($result) === 'mysqli_result') {
+    if (is_object($result) && function_exists('mysqli_fetch_assoc')) {
         return mysqli_fetch_assoc($result);
-    } elseif (is_object($result) && function_exists('PDOStatement') && get_class($result) === 'PDOStatement') {
-        return $result->fetch(PDO::FETCH_ASSOC);
     } elseif (function_exists('mysql_fetch_assoc')) {
-        return @mysql_fetch_assoc($result);
+        return mysql_fetch_assoc($result);
     }
     return null;
 }
@@ -582,4 +570,205 @@ if ($accion === 'timbrar') {
 // ACCIÓN 3: ELIMINAR NO TIMBRADA (LIBERAR FOLIO)
 // =========================================================================
 if ($accion === 'eliminar_no_timbrada') {
-    $folio = intval(getVal($
+    $folio = intval(getVal($data, 'folio', 0));
+
+    if ($folio <= 0) {
+        echo json_encode(array('ok' => false, 'error' => 'Folio inválido para descartar.'));
+        exit;
+    }
+
+    $check = dbQuery("SELECT timbrada FROM facturas WHERE folio = $folio");
+    $row   = dbFetchAssoc($check);
+
+    if ($row && intval(getVal($row, 'timbrada')) === 1) {
+        echo json_encode(array('ok' => false, 'error' => 'Esta factura ya fue timbrada ante el SAT y no puede ser eliminada directamente.'));
+        exit;
+    }
+
+    dbQuery("DELETE FROM detfactura WHERE folio = $folio");
+    dbQuery("DELETE FROM facturas WHERE folio = $folio");
+
+    $pdfPath = __DIR__ . "/facturas/factura_{$folio}.pdf";
+    if (file_exists($pdfPath)) {
+        @unlink($pdfPath);
+    }
+
+    echo json_encode(array(
+        'ok'      => true,
+        'mensaje' => "El borrador del folio $folio fue descartado y el folio quedó liberado."
+    ));
+    exit;
+}
+
+// =========================================================================
+// ACCIÓN 4: LISTAR FACTURAS (FILTROS POR ESTADO, BUSQUEDA Y FECHA)
+// =========================================================================
+if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accion === 'listar') {
+    $filtroEstado = trim(getVal($data, 'estado', getVal($_GET, 'estado', '')));
+    $busqueda     = trim(getVal($data, 'busqueda', getVal($data, 'query', getVal($_GET, 'busqueda', getVal($_GET, 'query', '')))));
+    $fechaInicio  = trim(getVal($data, 'fecha_inicio', getVal($_GET, 'fecha_inicio', '')));
+    $fechaFin     = trim(getVal($data, 'fecha_fin', getVal($_GET, 'fecha_fin', '')));
+
+    $where = array("1=1");
+
+    if ($accion === 'listar_no_timbradas' || $filtroEstado === 'no_timbradas' || $filtroEstado === 'pendientes') {
+        $where[] = "(F.timbrada = 0 OR F.estado = 'PENDIENTE' OR F.estado = 'BORRADOR')";
+    } elseif ($filtroEstado === 'timbradas') {
+        $where[] = "(F.timbrada = 1 OR F.estado = 'TIMBRADA')";
+    }
+
+    if (!empty($busqueda)) {
+        $bEsc = dbEscape($busqueda);
+        $where[] = "(F.rfc LIKE '%$bEsc%' OR F.nombre LIKE '%$bEsc%' OR F.folio LIKE '%$bEsc%' OR F.uuid LIKE '%$bEsc%' OR F.ticket_id LIKE '%$bEsc%')";
+    }
+
+    if (!empty($fechaInicio)) {
+        $fIniEsc = dbEscape($fechaInicio);
+        $where[] = "F.fecha >= '$fIniEsc 00:00:00'";
+    }
+    if (!empty($fechaFin)) {
+        $fFinEsc = dbEscape($fechaFin);
+        $where[] = "F.fecha <= '$fFinEsc 23:59:59'";
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $sql = "SELECT F.ID_FACTURA, F.ID_CLIENTE, F.serie, F.folio, F.fecha, F.rfc, F.nombre, 
+                   F.timporte AS subtotal, F.iva, F.ret_isr, F.total, F.correo, F.ticket_id, 
+                   F.timbrada, F.estado, F.uuid, F.formapago, F.metodopago, F.usocfdi, F.regimenfiscal, F.cp
+            FROM facturas F 
+            WHERE $whereSql 
+            ORDER BY F.ID_FACTURA DESC LIMIT 150";
+
+    $res = dbQuery($sql);
+    $lista = array();
+    if ($res) {
+        while ($row = dbFetchAssoc($res)) {
+            $folioRow = intval(getVal($row, 'folio', 0));
+            $isTimbrada = intval(getVal($row, 'timbrada', 0)) === 1 || getVal($row, 'estado') === 'TIMBRADA';
+            
+            $pdfUrl = $baseUrl . "facturas/factura_{$folioRow}.pdf";
+            $xmlUrl = $baseUrl . "facturas/factura_{$folioRow}.xml";
+
+            $row['folio']     = $folioRow;
+            $row['timbrada']  = $isTimbrada ? 1 : 0;
+            $row['subtotal']  = floatval(getVal($row, 'subtotal', 0));
+            $row['iva']       = floatval(getVal($row, 'iva', 0));
+            $row['ret_isr']   = floatval(getVal($row, 'ret_isr', 0));
+            $row['total']     = floatval(getVal($row, 'total', 0));
+            $row['pdfUrl']    = $pdfUrl;
+            $row['xmlUrl']    = $xmlUrl;
+            $lista[] = $row;
+        }
+    }
+
+    // Totales rápidos para widgets
+    $qStats = dbQuery("SELECT 
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        FROM facturas");
+    $stats = dbFetchAssoc($qStats);
+
+    echo json_encode(array(
+        'ok'       => true,
+        'facturas' => $lista,
+        'stats'    => array(
+            'total'          => intval(getVal($stats, 'total_count', 0)),
+            'timbradas'      => intval(getVal($stats, 'timbradas_count', 0)),
+            'pendientes'     => intval(getVal($stats, 'pendientes_count', 0)),
+            'clientes_mysql'  => intval(getVal($cli, 'total_clientes', 0)),
+            'monto_facturado'=> floatval(getVal($stats, 'total_facturado_monto', 0))
+        )
+    ));
+    exit;
+}
+
+// =========================================================================
+// ACCIÓN 5: REENVIAR FACTURA POR CORREO
+// =========================================================================
+if ($accion === 'reenviar_correo' || $accion === 'enviar_correo') {
+    $folio  = intval(getVal($data, 'folio', getVal($_GET, 'folio', 0)));
+    $correo = trim(getVal($data, 'correo', getVal($data, 'email', getVal($_GET, 'correo', getVal($_GET, 'email', '')))));
+
+    if ($folio <= 0) {
+        echo json_encode(array('ok' => false, 'error' => 'Se requiere el folio de la factura.'));
+        exit;
+    }
+
+    $qFact = dbQuery("SELECT * FROM facturas WHERE folio = $folio LIMIT 1");
+    $fact  = dbFetchAssoc($qFact);
+
+    if (!$fact) {
+        echo json_encode(array('ok' => false, 'error' => "No se encontró la factura Folio #$folio en la base de datos."));
+        exit;
+    }
+
+    $destinatario = !empty($correo) ? $correo : trim(getVal($fact, 'correo'));
+    if (empty($destinatario)) {
+        echo json_encode(array('ok' => false, 'error' => 'Por favor especifica una dirección de correo válida.'));
+        exit;
+    }
+
+    $destEsc = dbEscape($destinatario);
+    dbQuery("UPDATE facturas SET correo = '$destEsc' WHERE folio = $folio");
+
+    $pdfUrl = $baseUrl . "facturas/factura_{$folio}.pdf";
+    $xmlUrl = $baseUrl . "facturas/factura_{$folio}.xml";
+
+    // Enviar correo nativo o retornar links listos
+    $subject = "Factura Electrónica CFDI 4.0 - Folio #{$folio} - " . getVal($fact, 'nombre');
+    $message = "Estimado cliente,\n\nAdjuntamos los enlaces para la descarga de su Comprobante Fiscal Digital por Internet (CFDI 4.0):\n\n"
+             . "Folio: #{$folio}\n"
+             . "RFC: " . getVal($fact, 'rfc') . "\n"
+             . "Total: $" . number_format(floatval(getVal($fact, 'total', 0)), 2) . " MXN\n\n"
+             . "Descargar PDF: $pdfUrl\n"
+             . "Descargar XML: $xmlUrl\n\n"
+             . "Gracias por su preferencia.";
+    
+    $headers = "From: no-reply@" . ($host ? $host : "cocinet.com") . "\r\n" .
+               "Reply-To: no-reply@" . ($host ? $host : "cocinet.com") . "\r\n" .
+               "X-Mailer: PHP/" . phpversion();
+
+    @mail($destinatario, $subject, $message, $headers);
+
+    echo json_encode(array(
+        'ok'      => true,
+        'mensaje' => "Factura enviada exitosamente a $destinatario.",
+        'correo'  => $destinatario,
+        'pdfUrl'  => $pdfUrl,
+        'xmlUrl'  => $xmlUrl
+    ));
+    exit;
+}
+
+// =========================================================================
+// ACCIÓN 6: TEST DE CONEXIÓN Y ESTADO GENERAL
+// =========================================================================
+if ($accion === 'test_conexion' || $accion === 'ping') {
+    $qStats = dbQuery("SELECT 
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        FROM facturas");
+    $stats = dbFetchAssoc($qStats);
+    $qCli  = dbQuery("SELECT COUNT(*) AS total_clientes FROM clientes WHERE emisor <> '1'");
+    $cli   = dbFetchAssoc($qCli);
+
+    echo json_encode(array(
+        'ok'         => true,
+        'servidor'   => 'PHP MySQL CFDI 4.0 API Activa',
+        'host'       => $host,
+        'stats'      => array(
+            'total_facturas'  => intval(getVal($stats, 'total_count', 0)),
+            'timbradas'       => intval(getVal($stats, 'timbradas_count', 0)),
+            'pendientes'      => intval(getVal($stats, 'pendientes_count', 0)),
+            'clientes_mysql'  => intval(getVal($cli, 'total_clientes', 0)),
+            'monto_facturado' => floatval(getVal($stats, 'total_facturado_monto', 0))
+        )
+    ));
+    exit;
+}
+
+echo json_encode(array('ok' => false, 'error' => 'Acción no reconocida.'));
