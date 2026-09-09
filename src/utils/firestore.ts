@@ -2956,6 +2956,15 @@ export async function getAllProductsFromFirebase(): Promise<any[]> {
     .filter((p: any) => !p.isBackup && !p.id.startsWith("bk_"));
 }
 
+export async function getAllInventoryFromFirebase(): Promise<any[]> {
+  const q = query(collection(db, "inventory"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+}
+
 export async function getAllMenuBackupsFromFirebase(): Promise<any[]> {
   const q = query(collection(db, "products"));
   const snapshot = await getDocs(q);

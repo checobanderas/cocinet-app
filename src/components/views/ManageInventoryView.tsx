@@ -48,6 +48,8 @@ import {
   addInventoryItemToFirebase,
   updateInventoryItemInFirebase,
   deleteInventoryItemFromFirebase,
+  getAllInventoryFromFirebase,
+  generateUUID,
   addInventoryMovementToFirebase,
   updateProductInFirebase,
   addSupplierToFirebase,
@@ -76,6 +78,11 @@ interface ManageInventoryViewProps {
   purchases: any[];
   inventoryMovements: any[];
   cashierSessions: any[];
+  COMPANY_CATALOG?: any[];
+  customOwners?: any[];
+  activeOwnerFilter?: any;
+  restrictedOwnerKey?: any;
+  ownerBranches?: any[];
   triggerAppNotification: (
     title: string,
     message: string,
@@ -103,9 +110,54 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
   purchases,
   inventoryMovements,
   cashierSessions,
+  COMPANY_CATALOG = [],
+  customOwners = [],
+  activeOwnerFilter,
+  restrictedOwnerKey,
+  ownerBranches = [],
   triggerAppNotification,
 }) => {
   const [activeTab, setActiveTab] = useState<InventoryTabType>(null);
+
+  // --- Multi-Tenant & Owner Setup for Insumos ---
+  const currentOwnerKey =
+    selectedTenant?.ownerKey ||
+    activeOwnerFilter ||
+    restrictedOwnerKey ||
+    (selectedTenant?.id && COMPANY_CATALOG.find((c: any) => c.id === selectedTenant.id)?.ownerKey) ||
+    "1";
+
+  const ownerObj = customOwners.find((o: any) => o.key === currentOwnerKey) || {
+    name: selectedTenant?.propietario || selectedTenant?.name || `Propietario #${currentOwnerKey}`,
+    avatar: selectedTenant?.avatar || "👑",
+    key: currentOwnerKey,
+  };
+
+  const currentOwnerBranches = COMPANY_CATALOG.filter((c: any) => c.ownerKey === currentOwnerKey);
+  const relevantBranches = currentOwnerBranches.length > 0
+    ? currentOwnerBranches
+    : (ownerBranches.length > 0 ? ownerBranches : (selectedTenant ? [selectedTenant] : []));
+  const currentTenantId = selectedTenant?.id || relevantBranches[0]?.id || "";
+
+  // Selected branches for Insumo replication (Default: ALL owner branches selected)
+  const [selectedTenantsForInsumo, setSelectedTenantsForInsumo] = useState<string[]>([]);
+  const [isSavingInsumo, setIsSavingInsumo] = useState<boolean>(false);
+
+  const toggleTenantForInsumo = (tenantId: string) => {
+    setSelectedTenantsForInsumo((prev) =>
+      prev.includes(tenantId) ? prev.filter((id) => id !== tenantId) : [...prev, tenantId]
+    );
+  };
+
+  const selectAllOwnerBranchesForInsumo = () => {
+    setSelectedTenantsForInsumo(relevantBranches.map((b: any) => b.id));
+  };
+
+  const selectOnlyCurrentBranchForInsumo = () => {
+    if (currentTenantId) {
+      setSelectedTenantsForInsumo([currentTenantId]);
+    }
+  };
 
   // --- Sub-states for Insumos Tab ---
   const [insumoSearch, setInsumoSearch] = useState("");
@@ -650,6 +702,8 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
     setInsumoFormCost("0");
     setInsumoFormStock("0");
     setInsumoFormMinStock("5");
+    // Pre-select ALL owner branches by default (as required)
+    setSelectedTenantsForInsumo(relevantBranches.map((b: any) => b.id));
     setShowInsumoModal(true);
   };
 
@@ -661,14 +715,18 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
     setInsumoFormCost(String(item.cost ?? 0));
     setInsumoFormStock(String(item.stock ?? 0));
     setInsumoFormMinStock(String(item.minStock ?? 5));
+    // Pre-select ALL owner branches by default
+    setSelectedTenantsForInsumo(relevantBranches.map((b: any) => b.id));
     setShowInsumoModal(true);
   };
 
   const handleSaveInsumo = async () => {
     if (!insumoFormName.trim()) {
-      alert("Por favor escribe el nombre del insumo.");
+      triggerAppNotification("⚠️ Error", "Por favor escribe el nombre del insumo.", "warning");
       return;
     }
+    if (isSavingInsumo) return;
+
     const itemData = {
       name: insumoFormName.trim(),
       category: insumoFormCategory,
@@ -678,33 +736,135 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
       minStock: parseFloat(insumoFormMinStock) || 0,
     };
 
+    const targetsToApply =
+      selectedTenantsForInsumo.length > 0
+        ? selectedTenantsForInsumo
+        : currentTenantId
+        ? [currentTenantId]
+        : [];
+
+    const canonicalUuid = editingInsumo?.uuid || editingInsumo?.globalId || generateUUID();
+    const nowTimestamp = getMexicoISOString();
+
+    setIsSavingInsumo(true);
+
     try {
-      if (editingInsumo) {
-        await updateInventoryItemInFirebase(editingInsumo.id, itemData);
-        triggerAppNotification(
-          "Insumo Actualizado",
-          `Se actualizó "${itemData.name}" exitosamente.`,
-          "success"
-        );
+      if (targetsToApply.length <= 1 && (!targetsToApply[0] || targetsToApply[0] === currentTenantId)) {
+        if (editingInsumo) {
+          await updateInventoryItemInFirebase(editingInsumo.id, {
+            ...itemData,
+            uuid: canonicalUuid,
+            tenantId: currentTenantId,
+            ownerKey: currentOwnerKey,
+            updatedAt: nowTimestamp,
+          });
+          triggerAppNotification(
+            "✅ Insumo Actualizado",
+            `Se actualizó "${itemData.name}" en ${selectedTenant?.name || "esta sucursal"}.`,
+            "success"
+          );
+        } else {
+          const newId = `inv_${currentTenantId || "t"}_${Date.now()}`;
+          await addInventoryItemToFirebase({
+            id: newId,
+            uuid: canonicalUuid,
+            ...itemData,
+            tenantId: currentTenantId,
+            ownerKey: currentOwnerKey,
+            createdAt: nowTimestamp,
+            updatedAt: nowTimestamp,
+          });
+          setBulkInsumoId(newId);
+          setSelectedIngredientId(newId);
+          triggerAppNotification(
+            "✅ Insumo Creado y Seleccionado ✨",
+            `Se agregó "${itemData.name}" en ${selectedTenant?.name || "esta sucursal"} listo para su uso.`,
+            "success"
+          );
+        }
       } else {
-        const newId = `inv_${Date.now()}`;
-        await addInventoryItemToFirebase({
-          id: newId,
-          ...itemData,
-          createdAt: getMexicoISOString(),
-        });
-        setBulkInsumoId(newId);
-        setSelectedIngredientId(newId);
+        const allInvFromFb = (await getAllInventoryFromFirebase()) || [];
+        let createdCount = 0;
+        let updatedCount = 0;
+
+        const tenantsToUpdate: { tId: string; matchedItem: any }[] = [];
+        const tenantsToAdd: string[] = [];
+
+        for (const tId of targetsToApply) {
+          const matched = allInvFromFb.find(
+            (inv: any) =>
+              inv.tenantId === tId &&
+              ((canonicalUuid && inv.uuid === canonicalUuid) ||
+                (inv.name && inv.name.trim().toLowerCase() === itemData.name.toLowerCase()))
+          );
+          if (matched) {
+            tenantsToUpdate.push({ tId, matchedItem: matched });
+          } else {
+            tenantsToAdd.push(tId);
+          }
+        }
+
+        let currentCreatedId = "";
+
+        await Promise.all([
+          ...tenantsToUpdate.map(async (item) => {
+            const updates: any = {
+              name: itemData.name,
+              category: itemData.category,
+              unit: itemData.unit,
+              cost: itemData.cost,
+              minStock: itemData.minStock,
+              uuid: canonicalUuid,
+              tenantId: item.tId,
+              ownerKey: currentOwnerKey,
+              updatedAt: nowTimestamp,
+            };
+            if (item.tId === currentTenantId) {
+              updates.stock = itemData.stock;
+            }
+            await updateInventoryItemInFirebase(item.matchedItem.id, updates);
+            updatedCount++;
+          }),
+          ...tenantsToAdd.map(async (tId) => {
+            const newId = `inv_${tId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            if (tId === currentTenantId) {
+              currentCreatedId = newId;
+            }
+            await addInventoryItemToFirebase({
+              id: newId,
+              uuid: canonicalUuid,
+              name: itemData.name,
+              category: itemData.category,
+              unit: itemData.unit,
+              cost: itemData.cost,
+              stock: tId === currentTenantId ? itemData.stock : 0,
+              minStock: itemData.minStock,
+              tenantId: tId,
+              ownerKey: currentOwnerKey,
+              createdAt: nowTimestamp,
+              updatedAt: nowTimestamp,
+            });
+            createdCount++;
+          }),
+        ]);
+
+        if (currentCreatedId) {
+          setBulkInsumoId(currentCreatedId);
+          setSelectedIngredientId(currentCreatedId);
+        }
+
         triggerAppNotification(
-          "Insumo Creado y Seleccionado ✨",
-          `Se agregó "${itemData.name}" y se seleccionó listo para asignar en la receta.`,
+          "✅ Insumo Sincronizado en Multitenant",
+          `Se aplicó "${itemData.name}" en ${targetsToApply.length} sucursales (${updatedCount} actualizadas, ${createdCount} creadas).`,
           "success"
         );
       }
       setShowInsumoModal(false);
     } catch (err) {
       console.error(err);
-      alert("Error al guardar el insumo.");
+      triggerAppNotification("❌ Error", "No se pudo guardar el insumo en las sucursales.", "error");
+    } finally {
+      setIsSavingInsumo(false);
     }
   };
 
@@ -728,16 +888,20 @@ export const ManageInventoryView: React.FC<ManageInventoryViewProps> = ({
       return;
     }
 
-    const newId = `inv_${Date.now()}`;
+    const newId = `inv_${currentTenantId || "t"}_${Date.now()}`;
     const newItem = {
       id: newId,
+      uuid: generateUUID(),
       name,
       category,
       unit,
       cost: defaultCost,
       stock: 100,
       minStock: 10,
+      tenantId: currentTenantId,
+      ownerKey: currentOwnerKey,
       createdAt: getMexicoISOString(),
+      updatedAt: getMexicoISOString(),
     };
 
     try {
@@ -3887,125 +4051,281 @@ Devuelve un JSON estructurado con:
         </div>
 
         {/* ========================================================= */}
-        {/* MODAL: NUEVO / EDITAR INSUMO */}
+        {/* MODAL: NUEVO / EDITAR INSUMO MULTISUCURSAL 🏢 */}
         {/* ========================================================= */}
         <IonModal
           isOpen={showInsumoModal}
-          onDidDismiss={() => setShowInsumoModal(false)}
-          initialBreakpoint={0.75}
-          breakpoints={[0, 0.75]}
+          onDidDismiss={() => {
+            if (!isSavingInsumo) {
+              setShowInsumoModal(false);
+            }
+          }}
+          className="insumo-crud-modal"
+          style={{
+            "--height": "95%",
+            "--width": "100%",
+            "--max-width": "1000px",
+            "--border-radius": "28px",
+          }}
         >
-          <IonHeader className="ion-no-border">
-            <IonToolbar style={{ "--background": "#1e293b", "--color": "white" }}>
-              <IonTitle>{editingInsumo ? "Editar Insumo" : "Nuevo Insumo de Stock"}</IonTitle>
-              <IonButtons slot="end">
-                <IonButton onClick={() => setShowInsumoModal(false)}>Cerrar</IonButton>
-              </IonButtons>
-            </IonToolbar>
-          </IonHeader>
-          <IonContent className="ion-padding" style={{ "--background": "#f8fafc" }}>
-            <div className="max-w-xl mx-auto space-y-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative select-none font-sans">
+            {/* Saving / Processing Overlay */}
+            {isSavingInsumo && (
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex flex-col items-center justify-center z-50 rounded-3xl text-white space-y-4 animate-fade-in">
+                <div className="w-14 h-14 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin shadow-2xl"></div>
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-black tracking-wide uppercase m-0">Procesando cambios... ⏳</h3>
+                  <p className="text-xs text-slate-200 font-semibold m-0">
+                    Guardando insumo en las sucursales seleccionadas, por favor espere.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Header */}
+            <div className="p-5 bg-[#1e293b] text-white flex justify-between items-center shrink-0 border-b border-slate-700/60">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Nombre del Insumo *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Tortillas de Maíz kg, Pechuga de Pollo kg, Coca-Cola 355ml"
-                  value={insumoFormName}
-                  onChange={(e) => setInsumoFormName(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                />
+                <h2 className="text-lg font-black uppercase tracking-tight m-0 flex items-center gap-2">
+                  {editingInsumo ? "✏️ Editar Insumo" : "➕ Nuevo Insumo"}
+                </h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 m-0">
+                  Administración de Inventario • {selectedTenant?.name || "Sucursal Activa"}
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Categoría
-                  </label>
-                  <select
-                    value={insumoFormCategory}
-                    onChange={(e) => setInsumoFormCategory(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                  >
-                    <option value="Ingredientes">Ingredientes 🍅</option>
-                    <option value="Carnes">Carnes / Mariscos 🥩</option>
-                    <option value="Bebidas">Bebidas 🍹</option>
-                    <option value="Abarrotes">Abarrotes 🍝</option>
-                    <option value="Desechables">Desechables 📦</option>
-                    <option value="Otros">Otros ⚙️</option>
-                  </select>
+              <button
+                type="button"
+                disabled={isSavingInsumo}
+                onClick={() => setShowInsumoModal(false)}
+                className="bg-white/10 hover:bg-white/20 disabled:opacity-50 px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase transition-all active:scale-95 cursor-pointer border-none text-white"
+              >
+                Cerrar ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex flex-col md:flex-row h-full min-h-[500px]">
+                {/* Left Column: ONLY CURRENT OWNER & THEIR BRANCHES */}
+                <div className="w-full md:w-2/5 bg-slate-100 border-r border-slate-250 p-5 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-black text-slate-700 uppercase tracking-wider">
+                        🏢 Aplicar a Sucursales
+                      </label>
+                      <p className="text-[10.5px] text-slate-500 font-medium mt-1 leading-snug">
+                        Selecciona en qué sucursales de este propietario se agregará o actualizará este insumo:
+                      </p>
+                    </div>
+
+                    {/* Owner Group Container */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{ownerObj.avatar || "👑"}</span>
+                          <div>
+                            <h4 className="text-xs font-black uppercase text-slate-800 tracking-tight m-0 leading-tight">
+                              {ownerObj.name}
+                            </h4>
+                            <span className="text-[9.5px] font-bold text-indigo-600 uppercase">
+                              Grupo Patrón #{currentOwnerKey}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick select buttons */}
+                      {relevantBranches.length > 1 && (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <button
+                            type="button"
+                            disabled={isSavingInsumo}
+                            onClick={selectAllOwnerBranchesForInsumo}
+                            className="flex-1 py-1 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-extrabold rounded-lg transition-colors border border-indigo-200/60 cursor-pointer"
+                          >
+                            ✓ Todas ({relevantBranches.length})
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingInsumo}
+                            onClick={selectOnlyCurrentBranchForInsumo}
+                            className="flex-1 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-extrabold rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                          >
+                            Solo Actual 📍
+                          </button>
+                        </div>
+                      )}
+
+                      {/* List of Owner's Branches */}
+                      <div className="space-y-1.5 pt-1 max-h-[220px] overflow-y-auto">
+                        {relevantBranches.map((t: any) => {
+                          const isCurrent = t.id === currentTenantId;
+                          const isChecked = selectedTenantsForInsumo.includes(t.id);
+
+                          return (
+                            <label
+                              key={t.id}
+                              className={`flex items-center justify-between gap-2 text-[11px] font-bold p-2.5 rounded-xl cursor-pointer transition-all border ${
+                                isChecked
+                                  ? "bg-indigo-50/80 border-indigo-300 text-indigo-950 shadow-2xs"
+                                  : "bg-slate-50/60 hover:bg-slate-100 border-slate-200/70 text-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <input
+                                  type="checkbox"
+                                  disabled={isSavingInsumo}
+                                  checked={isChecked}
+                                  onChange={() => toggleTenantForInsumo(t.id)}
+                                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                                />
+                                <span className="truncate uppercase">{t.name}</span>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {isCurrent && (
+                                  <span className="text-[8.5px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded uppercase">
+                                    Actual
+                                  </span>
+                                )}
+                                <span className="text-[8.5px] bg-slate-200/80 text-slate-600 font-bold px-1.5 py-0.5 rounded uppercase">
+                                  {t.type === "matriz" ? "Matriz 🏛️" : "Sucursal 📍"}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Multi-branch info warning */}
+                  <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl">
+                    <p className="text-[10px] text-amber-800 font-medium leading-relaxed m-0">
+                      💡 <b>Nota:</b> El cambio se aplicará únicamente a las <b>{selectedTenantsForInsumo.length}</b> sucursal(es) marcada(s) arriba compartiendo el mismo código canónico (UUID) para reportes y traspasos.
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Unidad de Medida
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="kg, g, lt, ml, pza, paquete"
-                    value={insumoFormUnit}
-                    onChange={(e) => setInsumoFormUnit(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                  />
-                </div>
-              </div>
+                {/* Right Column: Insumo Form */}
+                <div className="w-full md:w-3/5 bg-white p-5 md:p-6 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[11.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                        Nombre del Insumo / Materia Prima *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Tortillas de Harina kg, Pechuga de Pollo kg, Coca-Cola 355ml"
+                        value={insumoFormName}
+                        onChange={(e) => setInsumoFormName(e.target.value)}
+                        className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none transition shadow-2xs"
+                      />
+                    </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Costo Unitario ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={insumoFormCost}
-                    onChange={(e) => setInsumoFormCost(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                  />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Categoría *
+                        </label>
+                        <select
+                          value={insumoFormCategory}
+                          onChange={(e) => setInsumoFormCategory(e.target.value)}
+                          className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none transition shadow-2xs"
+                        >
+                          <option value="Ingredientes">Ingredientes 🍅</option>
+                          <option value="Carnes">Carnes / Mariscos 🥩</option>
+                          <option value="Bebidas">Bebidas 🍹</option>
+                          <option value="Abarrotes">Abarrotes 🍝</option>
+                          <option value="Desechables">Desechables 📦</option>
+                          <option value="Otros">Otros ⚙️</option>
+                        </select>
+                      </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Stock Actual
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="0"
-                    value={insumoFormStock}
-                    onChange={(e) => setInsumoFormStock(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                  />
-                </div>
+                      <div>
+                        <label className="block text-[11.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Unidad de Medida *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="kg, g, lt, ml, pza, paquete, caja"
+                          value={insumoFormUnit}
+                          onChange={(e) => setInsumoFormUnit(e.target.value)}
+                          className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none transition shadow-2xs"
+                        />
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Stock Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="5"
-                    value={insumoFormMinStock}
-                    onChange={(e) => setInsumoFormMinStock(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none"
-                  />
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Costo Unitario ($) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={insumoFormCost}
+                          onChange={(e) => setInsumoFormCost(e.target.value)}
+                          className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-black text-slate-900 outline-none transition shadow-2xs"
+                        />
+                      </div>
 
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleSaveInsumo}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-xs py-3 rounded-xl transition cursor-pointer border-none shadow-md shadow-blue-500/20"
-                >
-                  💾 Guardar Insumo
-                </button>
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Stock Actual / Inicial
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="0"
+                          value={insumoFormStock}
+                          onChange={(e) => setInsumoFormStock(e.target.value)}
+                          className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-black text-slate-900 outline-none transition shadow-2xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Stock Mínimo (Alerta)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="5"
+                          value={insumoFormMinStock}
+                          onChange={(e) => setInsumoFormMinStock(e.target.value)}
+                          className="w-full p-3 bg-slate-50 border border-slate-250 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-black text-slate-900 outline-none transition shadow-2xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isSavingInsumo}
+                      onClick={() => setShowInsumoModal(false)}
+                      className="w-1/3 py-3 rounded-xl border border-slate-250 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingInsumo || !insumoFormName.trim()}
+                      onClick={handleSaveInsumo}
+                      className="w-2/3 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs transition cursor-pointer border-none shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2"
+                    >
+                      <span>💾</span>
+                      <span>
+                        Guardar Insumo ({selectedTenantsForInsumo.length} Sucursales)
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </IonContent>
+          </div>
         </IonModal>
 
         {/* ========================================================= */}

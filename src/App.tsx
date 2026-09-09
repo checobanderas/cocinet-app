@@ -13235,6 +13235,11 @@ Instrucciones:
       purchases={purchases}
       inventoryMovements={inventoryMovements}
       cashierSessions={cashierSessions}
+      COMPANY_CATALOG={COMPANY_CATALOG}
+      customOwners={customOwners}
+      activeOwnerFilter={activeOwnerFilter}
+      restrictedOwnerKey={restrictedOwnerKey}
+      ownerBranches={ownerBranches}
       triggerAppNotification={triggerAppNotification}
     />
   );
