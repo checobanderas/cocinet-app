@@ -39,10 +39,11 @@ interface ClosedAccountsListViewProps {
   setTempPaymentMethod: any;
   triggerAppNotification: any;
   cancelled: any;
-  historyForCuentasTab: any;
   markAsPaid: any;
   reprintAccount: any;
   handleOpenCfdiInvoiceModal?: any;
+  selectedTenant?: any;
+  invoicingApiUrl?: string;
 }
 
 export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
@@ -78,7 +79,9 @@ export const ClosedAccountsListView: React.FC<ClosedAccountsListViewProps> = ({
   setTempPaymentMethod,
   triggerAppNotification,
   cancelled, historyForCuentasTab, markAsPaid, reprintAccount,
-  handleOpenCfdiInvoiceModal
+  handleOpenCfdiInvoiceModal,
+  selectedTenant,
+  invoicingApiUrl
 }) => {
   const [showSummaryPanel, setShowSummaryPanel] = React.useState(false);
 
@@ -1130,7 +1133,11 @@ return (
                                           );
                                         }
 
-                                        if (isWaitingStamp) {
+                                        const hasInvoicingApi = Boolean(
+                                          (invoicingApiUrl || selectedTenant?.invoicingApiUrl || "").trim().length > 0
+                                        );
+
+                                        if (isWaitingStamp && hasInvoicingApi) {
                                           return (
                                             <button
                                               type="button"
@@ -1154,7 +1161,7 @@ return (
 
                                         const hasInvoiceRequirement = Boolean(account.requiresInvoice || (account.invoicePhone && account.invoicePhone.trim() !== ""));
 
-                                        if (handleOpenCfdiInvoiceModal && hasInvoiceRequirement) {
+                                        if (handleOpenCfdiInvoiceModal && hasInvoiceRequirement && hasInvoicingApi) {
                                           return (
                                             <button
                                               type="button"

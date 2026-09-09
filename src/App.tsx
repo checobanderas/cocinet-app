@@ -9864,6 +9864,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
   };
 
   const handleOpenCfdiInvoiceModal = (account: any) => {
+    const currentApiUrl = (ticketInvoicingApiUrl || selectedTenant?.invoicingApiUrl || companyConfig?.invoicingApiUrl || "").trim();
+    if (!currentApiUrl) {
+      triggerAppNotification(
+        "⚠️ FACTURACIÓN NO CONFIGURADA",
+        `La sucursal "${selectedTenant?.name || "activa"}" no tiene configurada su API de Facturación CFDI. Por favor configúrela en el panel de administración.`,
+        "warning"
+      );
+      return;
+    }
+
     const cleanPhone = (account?.invoicePhone || invoicePhone || "").replace(/\D/g, "").slice(-10);
     const matchedCustomer = (customers || []).find((c: any) => 
       (cleanPhone && (c.phone || "").replace(/\D/g, "").slice(-10) === cleanPhone) ||
@@ -11002,6 +11012,8 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       markAsPaid={markAsPaid}
       reprintAccount={reprintAccount}
       handleOpenCfdiInvoiceModal={handleOpenCfdiInvoiceModal}
+      selectedTenant={selectedTenant}
+      invoicingApiUrl={ticketInvoicingApiUrl || selectedTenant?.invoicingApiUrl || companyConfig?.invoicingApiUrl || ""}
     />
   );
 

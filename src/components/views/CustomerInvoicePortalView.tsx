@@ -124,9 +124,12 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
       (!rawApiUrl.startsWith("http://") && !rawApiUrl.startsWith("https://"))
     )
   );
-  const activeApiUrl = (!isFirebaseHostingDomain && (rawApiUrl.startsWith("http://") || rawApiUrl.startsWith("https://"))) 
-    ? rawApiUrl 
-    : DEFAULT_INVOICING_API_URL;
+  const isApiConfigured = Boolean(
+    rawApiUrl &&
+    !isFirebaseHostingDomain &&
+    (rawApiUrl.startsWith("http://") || rawApiUrl.startsWith("https://"))
+  );
+  const activeApiUrl = isApiConfigured ? rawApiUrl : "";
 
   // Sincronizar clientes desde Firestore en tiempo real al montar
   useEffect(() => {
@@ -807,8 +810,22 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
           {/* Cuerpo Principal */}
           <div className="p-5 sm:p-7">
 
-            {/* PASO 3: FACTURA TIMBRADA EXITOSAMENTE */}
-            {step === 3 && stampedResult ? (
+            {!isApiConfigured ? (
+              <div className="text-center py-8 space-y-4 animate-fadeIn">
+                <div className="w-16 h-16 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-3xl shadow-xl shadow-amber-500/10">
+                  ⚠️
+                </div>
+                <h2 className="text-xl font-black text-white">Facturación CFDI No Configurada</h2>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+                  La sucursal <b>{businessName}</b> aún no cuenta con una API de Facturación CFDI conectada en el sistema.
+                </p>
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                  Por favor solicite al administrador de la sucursal configurar su endpoint fiscal desde el panel de administración.
+                </p>
+              </div>
+
+            /* PASO 3: FACTURA TIMBRADA EXITOSAMENTE */
+            ) : step === 3 && stampedResult ? (
               <div className="text-center py-4 space-y-5 animate-fadeIn">
                 <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-4xl shadow-xl shadow-emerald-500/10">
                   🎉
