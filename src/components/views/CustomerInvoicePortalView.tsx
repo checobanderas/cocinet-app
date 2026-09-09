@@ -325,9 +325,17 @@ export const CustomerInvoicePortalView: React.FC<CustomerInvoicePortalViewProps>
     }
   }, [initialPhone, initialRfc, customers, localCustomers]);
 
-  // Si la cuenta tiene forma de pago previa, sincronizar
+  // Si la cuenta tiene forma de pago o datos fiscales previos, sincronizar
   useEffect(() => {
     if (matchedAccount) {
+      if (matchedAccount.rfc) setRfc(matchedAccount.rfc.toUpperCase().trim());
+      if (matchedAccount.razonSocial) setRazonSocial(matchedAccount.razonSocial.toUpperCase().trim());
+      if (matchedAccount.cp) setCp(matchedAccount.cp.trim());
+      if (matchedAccount.regimenFiscal) setRegimenFiscal(matchedAccount.regimenFiscal);
+      if (matchedAccount.usoCfdi) setUsoCfdi(matchedAccount.usoCfdi);
+      if (matchedAccount.emailFacturacion) setEmail(matchedAccount.emailFacturacion.trim());
+      if (matchedAccount.invoicePhone && !phone) setPhone(matchedAccount.invoicePhone.replace(/\D/g, "").slice(-10));
+
       const pm = (matchedAccount.paymentMethod || "").toLowerCase();
       if (pm.includes("tarjeta") || pm.includes("card")) {
         setFormaPago("04");
@@ -989,6 +997,25 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     Ingresa tu RFC y datos fiscales para emitir tu factura electrónica.
                   </p>
                 </div>
+
+                {/* Banner de Pre-Factura Lista */}
+                {(matchedAccount?.rfc || (rfc && razonSocial && cp)) && (
+                  <div className="p-3.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-amber-200 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⏳</span>
+                      <div>
+                        <span className="font-black text-amber-300 block">Pre-Factura Lista en MySQL (Esperando Timbrado)</span>
+                        <span className="text-[11px] text-slate-300">Datos fiscales registrados para RFC: <strong className="font-mono text-white">{rfc || matchedAccount?.rfc}</strong></span>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs shadow-md transition cursor-pointer border-none whitespace-nowrap"
+                    >
+                      ⚡ Continuar a Timbrar →
+                    </button>
+                  </div>
+                )}
 
                 {/* Badge de Reconocimiento / Autocomplete */}
                 {autoCompleted && (

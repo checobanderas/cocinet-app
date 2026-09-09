@@ -661,7 +661,15 @@ return (
                                   {account.requiresInvoice && (
                                     <span className="inline-flex items-center gap-1 ml-1">
                                       <span title="Requiere Factura">🧾</span>
-                                      {account.invoicePhone ? (
+                                      {account.invoiceUuid || account.isStamped || account.invoiceStatus === "timbrada" ? (
+                                        <span className="bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full text-[10px] shadow-sm">
+                                          ✅ Timbrada
+                                        </span>
+                                      ) : (account.rfc || account.razonSocial || account.invoiceStatus === "datos_completos" || account.invoiceStatus === "esperando_timbrado" || account.invoiceDraftFolio) ? (
+                                        <span className="bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-full text-[10px] shadow-sm">
+                                          ⏳ No Timbrada
+                                        </span>
+                                      ) : account.invoicePhone ? (
                                         <button
                                           type="button"
                                           onClick={(e) => handleSendWhatsAppInvoice(account, e)}
@@ -1088,19 +1096,80 @@ return (
                                        )
                                      )}
 
-                                      {handleOpenCfdiInvoiceModal && account.status !== "cancelled" && (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenCfdiInvoiceModal(account);
-                                          }}
-                                          className="px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700"
-                                          title="Emitir o Timbrar Factura CFDI 4.0 ante el SAT"
-                                        >
-                                          ⚡ Facturar CFDI
-                                        </button>
-                                      )}
+                                      {account.status !== "cancelled" && (() => {
+                                        const isStamped = Boolean(account.invoiceUuid || account.isStamped || account.invoiceStatus === "timbrada");
+                                        const isWaitingStamp = Boolean(
+                                          !isStamped && (
+                                            account.rfc ||
+                                            account.razonSocial ||
+                                            account.invoiceDraftFolio ||
+                                            account.invoiceStatus === "datos_completos" ||
+                                            account.invoiceStatus === "esperando_timbrado" ||
+                                            account.invoiceStatus === "prefactura"
+                                          )
+                                        );
+
+                                        if (isStamped) {
+                                          return (
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-sm">
+                                                ✅ Timbrada {account.invoiceFolio ? `#${account.invoiceFolio}` : ""}
+                                              </span>
+                                              {account.invoicePdfUrl && (
+                                                <a
+                                                  href={account.invoicePdfUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1 shadow-sm no-underline"
+                                                >
+                                                  📄 Ver PDF
+                                                </a>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+
+                                        if (isWaitingStamp) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenCfdiInvoiceModal?.(account);
+                                              }}
+                                              className="px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-md active:scale-95 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 border-amber-600"
+                                              title="Pre-factura y datos fiscales listos en MySQL. Clic para timbrar ante el SAT"
+                                            >
+                                              <span>⏳</span>
+                                              <span>No Timbrada (Esperando Timbrado)</span>
+                                              {account.rfc && (
+                                                <span className="bg-slate-950 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                                  {account.rfc}
+                                                </span>
+                                              )}
+                                            </button>
+                                          );
+                                        }
+
+                                        if (handleOpenCfdiInvoiceModal) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenCfdiInvoiceModal(account);
+                                              }}
+                                              className="px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700"
+                                              title="Emitir o Timbrar Factura CFDI 4.0 ante el SAT"
+                                            >
+                                              ⚡ Facturar CFDI
+                                            </button>
+                                          );
+                                        }
+
+                                        return null;
+                                      })()}
 
                                     {account.status !== "cancelled" && (
                                       <IonButton
