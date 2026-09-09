@@ -383,6 +383,23 @@ return (
                               </span>
                               <span>Inventarios</span>
                             </button>
+
+                            <button
+                              onClick={() => {
+                                setAppMode("invoicing");
+                                setShowSidebar(false);
+                              }}
+                              className={`flex items-center gap-3 w-full p-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                                appMode === "invoicing"
+                                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20 scale-[1.02]"
+                                  : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                              }`}
+                            >
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/10 text-base">
+                                🧾
+                              </span>
+                              <span>Facturación CFDI</span>
+                            </button>
                           </>
                         )}
                       </>

@@ -118,6 +118,7 @@ const CustomerInvoicePortalView = React.lazy(() =>
 const AdminPanelView = React.lazy(() => import('./components/views/AdminPanelView').then(m => ({ default: m.AdminPanelView })));
 const ManageMenuView = React.lazy(() => import('./components/views/ManageMenuView').then(m => ({ default: m.ManageMenuView })));
 const ManageInventoryView = React.lazy(() => import('./components/views/ManageInventoryView').then(m => ({ default: m.ManageInventoryView })));
+const ManageInvoicingView = React.lazy(() => import('./components/views/ManageInvoicingView').then(m => ({ default: m.ManageInvoicingView })));
 const ReportsView = React.lazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
 const DashboardView = React.lazy(() => import('./components/views/DashboardView').then(m => ({ default: m.DashboardView })));
 const CorteNuevoView = React.lazy(() => import('./components/views/CorteNuevoView').then(m => ({ default: m.CorteNuevoView })));
@@ -4973,6 +4974,7 @@ export default function App() {
     | "admin"
     | "manage-menu"
     | "inventory"
+    | "invoicing"
     | "suppliers"
     | "customers"
     | "reports"
@@ -13237,6 +13239,21 @@ Instrucciones:
     />
   );
 
+  const renderManageInvoicing = () => (
+    <ManageInvoicingView
+      renderMaterialHeader={renderMaterialHeader}
+      setAppMode={setAppMode}
+      currentUser={currentUser}
+      selectedTenant={selectedTenant}
+      COMPANY_CATALOG={COMPANY_CATALOG}
+      customOwners={customOwners}
+      activeOwnerFilter={activeOwnerFilter}
+      history={history}
+      customers={customers}
+      triggerAppNotification={triggerAppNotification}
+    />
+  );
+
   const renderSuppliers = () => (
     <SuppliersView
       renderMaterialHeader={renderMaterialHeader}
@@ -14202,6 +14219,7 @@ Instrucciones:
 
             {appMode === "manage-menu" && renderManageMenu()}
             {appMode === "inventory" && renderManageInventory()}
+            {appMode === "invoicing" && renderManageInvoicing()}
             {appMode === "suppliers" && renderSuppliers()}
             {appMode === "customers" && renderCustomers()}
             {appMode === "reports" && renderReports()}

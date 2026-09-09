@@ -580,21 +580,172 @@ if ($accion === 'eliminar_no_timbrada') {
 }
 
 // =========================================================================
-// ACCIÓN 4: LISTAR FACTURAS NO TIMBRADAS
+// ACCIÓN 4: LISTAR FACTURAS (FILTROS POR ESTADO, BUSQUEDA Y FECHA)
 // =========================================================================
-if ($accion === 'listar_no_timbradas') {
-    $sql = "SELECT F.ID_FACTURA, F.ID_CLIENTE, F.FOLIO, F.FECHA, F.TIMPORTE, F.IVA, F.SUBTOTAL, F.ISR, F.TOTAL, F.XML, F.estado, F.timbrada, F.rfc, F.nombre 
+if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accion === 'listar') {
+    $filtroEstado = trim($data['estado'] ?? $_GET['estado'] ?? '');
+    $busqueda     = trim($data['busqueda'] ?? $data['query'] ?? $_GET['busqueda'] ?? $_GET['query'] ?? '');
+    $fechaInicio  = trim($data['fecha_inicio'] ?? $_GET['fecha_inicio'] ?? '');
+    $fechaFin     = trim($data['fecha_fin'] ?? $_GET['fecha_fin'] ?? '');
+
+    $where = ["1=1"];
+
+    if ($accion === 'listar_no_timbradas' || $filtroEstado === 'no_timbradas' || $filtroEstado === 'pendientes') {
+        $where[] = "(F.timbrada = 0 OR F.estado = 'PENDIENTE' OR F.estado = 'BORRADOR')";
+    } elseif ($filtroEstado === 'timbradas') {
+        $where[] = "(F.timbrada = 1 OR F.estado = 'TIMBRADA')";
+    }
+
+    if (!empty($busqueda)) {
+        $bEsc = dbEscape($busqueda);
+        $where[] = "(F.rfc LIKE '%$bEsc%' OR F.nombre LIKE '%$bEsc%' OR F.folio LIKE '%$bEsc%' OR F.uuid LIKE '%$bEsc%' OR F.ticket_id LIKE '%$bEsc%')";
+    }
+
+    if (!empty($fechaInicio)) {
+        $fIniEsc = dbEscape($fechaInicio);
+        $where[] = "F.fecha >= '$fIniEsc 00:00:00'";
+    }
+    if (!empty($fechaFin)) {
+        $fFinEsc = dbEscape($fechaFin);
+        $where[] = "F.fecha <= '$fFinEsc 23:59:59'";
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $sql = "SELECT F.ID_FACTURA, F.ID_CLIENTE, F.serie, F.folio, F.fecha, F.rfc, F.nombre, 
+                   F.timporte AS subtotal, F.iva, F.ret_isr, F.total, F.correo, F.ticket_id, 
+                   F.timbrada, F.estado, F.uuid, F.formapago, F.metodopago, F.usocfdi, F.regimenfiscal, F.cp
             FROM facturas F 
-            WHERE F.timbrada = 0 OR F.estado = 'PENDIENTE' OR F.estado = 'BORRADOR' 
-            ORDER BY F.ID_FACTURA DESC LIMIT 50";
+            WHERE $whereSql 
+            ORDER BY F.ID_FACTURA DESC LIMIT 150";
+
     $res = dbQuery($sql);
     $lista = [];
     if ($res) {
         while ($row = dbFetchAssoc($res)) {
+            $folioRow = intval($row['folio'] ?? 0);
+            $isTimbrada = intval($row['timbrada'] ?? 0) === 1 || ($row['estado'] ?? '') === 'TIMBRADA';
+            
+            $pdfUrl = $baseUrl . "facturas/factura_{$folioRow}.pdf";
+            $xmlUrl = $baseUrl . "facturas/factura_{$folioRow}.xml";
+
+            $row['folio']     = $folioRow;
+            $row['timbrada']  = $isTimbrada ? 1 : 0;
+            $row['subtotal']  = floatval($row['subtotal'] ?? 0);
+            $row['iva']       = floatval($row['iva'] ?? 0);
+            $row['ret_isr']   = floatval($row['ret_isr'] ?? 0);
+            $row['total']     = floatval($row['total'] ?? 0);
+            $row['pdfUrl']    = $pdfUrl;
+            $row['xmlUrl']    = $xmlUrl;
             $lista[] = $row;
         }
     }
-    echo json_encode(['ok' => true, 'facturas' => $lista]);
+
+    // Totales rápidos para widgets
+    $qStats = dbQuery("SELECT 
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        FROM facturas");
+    $stats = dbFetchAssoc($qStats);
+
+    echo json_encode([
+        'ok'       => true,
+        'facturas' => $lista,
+        'stats'    => [
+            'total'          => intval($stats['total_count'] ?? 0),
+            'timbradas'      => intval($stats['timbradas_count'] ?? 0),
+            'pendientes'     => intval($stats['pendientes_count'] ?? 0),
+            'monto_facturado'=> floatval($stats['total_facturado_monto'] ?? 0)
+        ]
+    ]);
+    exit;
+}
+
+// =========================================================================
+// ACCIÓN 5: REENVIAR FACTURA POR CORREO
+// =========================================================================
+if ($accion === 'reenviar_correo' || $accion === 'enviar_correo') {
+    $folio  = intval($data['folio'] ?? $_GET['folio'] ?? 0);
+    $correo = trim($data['correo'] ?? $data['email'] ?? $_GET['correo'] ?? $_GET['email'] ?? '');
+
+    if ($folio <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'Se requiere el folio de la factura.']);
+        exit;
+    }
+
+    $qFact = dbQuery("SELECT * FROM facturas WHERE folio = $folio LIMIT 1");
+    $fact  = dbFetchAssoc($qFact);
+
+    if (!$fact) {
+        echo json_encode(['ok' => false, 'error' => "No se encontró la factura Folio #$folio en la base de datos."]);
+        exit;
+    }
+
+    $destinatario = !empty($correo) ? $correo : trim($fact['correo'] ?? '');
+    if (empty($destinatario)) {
+        echo json_encode(['ok' => false, 'error' => 'Por favor especifica una dirección de correo válida.']);
+        exit;
+    }
+
+    $destEsc = dbEscape($destinatario);
+    dbQuery("UPDATE facturas SET correo = '$destEsc' WHERE folio = $folio");
+
+    $pdfUrl = $baseUrl . "facturas/factura_{$folio}.pdf";
+    $xmlUrl = $baseUrl . "facturas/factura_{$folio}.xml";
+
+    // Enviar correo nativo o retornar links listos
+    $subject = "Factura Electrónica CFDI 4.0 - Folio #{$folio} - " . ($fact['nombre'] ?? '');
+    $message = "Estimado cliente,\n\nAdjuntamos los enlaces para la descarga de su Comprobante Fiscal Digital por Internet (CFDI 4.0):\n\n"
+             . "Folio: #{$folio}\n"
+             . "RFC: " . ($fact['rfc'] ?? '') . "\n"
+             . "Total: $" . number_format(floatval($fact['total'] ?? 0), 2) . " MXN\n\n"
+             . "Descargar PDF: $pdfUrl\n"
+             . "Descargar XML: $xmlUrl\n\n"
+             . "Gracias por su preferencia.";
+    
+    $headers = "From: no-reply@" . ($host ? $host : "cocinet.com") . "\r\n" .
+               "Reply-To: no-reply@" . ($host ? $host : "cocinet.com") . "\r\n" .
+               "X-Mailer: PHP/" . phpversion();
+
+    @mail($destinatario, $subject, $message, $headers);
+
+    echo json_encode([
+        'ok'      => true,
+        'mensaje' => "Factura enviada exitosamente a $destinatario.",
+        'correo'  => $destinatario,
+        'pdfUrl'  => $pdfUrl,
+        'xmlUrl'  => $xmlUrl
+    ]);
+    exit;
+}
+
+// =========================================================================
+// ACCIÓN 6: TEST DE CONEXIÓN Y ESTADO GENERAL
+// =========================================================================
+if ($accion === 'test_conexion' || $accion === 'ping') {
+    $qStats = dbQuery("SELECT 
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        FROM facturas");
+    $stats = dbFetchAssoc($qStats);
+    $qCli  = dbQuery("SELECT COUNT(*) AS total_clientes FROM clientes WHERE emisor <> '1'");
+    $cli   = dbFetchAssoc($qCli);
+
+    echo json_encode([
+        'ok'         => true,
+        'servidor'   => 'PHP MySQL CFDI 4.0 API Activa',
+        'host'       => $host,
+        'stats'      => [
+            'total_facturas'  => intval($stats['total_count'] ?? 0),
+            'timbradas'       => intval($stats['timbradas_count'] ?? 0),
+            'pendientes'      => intval($stats['pendientes_count'] ?? 0),
+            'clientes_mysql'  => intval($cli['total_clientes'] ?? 0),
+            'monto_facturado' => floatval($stats['total_facturado_monto'] ?? 0)
+        ]
+    ]);
     exit;
 }
 

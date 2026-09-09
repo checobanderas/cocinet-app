@@ -467,3 +467,180 @@ export async function descartarFactura(
     return { ok: false, error: err.message || "Error al conectar con la API de facturación." };
   }
 }
+
+export interface ApiInvoiceItem {
+  folio: number;
+  serie?: string;
+  fecha?: string;
+  ticket?: string | number;
+  ticket_id?: string | number;
+  rfc: string;
+  razon_social: string;
+  email?: string;
+  telefono?: string;
+  total: number;
+  subtotal?: number;
+  iva?: number;
+  retencion_isr?: number;
+  uuid?: string;
+  timbrada: boolean | number;
+  pdf_url?: string;
+  xml_url?: string;
+  forma_pago?: string;
+  metodo_pago?: string;
+  uso_cfdi?: string;
+  regimen_fiscal?: string;
+  cp?: string;
+  tenant_id?: string;
+}
+
+export interface ListInvoicesResponse {
+  ok: boolean;
+  resumen?: {
+    total: number;
+    timbradas: number;
+    no_timbradas: number;
+    monto_total_timbrado: number;
+    monto_total_no_timbrado: number;
+  };
+  facturas?: ApiInvoiceItem[];
+  error?: string;
+}
+
+/**
+ * Accion: 'listar_facturas' - Obtiene facturas timbradas y borradores de MySQL
+ */
+export async function listarFacturasFromApi(
+  apiUrl: string,
+  filters?: {
+    estado?: "todas" | "timbradas" | "no_timbradas" | "pendientes_datos";
+    busqueda?: string;
+    fecha_inicio?: string;
+    fecha_fin?: string;
+    limite?: number;
+  }
+): Promise<ListInvoicesResponse> {
+  const url = apiUrl || DEFAULT_INVOICING_API_URL;
+  if (!url) return { ok: false, error: "No hay URL de API de facturación." };
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        accion: "listar_facturas",
+        action: "listar_facturas",
+        ...filters
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const parseResult = await safeParseJsonResponse<ListInvoicesResponse>(res, "listado de facturas");
+    if (!parseResult.ok || !parseResult.data) {
+      return { ok: false, error: parseResult.error || `Error al consultar facturas (HTTP ${res.status})` };
+    }
+
+    return parseResult.data;
+  } catch (err: any) {
+    console.error("Error al listar facturas desde API:", err);
+    return { ok: false, error: err.message || "Error al conectar con la API de facturación." };
+  }
+}
+
+/**
+ * Accion: 'reenviar_correo' - Reenvía comprobantes PDF y XML al correo del cliente
+ */
+export async function reenviarFacturaPorCorreo(
+  apiUrl: string,
+  params: {
+    folio: number;
+    email: string;
+    pdf_url?: string;
+    xml_url?: string;
+  }
+): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
+  const url = apiUrl || DEFAULT_INVOICING_API_URL;
+  if (!url) return { ok: false, error: "No hay URL de API de facturación." };
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        accion: "reenviar_correo",
+        action: "reenviar_correo",
+        folio: params.folio,
+        email: params.email,
+        correo: params.email,
+        pdf_url: params.pdf_url,
+        xml_url: params.xml_url
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const parseResult = await safeParseJsonResponse<{ ok: boolean; mensaje?: string; error?: string }>(res, "reenvío de correo");
+    if (!parseResult.ok || !parseResult.data) {
+      return { ok: false, error: parseResult.error || `Error al reenviar correo (HTTP ${res.status})` };
+    }
+
+    return parseResult.data;
+  } catch (err: any) {
+    console.error("Error al reenviar correo:", err);
+    return { ok: false, error: err.message || "Error al conectar con el servidor de correo." };
+  }
+}
+
+/**
+ * Accion: 'test_conexion' - Prueba conectividad con el servidor PHP/MySQL
+ */
+export async function testConexionFacturacion(
+  apiUrl: string
+): Promise<{
+  ok: boolean;
+  mensaje?: string;
+  servidor?: string;
+  clientes_registrados?: number;
+  facturas_timbradas?: number;
+  facturas_no_timbradas?: number;
+  total_facturado?: number;
+  error?: string;
+}> {
+  const url = apiUrl || DEFAULT_INVOICING_API_URL;
+  if (!url) return { ok: false, error: "No hay URL configurada." };
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        accion: "test_conexion",
+        action: "test_conexion"
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const parseResult = await safeParseJsonResponse<any>(res, "prueba de conexión");
+    if (!parseResult.ok || !parseResult.data) {
+      return { ok: false, error: parseResult.error || `Error HTTP ${res.status}` };
+    }
+
+    return parseResult.data;
+  } catch (err: any) {
+    return { ok: false, error: err.message || "No se pudo conectar con el servidor." };
+  }
+}
