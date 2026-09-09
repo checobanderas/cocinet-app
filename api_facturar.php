@@ -612,30 +612,46 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
     $where = array("1=1");
 
     if ($accion === 'listar_no_timbradas' || $filtroEstado === 'no_timbradas' || $filtroEstado === 'pendientes') {
-        $where[] = "(F.timbrada = 0 OR F.estado = 'PENDIENTE' OR F.estado = 'BORRADOR')";
+        $where[] = "((F.UUID IS NULL OR F.UUID = '' OR F.UUID = '0') AND (F.estado IS NULL OR F.estado <> 'TIMBRADA'))";
     } elseif ($filtroEstado === 'timbradas') {
-        $where[] = "(F.timbrada = 1 OR F.estado = 'TIMBRADA')";
+        $where[] = "((F.UUID IS NOT NULL AND F.UUID <> '' AND F.UUID <> '0') OR F.estado = 'TIMBRADA')";
     }
 
     if (!empty($busqueda)) {
         $bEsc = dbEscape($busqueda);
-        $where[] = "(F.rfc LIKE '%$bEsc%' OR F.nombre LIKE '%$bEsc%' OR F.folio LIKE '%$bEsc%' OR F.uuid LIKE '%$bEsc%' OR F.ticket_id LIKE '%$bEsc%')";
+        $where[] = "(C.RFC LIKE '%$bEsc%' OR C.NOMBRE LIKE '%$bEsc%' OR F.FOLIO LIKE '%$bEsc%' OR F.UUID LIKE '%$bEsc%')";
     }
 
     if (!empty($fechaInicio)) {
         $fIniEsc = dbEscape($fechaInicio);
-        $where[] = "F.fecha >= '$fIniEsc 00:00:00'";
+        $where[] = "F.FECHA >= '$fIniEsc 00:00:00'";
     }
     if (!empty($fechaFin)) {
         $fFinEsc = dbEscape($fechaFin);
-        $where[] = "F.fecha <= '$fFinEsc 23:59:59'";
+        $where[] = "F.FECHA <= '$fFinEsc 23:59:59'";
     }
 
     $whereSql = implode(' AND ', $where);
-    $sql = "SELECT F.ID_FACTURA, F.ID_CLIENTE, F.serie, F.folio, F.fecha, F.rfc, F.nombre, 
-                   F.timporte AS subtotal, F.iva, F.ret_isr, F.total, F.correo, F.ticket_id, 
-                   F.timbrada, F.estado, F.uuid, F.formapago, F.metodopago, F.usocfdi, F.regimenfiscal, F.cp
+    $sql = "SELECT F.ID_FACTURA,
+                   F.ID_CLIENTE,
+                   F.FOLIO AS folio,
+                   F.FECHA AS fecha,
+                   C.NOMBRE AS nombre,
+                   C.NOMBRE AS razon_social,
+                   C.RFC AS rfc,
+                   C.CP AS cp,
+                   C.REGIMEN AS regimenfiscal,
+                   C.USOCFDI AS usocfdi,
+                   C.EMAIL AS correo,
+                   C.TELEFONO AS phone,
+                   F.IMPORTE AS subtotal,
+                   F.IVA AS iva,
+                   F.ISR AS ret_isr,
+                   F.TOTAL AS total,
+                   F.UUID AS uuid,
+                   F.estado AS estado
             FROM facturas F 
+            LEFT JOIN clientes C ON (F.ID_CLIENTE = C.ID_CLIENTE OR F.ID_CLIENTE = C.id)
             WHERE $whereSql 
             ORDER BY F.ID_FACTURA DESC LIMIT 150";
 
@@ -643,30 +659,49 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
     $lista = array();
     if ($res) {
         while ($row = dbFetchAssoc($res)) {
-            $folioRow = intval(getVal($row, 'folio', 0));
-            $isTimbrada = intval(getVal($row, 'timbrada', 0)) === 1 || getVal($row, 'estado') === 'TIMBRADA';
+            $folioRow = trim(strval(getVal($row, 'folio', getVal($row, 'FOLIO', ''))));
+            $rawUuid  = trim(strval(getVal($row, 'uuid', getVal($row, 'UUID', ''))));
+            $rawEstado = strtoupper(trim(strval(getVal($row, 'estado', ''))));
+            $isTimbrada = (!empty($rawUuid) && $rawUuid !== '0') || ($rawEstado === 'TIMBRADA');
             
             $pdfUrl = $baseUrl . "facturas/factura_{$folioRow}.pdf";
             $xmlUrl = $baseUrl . "facturas/factura_{$folioRow}.xml";
 
-            $row['folio']     = $folioRow;
-            $row['timbrada']  = $isTimbrada ? 1 : 0;
-            $row['subtotal']  = floatval(getVal($row, 'subtotal', 0));
-            $row['iva']       = floatval(getVal($row, 'iva', 0));
-            $row['ret_isr']   = floatval(getVal($row, 'ret_isr', 0));
-            $row['total']     = floatval(getVal($row, 'total', 0));
-            $row['pdfUrl']    = $pdfUrl;
-            $row['xmlUrl']    = $xmlUrl;
-            $lista[] = $row;
+            $lista[] = array(
+                'id'                  => getVal($row, 'ID_FACTURA'),
+                'folio'               => $folioRow,
+                'serie'               => 'A',
+                'fecha'               => getVal($row, 'fecha', getVal($row, 'FECHA')),
+                'rfc'                 => strtoupper(trim(getVal($row, 'rfc'))),
+                'razon_social'        => strtoupper(trim(getVal($row, 'razon_social', getVal($row, 'nombre')))),
+                'nombre'              => strtoupper(trim(getVal($row, 'nombre', getVal($row, 'razon_social')))),
+                'total'               => floatval(getVal($row, 'total', getVal($row, 'TOTAL', 0))),
+                'subtotal'            => floatval(getVal($row, 'subtotal', getVal($row, 'IMPORTE', 0))),
+                'iva'                 => floatval(getVal($row, 'iva', getVal($row, 'IVA', 0))),
+                'ret_isr'             => floatval(getVal($row, 'ret_isr', getVal($row, 'ISR', 0))),
+                'retencion_isr'       => floatval(getVal($row, 'ret_isr', getVal($row, 'ISR', 0))),
+                'uuid'                => $rawUuid,
+                'timbrada'            => $isTimbrada ? 1 : 0,
+                'estado'              => $isTimbrada ? 'TIMBRADA' : ($rawEstado ? $rawEstado : 'PENDIENTE'),
+                'email'               => getVal($row, 'correo'),
+                'correo'              => getVal($row, 'correo'),
+                'cp'                  => getVal($row, 'cp'),
+                'regimen_fiscal'      => getVal($row, 'regimenfiscal', '612'),
+                'uso_cfdi'            => getVal($row, 'usocfdi', 'G03'),
+                'pdf_url'             => $pdfUrl,
+                'xml_url'             => $xmlUrl,
+                'pdfUrl'              => $pdfUrl,
+                'xmlUrl'              => $xmlUrl
+            );
         }
     }
 
     // Totales rápidos para widgets
     $qStats = dbQuery("SELECT 
         COUNT(*) AS total_count,
-        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
-        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
-        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        SUM(CASE WHEN (UUID IS NOT NULL AND UUID <> '' AND UUID <> '0') OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN (UUID IS NULL OR UUID = '' OR UUID = '0') AND (estado IS NULL OR estado <> 'TIMBRADA') THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN (UUID IS NOT NULL AND UUID <> '' AND UUID <> '0') OR estado = 'TIMBRADA' THEN TOTAL ELSE 0 END) AS total_facturado_monto
         FROM facturas");
     $stats = dbFetchAssoc($qStats);
 
@@ -748,9 +783,9 @@ if ($accion === 'reenviar_correo' || $accion === 'enviar_correo') {
 if ($accion === 'test_conexion' || $accion === 'ping') {
     $qStats = dbQuery("SELECT 
         COUNT(*) AS total_count,
-        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
-        SUM(CASE WHEN timbrada = 0 OR estado = 'PENDIENTE' OR estado = 'BORRADOR' THEN 1 ELSE 0 END) AS pendientes_count,
-        SUM(CASE WHEN timbrada = 1 OR estado = 'TIMBRADA' THEN total ELSE 0 END) AS total_facturado_monto
+        SUM(CASE WHEN (UUID IS NOT NULL AND UUID <> '' AND UUID <> '0') OR estado = 'TIMBRADA' THEN 1 ELSE 0 END) AS timbradas_count,
+        SUM(CASE WHEN (UUID IS NULL OR UUID = '' OR UUID = '0') AND (estado IS NULL OR estado <> 'TIMBRADA') THEN 1 ELSE 0 END) AS pendientes_count,
+        SUM(CASE WHEN (UUID IS NOT NULL AND UUID <> '' AND UUID <> '0') OR estado = 'TIMBRADA' THEN TOTAL ELSE 0 END) AS total_facturado_monto
         FROM facturas");
     $stats = dbFetchAssoc($qStats);
     $qCli  = dbQuery("SELECT COUNT(*) AS total_clientes FROM clientes WHERE emisor <> '1'");
