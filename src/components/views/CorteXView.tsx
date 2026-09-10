@@ -1,7 +1,8 @@
 import { getMexicoISOString } from '../../utils/firestore';
 import { getProductReportName, getProductSortScore, getTenantUsers } from '../../utils/appHelpers';
 import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
-import React from 'react';
+import { WhatsAppCorteModal } from '../modals/WhatsAppCorteModal';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
 import { logoUrl } from 'ionicons/icons';
@@ -132,6 +133,10 @@ if (currentUser?.role === "mesero") {
     }
 
     // Calculate dates based on selected date (6:00 AM selected_day to 5:59 AM next_day)
+    const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+    const [whatsAppText, setWhatsAppText] = useState("");
+    const [whatsAppRecipients, setWhatsAppRecipients] = useState<any[]>([]);
+
     const getCorteXRange = (dateStr: string) => {
       const [year, month, day] = dateStr.split("-").map(Number);
       const start = new Date(year, month - 1, day, 6, 0, 0, 0);
@@ -343,16 +348,16 @@ if (currentUser?.role === "mesero") {
       return text;
     };
 
-    const handleShareWhatsApp = async () => {
+    const handleShareWhatsApp = () => {
       const text = getCorteText();
       const phonesSet = new Set<string>();
-      const recipients: Array<{ name: string; phone: string }> = [];
-      const addRecipient = (name: string, rawPhone?: string) => {
+      const recipients: Array<{ name: string; phone: string; role?: string }> = [];
+      const addRecipient = (name: string, rawPhone?: string, role?: string) => {
         if (!rawPhone) return;
         const clean = rawPhone.replace(/\D/g, "");
         if (clean.length >= 10 && !phonesSet.has(clean)) {
           phonesSet.add(clean);
-          recipients.push({ name, phone: clean });
+          recipients.push({ name, phone: clean, role: role || "Administrador" });
         }
       };
       try {
@@ -361,28 +366,17 @@ if (currentUser?.role === "mesero") {
         const users = getTenantUsers(tid);
         users.forEach(u => {
           if ((u.role === "admin" || u.role === "owner" || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.isReportRecipient) && u.phone) {
-            addRecipient(u.name, u.phone);
+            addRecipient(u.name, u.phone, u.role || "Admin");
           }
         });
       } catch(e) {}
-      if (recipients.length === 0) {
-        addRecipient("Administrador", "9511273796");
+      const lastPhone = localStorage.getItem("cocinet_last_corte_whatsapp_phone");
+      if (lastPhone && !phonesSet.has(lastPhone)) {
+        addRecipient("Último Número Usado", lastPhone, "Guardado");
       }
-
-      let anySent = false;
-      for (const r of recipients) {
-        if (r.phone) {
-          const res = await sendSilentWhatsAppMessage(r.phone, text);
-          if (res.success) anySent = true;
-        }
-      }
-
-      if (anySent) {
-        alert("Corte X enviado exitosamente a WhatsApp ✅");
-      } else {
-        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-        window.open(url, "_blank");
-      }
+      setWhatsAppText(text);
+      setWhatsAppRecipients(recipients);
+      setShowWhatsAppModal(true);
     };
 
     const handleCopyClipboard = () => {
@@ -917,6 +911,14 @@ if (currentUser?.role === "mesero") {
             </div>
 
           </div>
+
+          <WhatsAppCorteModal
+            isOpen={showWhatsAppModal}
+            onClose={() => setShowWhatsAppModal(false)}
+            corteText={whatsAppText}
+            businessName={ticketBusinessName || companyConfig?.businessName || "COCINET"}
+            recipients={whatsAppRecipients}
+          />
         </IonContent>
       </IonPage>
     );

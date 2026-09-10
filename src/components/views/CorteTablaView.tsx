@@ -3,6 +3,8 @@ import { ShiftBackupModal } from '../modals/ShiftBackupModal';
 import { SystemsChoiceAlert } from '../modals/SystemsChoiceAlert';
 import { TablaArqueoModal } from '../modals/TablaArqueoModal';
 import { EditFondoModal } from '../modals/EditFondoModal';
+import { WhatsAppCorteModal } from '../modals/WhatsAppCorteModal';
+import { MetaWhatsAppConfigModal } from '../modals/MetaWhatsAppConfigModal';
 import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
 import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
@@ -236,6 +238,10 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
   const [testWhatsappPhone, setTestWhatsappPhone] = useState("");
   const [pendingTablesList, setPendingTablesList] = useState<any[]>([]);
   const [showShiftBackupModal, setShowShiftBackupModal] = useState(false);
+  const [showWhatsAppCorteModal, setShowWhatsAppCorteModal] = useState(false);
+  const [showMetaConfigModal, setShowMetaConfigModal] = useState(false);
+  const [whatsAppCorteRecipients, setWhatsAppCorteRecipients] = useState<any[]>([]);
+  const [whatsAppCorteText, setWhatsAppCorteText] = useState<string>("");
 
   const sessionToRender = activeSessionForCorte;
   const openSessions = cashierSessions?.filter((s) => s.status === "open") || [];
@@ -1690,59 +1696,42 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
       triggerAppNotification("Exportador", "Corte exportado a archivo TXT correctamente 📄✨", "success");
     };
 
-    const sendCorteTablaToWhatsApp = async () => {
+    const sendCorteTablaToWhatsApp = () => {
       const text = generateCorteText();
-      const metaConfig = getWhatsAppCloudConfig();
 
       const phonesSet = new Set<string>();
-      const recipients: Array<{ name: string; phone: string }> = [];
+      const recipients: Array<{ name: string; phone: string; role?: string }> = [];
 
-      const addRecipient = (name: string, rawPhone?: string) => {
+      const addRecipient = (name: string, rawPhone?: string, role?: string) => {
         if (!rawPhone) return;
         const clean = rawPhone.replace(/\D/g, "");
         if (clean.length >= 10 && !phonesSet.has(clean)) {
           phonesSet.add(clean);
-          recipients.push({ name, phone: clean });
+          recipients.push({ name, phone: clean, role: role || "Administrador" });
         }
       };
 
       const tenantUsers = getTenantUsers(selectedTenant?.id || "tenant-1");
       tenantUsers.forEach((u) => {
         if ((u.isReportRecipient || u.id.endsWith("-admin") || u.id.endsWith("-manager") || u.id.endsWith("-sistemas") || u.role === "admin") && u.phone) {
-          addRecipient(u.name, u.phone);
+          addRecipient(u.name, u.phone, u.role || "Admin");
         }
       });
       if (currentUser?.phone && (currentUser.role === "admin" || currentUser.id?.endsWith("-admin") || currentUser.id?.endsWith("-sistemas"))) {
-        addRecipient(currentUser.name || "Admin", currentUser.phone);
+        addRecipient(currentUser.name || "Usuario Actual", currentUser.phone, currentUser.role || "Admin");
       }
-      if (selectedTenant?.phone) addRecipient(selectedTenant.name || "Admin", selectedTenant.phone);
-      if (selectedTenant?.adminPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.adminPhone);
-      if (selectedTenant?.whatsappPhone) addRecipient(selectedTenant.name || "Admin", selectedTenant.whatsappPhone);
+      if (selectedTenant?.phone) addRecipient(selectedTenant.name || "Sucursal", selectedTenant.phone, "Teléfono Sucursal");
+      if (selectedTenant?.adminPhone) addRecipient(selectedTenant.name || "Admin Sucursal", selectedTenant.adminPhone, "Admin");
+      if (selectedTenant?.whatsappPhone) addRecipient(selectedTenant.name || "WhatsApp Sucursal", selectedTenant.whatsappPhone, "WhatsApp");
 
-      if (metaConfig.isEnabled !== false && ((metaConfig.instanceId && metaConfig.token) || (metaConfig.phoneNumberId && metaConfig.accessToken))) {
-        if (recipients.length > 0) {
-          triggerAppNotification("Enviando WhatsApp Silencioso 🚀", `Entregando corte a administradores...`, "info");
-          let sentOk = false;
-          for (const r of recipients) {
-            const res = await sendSilentWhatsAppMessage(r.phone, text);
-            if (res.success) sentOk = true;
-          }
-          if (sentOk) {
-            triggerAppNotification(
-              "WhatsApp Silencioso Entregado 🚀✅",
-              `Corte entregado en segundo plano a ${recipients.map((r) => r.name).join(", ")}.`,
-              "success"
-            );
-            return;
-          }
-        }
+      const lastPhone = localStorage.getItem("cocinet_last_corte_whatsapp_phone");
+      if (lastPhone && !phonesSet.has(lastPhone)) {
+        addRecipient("Último Número Usado", lastPhone, "Guardado");
       }
 
-      const encodedText = encodeURIComponent(text);
-      const firstPhone = recipients[0]?.phone;
-      const waUrl = firstPhone ? `https://wa.me/52${firstPhone}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;
-      window.open(waUrl, "_blank");
-      triggerAppNotification("WhatsApp", "Enlace de WhatsApp generado con éxito 📲💬", "success");
+      setWhatsAppCorteText(text);
+      setWhatsAppCorteRecipients(recipients);
+      setShowWhatsAppCorteModal(true);
     };
 
     const printCorteTabla = async () => {
@@ -2931,6 +2920,28 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
             history={history || []}
             expenses={expenses || []}
             currentUser={currentUser}
+            triggerAppNotification={triggerAppNotification}
+          />
+
+          {/* ╔══════════════════════════════════════════════════════════════╗
+              ║  📲 MODAL DE ENVÍO DE CORTE POR WHATSAPP                    ║
+              ╚══════════════════════════════════════════════════════════════╝ */}
+          <WhatsAppCorteModal
+            isOpen={showWhatsAppCorteModal}
+            onClose={() => setShowWhatsAppCorteModal(false)}
+            corteText={whatsAppCorteText}
+            businessName={ticketBusinessName || selectedTenant?.name || "COCINET"}
+            recipients={whatsAppCorteRecipients}
+            triggerAppNotification={triggerAppNotification}
+            onOpenApiConfig={() => setShowMetaConfigModal(true)}
+          />
+
+          {/* ╔══════════════════════════════════════════════════════════════╗
+              ║  ⚙️ MODAL DE CONFIGURACIÓN WHATSAPP API (META/ULTRAMSG)       ║
+              ╚══════════════════════════════════════════════════════════════╝ */}
+          <MetaWhatsAppConfigModal
+            isOpen={showMetaConfigModal}
+            onClose={() => setShowMetaConfigModal(false)}
             triggerAppNotification={triggerAppNotification}
           />
         </IonContent>
