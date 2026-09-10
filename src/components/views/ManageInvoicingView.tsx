@@ -87,7 +87,7 @@ export const INVOICE_REMINDER_TEMPLATES: MessageTemplate[] = [
     template: `🌮 *RECORDATORIO DE FACTURACIÓN ELECTRÓNICA*
 🏢 *{sucursal}*
 
-¡Hola{cliente}! 👋 Te contactamos de *{sucursal}*. Notamos que solicitaste factura para tu consumo de *${total}* (Ticket #{ticket}), pero aún estamos en espera de tus datos fiscales (RFC, Razón Social, etc.) para poder generarla. 🧾✨
+¡Hola{cliente}! 👋 Te contactamos de *{sucursal}*. Notamos que solicitaste factura para tu consumo de *$\${total}* (Ticket #{ticket}), pero aún estamos en espera de tus datos fiscales (RFC, Razón Social, etc.) para poder generarla. 🧾✨
 
 📄 *Por favor ingresa tus datos fiscales en el siguiente enlace:*
 {enlace}
@@ -106,7 +106,7 @@ En cuanto los completes, emitiremos tu factura y te llegará a tu correo. ✉️
     template: `🧾 *AVISO DE FACTURA PENDIENTE*
 🏢 *{sucursal}*
 
-Estimado cliente{cliente} 👋 Le recordamos amablemente de parte de *{sucursal}* que tenemos pendiente la emisión de su factura correspondiente al consumo Ticket #{ticket} por un importe de *${total}*.
+Estimado cliente{cliente} 👋 Le recordamos amablemente de parte de *{sucursal}* que tenemos pendiente la emisión de su factura correspondiente al consumo Ticket #{ticket} por un importe de *$\${total}*.
 
 Para asegurar que su comprobante fiscal CFDI 4.0 se timbre oportunamente, por favor capture sus datos en el siguiente portal:
 {enlace}
@@ -119,7 +119,7 @@ Para asegurar que su comprobante fiscal CFDI 4.0 se timbre oportunamente, por fa
     badge: "Express",
     icon: "⚡",
     description: "Mensaje conciso para respuesta rápida y llenado en 1 minuto.",
-    template: `¡Hola{cliente}! 👋 En *{sucursal}* estamos listos para timbrar tu factura del Ticket #{ticket} (${total}).
+    template: `¡Hola{cliente}! 👋 En *{sucursal}* estamos listos para timbrar tu factura del Ticket #{ticket} ($\${total}).
 
 Solo nos faltan tus datos fiscales. Por favor ingresa a este enlace para completarlos en 1 minuto:
 {enlace}
