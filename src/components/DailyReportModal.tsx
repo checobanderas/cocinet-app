@@ -21,6 +21,7 @@ import { closeOutline, downloadOutline, listOutline, restaurantOutline, logoWhat
 import * as XLSX from 'xlsx';
 import { getOperatingDay, getProductReportName, getProductSortScore, SUBCATEGORY_ORDER, getTenantUsers } from '../utils/appHelpers';
 import { sendSilentWhatsAppMessage } from '../utils/whatsappCloud';
+import { WhatsAppCorteModal } from './modals/WhatsAppCorteModal';
 import { storage, ensureFirebaseAuth } from '../utils/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -121,6 +122,11 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
 
   // Excel Export Option
   const [excelExportMode, setExcelExportMode] = useState<'view' | 'full'>('full');
+
+  // WhatsApp Modal (Dual: Web/App & Silencioso)
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState<boolean>(false);
+  const [whatsAppText, setWhatsAppText] = useState<string>('');
+  const [whatsAppRecipients, setWhatsAppRecipients] = useState<any[]>([]);
 
   const todayOperatingDay = useMemo(() => targetDate || getOperatingDay(new Date()), [targetDate]);
 
@@ -980,15 +986,11 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       text += `Generado por Cocinet POS ✨`;
 
       const recipients = getReportRecipients();
-      let sentCount = 0;
-      for (const r of recipients) {
-        const res = await sendSilentWhatsAppMessage(r.phone, text);
-        if (res.success) sentCount++;
-      }
-
-      alert(`✅ Reporte diario enviado exitosamente por WhatsApp a ${sentCount} administrador(es) en silencio.`);
+      setWhatsAppText(text);
+      setWhatsAppRecipients(recipients);
+      setShowWhatsAppModal(true);
     } catch (err: any) {
-      alert(`⚠️ Error enviando por WhatsApp: ${err.message || String(err)}`);
+      alert(`⚠️ Error preparando reporte para WhatsApp: ${err.message || String(err)}`);
     }
   };
 
@@ -1546,6 +1548,14 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
           </IonGrid>
         </IonToolbar>
       </IonFooter>
+
+      <WhatsAppCorteModal
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
+        corteText={whatsAppText}
+        businessName={companyName}
+        recipients={whatsAppRecipients}
+      />
     </IonModal>
   );
 };
