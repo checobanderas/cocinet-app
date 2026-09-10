@@ -18,14 +18,31 @@ require_once('plugin/modoro.php');
 
 
 
-if (empty($_GET['ID'])) {
-    $_GET['ID'] = !empty($_GET['id']) ? $_GET['id'] : (!empty($_GET['id_cliente']) ? $_GET['id_cliente'] : 1);
-}
-$cliIdSanitized = intval($_GET['ID']);
-if ($cliIdSanitized <= 0) $cliIdSanitized = 1;
+// if ($_GET['ID'] == '') {
 
-$sql = 'select * from clientes where ID = ' . $cliIdSanitized . ' or id = ' . $cliIdSanitized;
-$cliente = celda($_SESSION['DB'], $sql);
+//     $_GET['ID'] =1;
+
+// }
+
+//
+
+//$_SESSION['DB']='smcfacturas';
+
+$sql='select * from clientes where emisor = 1';
+
+$emisor=celda($_SESSION['DB'],$sql);
+
+
+
+$empresa=$emisor['nomcomercial'];
+
+$direccion=" Calle:".$emisor['calle']. " Col:".$emisor['colonia'];
+
+
+
+$sql='select * from clientes where ID = ' . $_GET['ID'] ;
+
+$cliente=celda($_SESSION['DB'],$sql);
 
 
 
