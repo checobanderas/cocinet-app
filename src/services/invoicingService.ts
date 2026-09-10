@@ -697,35 +697,13 @@ export async function listarFacturasFromApi(
     clearTimeout(timeoutId);
 
     const parseResult = await safeParseJsonResponse<ListInvoicesResponse>(res, "listado de facturas");
-    
-    // Si la API devolvió respuesta válida con facturas, retornamos
-    if (parseResult.ok && parseResult.data && Array.isArray(parseResult.data.facturas) && parseResult.data.facturas.length > 0) {
-      return parseResult.data;
-    }
-
-    // Si la API devolvió stats pero el array de facturas está vacío (o si falló),
-    // consultamos automáticamente el endpoint legacy lstfacturas.php para poblar la lista
-    const legacyFallback = await fetchAndParseLegacyPhpInvoices(url, filters);
-    if (legacyFallback.ok && legacyFallback.facturas && legacyFallback.facturas.length > 0) {
-      // Preservar stats de la API si vinieron
-      if (parseResult.ok && parseResult.data && parseResult.data.resumen) {
-        legacyFallback.resumen = parseResult.data.resumen;
-      }
-      return legacyFallback;
-    }
-
     if (!parseResult.ok || !parseResult.data) {
       return { ok: false, error: parseResult.error || `Error al consultar facturas (HTTP ${res.status})` };
     }
 
     return parseResult.data;
   } catch (err: any) {
-    console.warn("Fallo al conectar con endpoint principal, intentando fallback legacy lstfacturas.php:", err);
-    // Intentar fallback legacy directamente
-    const legacyFallback = await fetchAndParseLegacyPhpInvoices(url, filters);
-    if (legacyFallback.ok) {
-      return legacyFallback;
-    }
+    console.error("Error al listar facturas desde API:", err);
     return { ok: false, error: err.message || "Error al conectar con la API de facturación." };
   }
 }
