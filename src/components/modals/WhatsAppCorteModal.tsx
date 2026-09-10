@@ -159,9 +159,8 @@ export const WhatsAppCorteModal: React.FC<WhatsAppCorteModalProps> = ({
       onDidDismiss={onClose}
       style={{
         '--width': '95%',
-        '--max-width': '580px',
-        '--height': 'auto',
-        '--max-height': '90vh',
+        '--max-width': '620px',
+        '--height': '85%',
         '--border-radius': '24px',
       }}
     >

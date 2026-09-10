@@ -99,8 +99,7 @@ export const MetaWhatsAppConfigModal: React.FC<MetaWhatsAppConfigModalProps> = (
       isOpen={isOpen}
       onDidDismiss={onClose}
       style={{
-        '--height': 'auto',
-        '--max-height': '92vh',
+        '--height': '85%',
         '--width': '95%',
         '--max-width': '650px',
         '--border-radius': '24px',
