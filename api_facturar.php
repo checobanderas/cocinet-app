@@ -543,9 +543,30 @@ if ($accion === 'timbrar') {
     // Obtener datos del borrador y cliente para inicializar variables
     $qFactCheck = dbQuery("SELECT * FROM facturas WHERE folio = $folio OR FOLIO = $folio LIMIT 1");
     $rFactCheck = dbFetchAssoc($qFactCheck);
+    
+    if (!$rFactCheck) {
+        echo json_encode(array('ok' => false, 'error' => "No se encontró la factura Folio #$folio en la base de datos."));
+        exit;
+    }
+
     $clienteId = intval(getVal($rFactCheck, 'ID_CLIENTE', getVal($rFactCheck, 'id_cliente', 0)));
     if (!empty($rFactCheck['serie'])) {
         $serie = trim($rFactCheck['serie']);
+    }
+
+    // Si ya está timbrada previamente, retornar éxito directamente
+    $isAlreadyStamped = (!empty($rFactCheck['UUID']) && $rFactCheck['UUID'] !== '0' && strlen($rFactCheck['UUID']) > 5) || intval(getVal($rFactCheck, 'timbrada')) === 1;
+    if ($isAlreadyStamped) {
+        $existingUuid = trim($rFactCheck['UUID']);
+        facturasLog("Factura ya timbrada previamente: Folio=$folio | UUID=$existingUuid");
+        echo json_encode(array(
+            'ok'     => true,
+            'folio'  => $folio,
+            'uuid'   => $existingUuid,
+            'pdfUrl' => $baseUrl . "facturas/factura_{$folio}.pdf?v=" . time(),
+            'xmlUrl' => $baseUrl . "facturas/factura_{$folio}.xml?v=" . time()
+        ));
+        exit;
     }
 
     if (session_status() === PHP_SESSION_NONE) {
@@ -561,47 +582,155 @@ if ($accion === 'timbrar') {
     $cli = $clienteId;
     $ID = $clienteId;
 
-    // 1. Crear el XML firmado con creacfdi.php
+    // 1. Generar XML firmado llamando a creacfdi.php / genxml.php
+    $xmlContent = '';
     if (file_exists(__DIR__ . '/creacfdi.php')) {
         ob_start();
-        @include __DIR__ . '/creacfdi.php';
+        @include_once __DIR__ . '/creacfdi.php';
+        if (function_exists('satxmlsv22')) {
+            $xmlContent = satxmlsv22();
+        }
         $creaCfdiOut = ob_get_clean();
-    } else {
-        echo json_encode(array('ok' => false, 'error' => 'No se encontró el módulo creacfdi.php en el servidor.'));
+    } elseif (file_exists(__DIR__ . '/genxml.php')) {
+        ob_start();
+        @include_once __DIR__ . '/genxml.php';
+        $creaCfdiOut = ob_get_clean();
+        if (file_exists(__DIR__ . "/FAC-{$folio}.xml")) {
+            $xmlContent = file_get_contents(__DIR__ . "/FAC-{$folio}.xml");
+        }
+    }
+
+    // Guardar XML pre-timbrado en ambas rutas estándar
+    if (!empty($xmlContent)) {
+        @file_put_contents(__DIR__ . "/FAC-{$folio}.xml", $xmlContent);
+        if (!is_dir(__DIR__ . "/facturas")) {
+            @mkdir(__DIR__ . "/facturas", 0777, true);
+        }
+        @file_put_contents(__DIR__ . "/facturas/factura_{$folio}.xml", $xmlContent);
+        dbQuery("UPDATE facturas SET xml = 'FAC-{$folio}.xml' WHERE folio = $folio");
+    }
+
+    $xmlPath = file_exists(__DIR__ . "/FAC-{$folio}.xml") 
+        ? __DIR__ . "/FAC-{$folio}.xml" 
+        : (file_exists(__DIR__ . "/facturas/factura_{$folio}.xml") ? __DIR__ . "/facturas/factura_{$folio}.xml" : '');
+
+    if (empty($xmlPath) || !file_exists($xmlPath)) {
+        facturasLog("Error al generar XML CFDI para Folio=$folio", "ERROR");
+        echo json_encode(array(
+            'ok'    => false,
+            'error' => "No se pudo generar el archivo XML firmado para el folio $folio. Revise los datos del emisor y cliente.",
+            'folio' => $folio
+        ));
         exit;
     }
 
-    // 2. Timbrar mediante SOAP Finkok con timbrar.php
-    if (file_exists(__DIR__ . '/timbrar.php')) {
-        $_POST['folio'] = $folio;
-        $_POST['serie'] = $serie;
-        $_GET['id'] = "facturas/factura_{$folio}.xml";
-        $_GET['folio'] = $folio;
-        ob_start();
-        @include __DIR__ . '/timbrar.php';
-        $timbrarOut = ob_get_clean();
-        
-        if (isset($uuid) && !empty($uuid)) {
-            dbQuery("UPDATE facturas SET timbrada = 1, estado = 'TIMBRADA', uuid = '$uuid', FechaTimbrado = NOW() WHERE folio = $folio");
+    // 2. Timbrado SOAP con Finkok
+    $qParam = dbQuery("SELECT * FROM parametros LIMIT 1");
+    $paramRow = dbFetchAssoc($qParam);
+    $username = getVal($paramRow, 'USER', 'checo2100');
+    $password = getVal($paramRow, 'PASS', '');
+    $urltimbra = getVal($paramRow, 'URLTIMBRA', 'http://facturacion.finkok.com/servicios/soap/stamp.wsdl');
+    if (empty($urltimbra)) {
+        $urltimbra = 'http://facturacion.finkok.com/servicios/soap/stamp.wsdl';
+    }
 
+    $rawXmlToStamp = file_get_contents($xmlPath);
+
+    try {
+        $client = new SoapClient($urltimbra, array(
+            'trace' => 1,
+            'exceptions' => 1,
+            'cache_wsdl' => WSDL_CACHE_NONE,
+            'connection_timeout' => 30
+        ));
+
+        $params = array(
+            "xml"      => $rawXmlToStamp,
+            "username" => $username,
+            "password" => $password
+        );
+
+        $response = $client->__soapCall("stamp", array($params));
+
+        $codEstatus = isset($response->stampResult->CodEstatus) ? (string)$response->stampResult->CodEstatus : '';
+        $uuidResult = isset($response->stampResult->UUID) ? (string)$response->stampResult->UUID : '';
+
+        if ($codEstatus === 'Comprobante timbrado satisfactoriamente' || (!empty($uuidResult) && strlen($uuidResult) > 10)) {
+            $uuid = $uuidResult;
+            $xmlTimbrado = isset($response->stampResult->xml) ? (string)$response->stampResult->xml : $rawXmlToStamp;
+            $fechaTimbrado = isset($response->stampResult->Fecha) ? (string)$response->stampResult->Fecha : date('Y-m-d H:i:s');
+            $noCertSAT = isset($response->stampResult->NoCertificadoSAT) ? (string)$response->stampResult->NoCertificadoSAT : '';
+            $selloSAT = isset($response->stampResult->SatSeal) ? (string)$response->stampResult->SatSeal : '';
+
+            // Guardar XML Timbrado final en disco
+            @file_put_contents(__DIR__ . "/FAC-{$folio}.xml", $xmlTimbrado);
+            if (!is_dir(__DIR__ . "/facturas")) {
+                @mkdir(__DIR__ . "/facturas", 0777, true);
+            }
+            @file_put_contents(__DIR__ . "/facturas/factura_{$folio}.xml", $xmlTimbrado);
+
+            $uuidEsc = dbEscape($uuid);
+            $fechaEsc = dbEscape($fechaTimbrado);
+            $noCertEsc = dbEscape($noCertSAT);
+            $selloSatEsc = dbEscape($selloSAT);
+
+            dbQuery("UPDATE facturas SET 
+                timbrada = 1, 
+                estado = 'TIMBRADA', 
+                UUID = '$uuidEsc', 
+                FechaTimbrado = '$fechaEsc', 
+                noCertificadoSAT = '$noCertEsc', 
+                selloSAT = '$selloSatEsc',
+                xml = 'FAC-{$folio}.xml'
+                WHERE folio = $folio");
+
+            // Generar PDF timbrado final
             if (file_exists(__DIR__ . '/facturapdf.php')) {
-                $_GET['folio'] = $folio;
+                $_GET['folio'] = strval($folio);
+                $_GET['id'] = strval($folio);
+                $_GET['ID'] = $clienteId;
                 $_GET['es_borrador'] = 0;
                 ob_start();
                 @include __DIR__ . '/facturapdf.php';
                 ob_end_clean();
             }
 
+            facturasLog("Factura Timbrada con Exito: Folio=$folio | UUID=$uuid");
+
             echo json_encode(array(
-                'ok'      => true,
-                'folio'   => $folio,
-                'uuid'    => $uuid,
-                'pdfUrl'  => $baseUrl . "facturas/factura_{$folio}.pdf?v=" . time(),
-                'xmlUrl'  => $baseUrl . "facturas/factura_{$folio}.xml?v=" . time()
+                'ok'     => true,
+                'folio'  => $folio,
+                'uuid'   => $uuid,
+                'pdfUrl' => $baseUrl . "facturas/factura_{$folio}.pdf?v=" . time(),
+                'xmlUrl' => $baseUrl . "facturas/factura_{$folio}.xml?v=" . time()
             ));
             exit;
         } else {
-            $errorMsg = !empty($errorSat) ? $errorSat : (!empty($error) ? $error : 'El SAT rechazó el timbrado. Verifique los datos fiscales.');
+            // Analizar incidencias o rechazos del SAT
+            $errorMsg = '';
+            if (isset($response->stampResult->Incidencias->Incidencia)) {
+                $inc = $response->stampResult->Incidencias->Incidencia;
+                if (is_array($inc)) {
+                    $parts = array();
+                    foreach ($inc as $item) {
+                        $c = isset($item->CodigoError) ? "[{$item->CodigoError}] " : "";
+                        $m = isset($item->MensajeIncidencia) ? $item->MensajeIncidencia : "";
+                        $parts[] = $c . $m;
+                    }
+                    $errorMsg = implode(" | ", $parts);
+                } elseif (is_object($inc)) {
+                    $c = isset($inc->CodigoError) ? "[{$inc->CodigoError}] " : "";
+                    $m = isset($inc->MensajeIncidencia) ? $inc->MensajeIncidencia : "";
+                    $errorMsg = $c . $m;
+                }
+            }
+
+            if (empty($errorMsg)) {
+                $errorMsg = !empty($codEstatus) ? $codEstatus : 'El SAT rechazó la solicitud de timbrado.';
+            }
+
+            facturasLog("Rechazo timbrado SAT Finkok: Folio=$folio | Detalle=$errorMsg", "ERROR");
+
             echo json_encode(array(
                 'ok'    => false,
                 'error' => $errorMsg,
@@ -609,8 +738,13 @@ if ($accion === 'timbrar') {
             ));
             exit;
         }
-    } else {
-        echo json_encode(array('ok' => false, 'error' => 'No se encontró el módulo timbrar.php en el servidor.'));
+    } catch (Exception $e) {
+        facturasLog("SoapFault/Excepcion timbrado Folio=$folio: " . $e->getMessage(), "ERROR");
+        echo json_encode(array(
+            'ok'    => false,
+            'error' => "Error de comunicación SOAP con el PAC Finkok: " . $e->getMessage(),
+            'folio' => $folio
+        ));
         exit;
     }
 }

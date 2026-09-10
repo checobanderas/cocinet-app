@@ -123,11 +123,11 @@ export function formatFriendlySatError(rawError: string): { title: string; expla
     };
   }
 
-  if (err.toLowerCase().includes("firebase") || err.toLowerCase().includes("hosting") || err.toLowerCase().includes("html") || err.toLowerCase().includes("sistema gastron")) {
+  if (err.toLowerCase().includes("firebase") || err.toLowerCase().includes("hosting de firebase") || err.toLowerCase().includes("sistema gastron")) {
     return {
       title: "Servidor PHP no configurado o en Hosting Estático",
-      explanation: "La URL de Facturación Web API configurada apunta a Firebase Hosting (que solo aloja la app web) y no a un servidor web que ejecute PHP.",
-      tip: "Configura en la Sucursal/Inquilino la URL completa hacia tu hosting PHP (ej. https://tudominio.com/api_facturar.php) o deja el campo vacío para operar en modo 'Registro y Solicitud de Factura'."
+      explanation: "La URL de Facturación Web API configurada apunta al hosting de Firebase (que solo aloja la app web) y no a un servidor web que ejecute PHP.",
+      tip: "Configura en la Sucursal/Inquilino la URL completa hacia tu hosting PHP (ej. https://tickettimbre.com/trvladimir/api_facturar.php) o deja el campo vacío para operar en modo 'Registro y Solicitud de Factura'."
     };
   }
 
