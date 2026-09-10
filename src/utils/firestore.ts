@@ -24,6 +24,7 @@ import {
   markOutboxSaleSynced,
   saveSingleLocalHistoryItem,
 } from "./db";
+import { logProcesoPico, measurePerformanceAsync } from "./procesosPicoLogger";
 
 
 export enum OperationType {
@@ -110,7 +111,8 @@ export function generateUUID(): string {
   return "uid-" + Date.now() + "-" + Math.floor(Math.random() * 10000000);
 }
 
-export async function runWrite(promise: Promise<any>): Promise<any> {
+export async function runWrite(promise: Promise<any>, opLabel: string = "runWrite"): Promise<any> {
+  const t0 = performance.now();
   const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
   if (!isOnline) {
     // Si estamos sin conexión, no bloqueamos la UI esperando la promesa de red.
@@ -118,26 +120,36 @@ export async function runWrite(promise: Promise<any>): Promise<any> {
     promise.catch((err) =>
       console.warn("Firestore queued offline background write:", err),
     );
+    const t1 = performance.now();
+    logProcesoPico("ESCRITURA_FIRESTORE", opLabel, t1 - t0, "OK", { offline: true });
     return;
   }
   try {
     // Aumentamos el tiempo de espera a un límite saludable de 15 segundos o dejamos que la promesa fluya,
     // pero para evitar falsos negativos que rompan el flujo de la aplicación en la UI, si hay un timeout,
     // lo registramos en consola y permitimos que la app continúe confiando en la sincronización asíncrona de Firestore.
-    return await Promise.race([
+    const result = await Promise.race([
       promise,
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Database write timeout (15s)")), 15000),
       ),
     ]);
-  } catch (err) {
+    const t1 = performance.now();
+    logProcesoPico("ESCRITURA_FIRESTORE", opLabel, t1 - t0, "OK");
+    return result;
+  } catch (err: any) {
+    const t1 = performance.now();
+    const isTimeout = err instanceof Error && err.message.includes("timeout");
+    logProcesoPico("ESCRITURA_FIRESTORE", opLabel, t1 - t0, isTimeout ? "TIMEOUT" : "ERROR", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     console.warn(
       "Firestore write sync delay or error, relying on Firestore background synchronization engine:",
       err,
     );
     // Para que la UI no se rompa ni lance alertas falsas de error por retraso de red,
     // permitimos que continúe con el éxito asíncrono si el error es de timeout.
-    if (err instanceof Error && err.message.includes("timeout")) {
+    if (isTimeout) {
       return; // Se asume que el motor en segundo plano de Firestore resolverá la escritura
     }
     throw err;
@@ -267,19 +279,21 @@ export function subscribeToTables(
 }
 
 export async function fetchTablesFromFirebase(tenantId: string): Promise<any[]> {
-  try {
-    const q = query(
-      collection(db, "tables"),
-      where("tenantId", "==", tenantId)
-    );
-    const snapshot = await getDocs(q);
-    const tables = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    tables.sort((a: any, b: any) => (a.label || "").localeCompare(b.label || ""));
-    return tables;
-  } catch (error) {
-    console.warn("Error in fetchTablesFromFirebase:", error);
-    return [];
-  }
+  return measurePerformanceAsync("LECTURA_FIRESTORE", "fetchTablesFromFirebase", async () => {
+    try {
+      const q = query(
+        collection(db, "tables"),
+        where("tenantId", "==", tenantId)
+      );
+      const snapshot = await getDocs(q);
+      const tables = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      tables.sort((a: any, b: any) => (a.label || "").localeCompare(b.label || ""));
+      return tables;
+    } catch (error) {
+      console.warn("Error in fetchTablesFromFirebase:", error);
+      return [];
+    }
+  }, { tenantId });
 }
 
 export function subscribeToHistory(
@@ -643,15 +657,17 @@ export async function deleteAllProductsFromFirebase(tenantId: string, sucursal: 
 }
 
 export async function checkTenantSalesCount(tenantId: string): Promise<number> {
-  try {
-    const ordersSnap = await getDocs(query(collection(db, "orders"), where("tenantId", "==", tenantId)));
-    const closedSnap = await getDocs(query(collection(db, "closed_accounts"), where("tenantId", "==", tenantId)));
-    const historySnap = await getDocs(query(collection(db, "history"), where("tenantId", "==", tenantId)));
-    return ordersSnap.size + closedSnap.size + historySnap.size;
-  } catch (err) {
-    console.warn("Error checking sales count:", err);
-    return 0;
-  }
+  return measurePerformanceAsync("LECTURA_FIRESTORE", "checkTenantSalesCount", async () => {
+    try {
+      const ordersSnap = await getDocs(query(collection(db, "orders"), where("tenantId", "==", tenantId)));
+      const closedSnap = await getDocs(query(collection(db, "closed_accounts"), where("tenantId", "==", tenantId)));
+      const historySnap = await getDocs(query(collection(db, "history"), where("tenantId", "==", tenantId)));
+      return ordersSnap.size + closedSnap.size + historySnap.size;
+    } catch (err) {
+      console.warn("Error checking sales count:", err);
+      return 0;
+    }
+  }, { tenantId });
 }
 
 export async function addInventoryItemToFirebase(item: any) {

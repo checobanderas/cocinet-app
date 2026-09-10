@@ -81,6 +81,30 @@ PRINT_MODE = "gdi"
 # ─── Logging Rotativo & Registro de Caídas (Crash Log) ──────────────
 LOG_FILE = os.path.join(BASE_DIR, "sentinel_printer.log")
 CRASH_LOG_FILE = os.path.join(BASE_DIR, "sentinel_crash.log")
+PROCESOSPICO_LOG_FILE = os.path.join(BASE_DIR, "procesospico.log")
+PROCESOSPICO_ROOT_FILE = os.path.join(os.path.dirname(BASE_DIR), "procesospico.log")
+pico_lock = threading.Lock()
+
+def log_proceso_pico(source: str, tipo: str, operacion: str, duracion_ms: float, status: str = "OK", detalles: dict = None):
+    """
+    Registra mediciones de rendimiento de alta precisión en procesospico.log.
+    Formato: [YYYY-MM-DD HH:MM:SS.mmm] [SOURCE] [TIPO] op="operacion" duracion=XX.XXms status=OK/ERROR detalles={...}
+    """
+    try:
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%d %H:%M:%S.") + f"{now.microsecond // 1000:03d}"
+        det_str = f" {json.dumps(detalles, ensure_ascii=False)}" if detalles else ""
+        line = f"[{timestamp}] [{source}] [{tipo}] op=\"{operacion}\" duracion={duracion_ms:.2f}ms status={status}{det_str}\n"
+        
+        with pico_lock:
+            for target_path in [PROCESOSPICO_LOG_FILE, PROCESOSPICO_ROOT_FILE]:
+                try:
+                    with open(target_path, "a", encoding="utf-8") as f:
+                        f.write(line)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"Error registrando en procesospico.log: {e}")
 
 def write_crash_log(event_type: str, message: str, details: str = ""):
     """Registra detalladamente la causa de caídas, errores o fallos en sentinel_crash.log."""
@@ -127,6 +151,25 @@ sock = Sock(app)
 app.logger.disabled = True
 log_flask = logging.getLogger("werkzeug")
 log_flask.setLevel(logging.ERROR)
+
+@app.before_request
+def pico_before_request():
+    request._pico_start = time.perf_counter()
+
+@app.after_request
+def pico_after_request(response):
+    if hasattr(request, "_pico_start") and request.path != "/api/log-procesopico":
+        duration_ms = (time.perf_counter() - request._pico_start) * 1000.0
+        status_str = "OK" if response.status_code < 400 else f"HTTP_{response.status_code}"
+        log_proceso_pico(
+            source="BACKEND_FLASK",
+            tipo="ENDPOINT",
+            operacion=f"{request.method} {request.path}",
+            duracion_ms=duration_ms,
+            status=status_str,
+            detalles={"status_code": response.status_code, "client_ip": request.remote_addr}
+        )
+    return response
 
 ws_clients = set()
 ws_lock = threading.Lock()
@@ -1211,6 +1254,34 @@ def print_data(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda
         send_raw_to_printer(printer_name, data_bytes)
 
 # ─── Endpoints de Flask ───────────────────────────────────────────
+@app.route("/api/log-procesopico", methods=["POST", "OPTIONS"])
+def receive_proceso_pico_log():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True}), 200
+    try:
+        data = request.get_json(silent=True) or {}
+        logs = data.get("logs", [])
+        if isinstance(logs, list):
+            for item in logs:
+                source = item.get("source", "FRONTEND_REACT")
+                tipo = item.get("tipo", "PROCESO_PICO")
+                operacion = item.get("operacion", "desconocida")
+                duracion_ms = float(item.get("duracionMs", 0.0))
+                status = item.get("status", "OK")
+                detalles = item.get("detalles", None)
+                log_proceso_pico(source, tipo, operacion, duracion_ms, status, detalles)
+        elif isinstance(data, dict) and "operacion" in data:
+            source = data.get("source", "FRONTEND_REACT")
+            tipo = data.get("tipo", "PROCESO_PICO")
+            operacion = data.get("operacion", "desconocida")
+            duracion_ms = float(data.get("duracionMs", 0.0))
+            status = data.get("status", "OK")
+            detalles = data.get("detalles", None)
+            log_proceso_pico(source, tipo, operacion, duracion_ms, status, detalles)
+        return jsonify({"ok": True, "received": len(logs) if isinstance(logs, list) else 1}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/config", methods=["GET", "POST"])
 def manage_config():
     if request.method == "POST":

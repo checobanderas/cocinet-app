@@ -200,10 +200,78 @@ try {
   // Migration already applied or similar
 }
 
+const PROCESOSPICO_LOG_FILE = path.join(process.cwd(), 'procesospico.log');
+
+function writeProcesosPicoLog(source: string, tipo: string, operacion: string, duracionMs: number, status: string = 'OK', detalles?: any) {
+  try {
+    const now = new Date();
+    const pad = (n: number, z = 2) => String(n).padStart(z, '0');
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}`;
+    const detStr = detalles ? ' ' + JSON.stringify(detalles) : '';
+    const line = `[${timestamp}] [${source}] [${tipo}] op="${operacion}" duracion=${duracionMs.toFixed(2)}ms status=${status}${detStr}\n`;
+    fs.appendFileSync(PROCESOSPICO_LOG_FILE, line, { encoding: 'utf-8' });
+  } catch (err) {
+    console.error('Error escribiendo en procesospico.log:', err);
+  }
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // Middleware de medición de rendimiento de alta precisión (performance.now())
+  app.use((req, res, next) => {
+    if (req.path === '/api/log-procesopico') {
+      return next();
+    }
+    const t0 = performance.now();
+    res.on('finish', () => {
+      const t1 = performance.now();
+      const duracionMs = t1 - t0;
+      const statusStr = res.statusCode < 400 ? 'OK' : `HTTP_${res.statusCode}`;
+      writeProcesosPicoLog(
+        'BACKEND_NODE',
+        'ENDPOINT',
+        `${req.method} ${req.path}`,
+        duracionMs,
+        statusStr,
+        { statusCode: res.statusCode, ip: req.ip }
+      );
+    });
+    next();
+  });
+
+  // Endpoint para recibir métricas del frontend React
+  app.post('/api/log-procesopico', (req, res) => {
+    try {
+      const { logs, operacion, duracionMs, tipo, status, source, detalles } = req.body;
+      if (Array.isArray(logs)) {
+        for (const item of logs) {
+          writeProcesosPicoLog(
+            item.source || 'FRONTEND_REACT',
+            item.tipo || 'PROCESO_PICO',
+            item.operacion || 'desconocida',
+            Number(item.duracionMs || 0),
+            item.status || 'OK',
+            item.detalles
+          );
+        }
+      } else if (operacion) {
+        writeProcesosPicoLog(
+          source || 'FRONTEND_REACT',
+          tipo || 'PROCESO_PICO',
+          operacion,
+          Number(duracionMs || 0),
+          status || 'OK',
+          detalles
+        );
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 
   // API Routes
   app.post('/api/sync', (req, res) => {
