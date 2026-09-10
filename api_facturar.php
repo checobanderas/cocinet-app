@@ -661,43 +661,23 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
     $whereSql = implode(' AND ', $where);
     $whereSqlSimple = implode(' AND ', $whereSimple);
 
-    // Estrategia 1: INNER/LEFT JOIN estándar idéntico a lstfacturasgral.php
-    $sql1 = "SELECT F.*, 
-                    COALESCE(C.NOMBRE, C.nombre, '') AS cliente_nombre, 
-                    COALESCE(C.RFC, C.rfc, '') AS cliente_rfc, 
-                    COALESCE(C.CP, C.cp, '') AS cliente_cp, 
-                    COALESCE(C.REGIMEN, C.regimen, '') AS cliente_regimen, 
-                    COALESCE(C.USOCFDI, C.usocfdi, '') AS cliente_usocfdi, 
-                    COALESCE(C.EMAIL, C.email, '') AS cliente_email, 
-                    COALESCE(C.TELEFONO, C.telefono, '') AS cliente_telefono 
-             FROM facturas F 
-             LEFT JOIN clientes C ON F.ID_CLIENTE = C.ID_CLIENTE
-             WHERE $whereSql 
-             ORDER BY COALESCE(F.ID_FACTURA, F.id_factura, F.folio, F.FOLIO, 1) DESC LIMIT 500";
-
-    $res = dbQuery($sql1);
-
-    // Estrategia 2: Si falla, intentar con id minúscula
-    if (!$res) {
-        $sql2 = "SELECT F.*, 
-                        COALESCE(C.NOMBRE, C.nombre, '') AS cliente_nombre, 
-                        COALESCE(C.RFC, C.rfc, '') AS cliente_rfc, 
-                        COALESCE(C.CP, C.cp, '') AS cliente_cp, 
-                        COALESCE(C.REGIMEN, C.regimen, '') AS cliente_regimen, 
-                        COALESCE(C.USOCFDI, C.usocfdi, '') AS cliente_usocfdi, 
-                        COALESCE(C.EMAIL, C.email, '') AS cliente_email, 
-                        COALESCE(C.TELEFONO, C.telefono, '') AS cliente_telefono 
-                 FROM facturas F 
-                 LEFT JOIN clientes C ON (F.id_cliente = C.id OR F.ID_CLIENTE = C.id)
-                 WHERE $whereSql 
-                 ORDER BY COALESCE(F.ID_FACTURA, F.id, F.folio, 1) DESC LIMIT 500";
-        $res = dbQuery($sql2);
+    // 1. Pre-cargar catálogo de clientes en memoria para evitar errores de JOIN en MySQL
+    $clientMap = array();
+    $qCliAll = dbQuery("SELECT id, NOMBRE, RFC, CP, REGIMEN, USOCFDI, EMAIL, TELEFONO FROM clientes");
+    if ($qCliAll) {
+        while ($rC = dbFetchAssoc($qCliAll)) {
+            $cId = strval(getVal($rC, 'id'));
+            if (!empty($cId)) {
+                $clientMap[$cId] = $rC;
+            }
+        }
     }
 
-    // Estrategia 3: Fallback garantizado directo a facturas
+    // 2. Consulta directa a la tabla facturas
+    $sql = "SELECT * FROM facturas WHERE $whereSqlSimple ORDER BY COALESCE(ID_FACTURA, id_factura, folio, FOLIO, id, 1) DESC LIMIT 500";
+    $res = dbQuery($sql);
     if (!$res) {
-        $sql3 = "SELECT * FROM facturas WHERE $whereSqlSimple ORDER BY COALESCE(ID_FACTURA, id_factura, folio, FOLIO, id, 1) DESC LIMIT 500";
-        $res = dbQuery($sql3);
+        $res = dbQuery("SELECT * FROM facturas ORDER BY 1 DESC LIMIT 500");
     }
 
     $lista = array();
@@ -717,17 +697,33 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
             $pdfUrl = $baseUrl . "facturas/factura_{$folioRow}.pdf";
             $xmlUrl = $baseUrl . "facturas/factura_{$folioRow}.xml";
 
-            $nombreCli = getVal($row, 'cliente_nombre', getVal($row, 'nombre', getVal($row, 'NOMBRE', getVal($row, 'razon_social', ''))));
-            $rfcCli    = getVal($row, 'cliente_rfc', getVal($row, 'rfc', getVal($row, 'RFC', 'XAXX010101000')));
+            $idCliFk = strval(getVal($row, 'ID_CLIENTE', getVal($row, 'id_cliente', getVal($row, 'idCliente', 0))));
+            $nombreCli = '';
+            $rfcCli = 'XAXX010101000';
+            $emailCli = '';
+            $cpCli = '';
+            $regCli = '612';
+            $usoCli = 'G03';
 
-            // Si aún no tenemos cliente_nombre y hay ID_CLIENTE, intentar consulta rápida a clientes
-            $idCliFk = getVal($row, 'ID_CLIENTE', getVal($row, 'id_cliente', 0));
-            if (empty($nombreCli) && !empty($idCliFk)) {
-                $qCliSingle = dbQuery("SELECT NOMBRE, RFC, CP, REGIMEN, USOCFDI, EMAIL, TELEFONO FROM clientes WHERE ID_CLIENTE = $idCliFk OR id = $idCliFk LIMIT 1");
-                if ($qCliSingle && ($rCli = dbFetchAssoc($qCliSingle))) {
-                    $nombreCli = getVal($rCli, 'NOMBRE', getVal($rCli, 'nombre', ''));
-                    $rfcCli    = getVal($rCli, 'RFC', getVal($rCli, 'rfc', 'XAXX010101000'));
-                }
+            if (!empty($idCliFk) && isset($clientMap[$idCliFk])) {
+                $rCli = $clientMap[$idCliFk];
+                $nombreCli = getVal($rCli, 'NOMBRE', getVal($rCli, 'nombre', ''));
+                $rfcCli    = getVal($rCli, 'RFC', getVal($rCli, 'rfc', 'XAXX010101000'));
+                $emailCli  = getVal($rCli, 'EMAIL', getVal($rCli, 'email', ''));
+                $cpCli     = getVal($rCli, 'CP', getVal($rCli, 'cp', ''));
+                $regCli    = getVal($rCli, 'REGIMEN', getVal($rCli, 'regimen', '612'));
+                $usoCli    = getVal($rCli, 'USOCFDI', getVal($rCli, 'usocfdi', 'G03'));
+            } else {
+                $nombreCli = getVal($row, 'cliente_nombre', getVal($row, 'nombre', getVal($row, 'NOMBRE', getVal($row, 'razon_social', ''))));
+                $rfcCli    = getVal($row, 'cliente_rfc', getVal($row, 'rfc', getVal($row, 'RFC', 'XAXX010101000')));
+                $emailCli  = getVal($row, 'cliente_email', getVal($row, 'correo', getVal($row, 'EMAIL', '')));
+                $cpCli     = getVal($row, 'cliente_cp', getVal($row, 'cp', getVal($row, 'CP', '')));
+                $regCli    = getVal($row, 'cliente_regimen', getVal($row, 'regimenfiscal', getVal($row, 'REGIMEN', '612')));
+                $usoCli    = getVal($row, 'cliente_usocfdi', getVal($row, 'usocfdi', getVal($row, 'USOCFDI', 'G03')));
+            }
+
+            if (empty($nombreCli)) {
+                $nombreCli = "CLIENTE #$idCliFk";
             }
 
             $subtotalVal = floatval(getVal($row, 'subtotal', getVal($row, 'SUBTOTAL', getVal($row, 'timporte', getVal($row, 'TIMPORTE', getVal($row, 'IMPORTE', 0))))));
