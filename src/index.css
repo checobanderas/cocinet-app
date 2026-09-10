@@ -69,3 +69,24 @@
 
 .embedded-menu-container ion-page { position: absolute !important; top: 0; left: 0; right: 0; bottom: 0; contain: strict; }
 
+/* Autofill high-contrast overrides & dark text guarantee */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+  color: #0f172a !important;
+}
+
+/* Base styling for form inputs to ensure readable contrast */
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+

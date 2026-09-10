@@ -729,7 +729,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
 
   return (
     <div 
-      className="fixed inset-0 z-[999999] bg-slate-950 text-slate-100 overflow-y-auto overscroll-y-contain select-text"
+      className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-sm text-slate-800 overflow-y-auto overscroll-y-contain select-text"
       style={{
         WebkitOverflowScrolling: "touch",
         touchAction: "pan-y pinch-zoom"
@@ -740,15 +740,15 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
     >
       {/* Loading Overlay */}
       {loading && (
-        <div className="fixed inset-0 z-[1000000] bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+        <div className="fixed inset-0 z-[1000000] bg-slate-900/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
           <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4 shadow-xl shadow-amber-500/20"></div>
           <h3 className="text-lg font-black text-white">{loadingText}</h3>
-          <p className="text-xs text-slate-400 mt-1">Por favor espera un momento...</p>
+          <p className="text-xs text-amber-200 mt-1">Por favor espera un momento...</p>
         </div>
       )}
 
       <div className="min-h-full w-full flex flex-col justify-start items-center p-3 sm:p-6 pb-36 sm:pb-48">
-        <div className="w-full max-w-xl bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl overflow-hidden my-4 sm:my-6">
+        <div className="w-full max-w-xl bg-white border border-slate-200 shadow-2xl rounded-3xl overflow-hidden my-4 sm:my-6">
           
           {/* Encabezado Principal */}
           <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 p-5 sm:p-6 text-white relative">
@@ -795,13 +795,13 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
 
           {/* Ficha Resumen del Consumo (Ticket) si existe folio */}
           {initialFolio && (
-            <div className="bg-slate-800/90 border-b border-slate-700/80 px-5 sm:px-6 py-3.5 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-slate-300">
-                <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Ticket / Consumo: <strong className="text-white font-mono font-bold">#{matchedAccount?.folio || matchedAccount?.folioInterno || initialFolio}</strong></span>
+            <div className="bg-amber-50/60 border-b border-amber-200/70 px-5 sm:px-6 py-3.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-slate-700">
+                <Receipt className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Ticket / Consumo: <strong className="text-slate-900 font-mono font-bold">#{matchedAccount?.folio || matchedAccount?.folioInterno || initialFolio}</strong></span>
               </div>
               {ticketTotal > 0 && (
-                <div className="text-emerald-400 font-black font-mono text-sm">
+                <div className="text-emerald-700 font-black font-mono text-sm bg-emerald-100/70 px-2.5 py-0.5 rounded-lg border border-emerald-200">
                   ${ticketTotal.toFixed(2)} MXN
                 </div>
               )}
@@ -809,18 +809,18 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
           )}
 
           {/* Cuerpo Principal */}
-          <div className="p-5 sm:p-7">
+          <div className="p-5 sm:p-7 bg-white">
 
             {!isApiConfigured ? (
               <div className="text-center py-8 space-y-4 animate-fadeIn">
-                <div className="w-16 h-16 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-3xl shadow-xl shadow-amber-500/10">
+                <div className="w-16 h-16 bg-amber-100 text-amber-600 border border-amber-300 rounded-full flex items-center justify-center mx-auto text-3xl shadow-md">
                   ⚠️
                 </div>
-                <h2 className="text-xl font-black text-white">Facturación CFDI No Configurada</h2>
-                <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+                <h2 className="text-xl font-black text-slate-900">Facturación CFDI No Configurada</h2>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
                   La sucursal <b>{businessName}</b> aún no cuenta con una API de Facturación CFDI conectada en el sistema.
                 </p>
-                <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
                   Por favor solicite al administrador de la sucursal configurar su endpoint fiscal desde el panel de administración.
                 </p>
               </div>
@@ -828,32 +828,32 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
             /* PASO 3: FACTURA TIMBRADA EXITOSAMENTE */
             ) : step === 3 && stampedResult ? (
               <div className="text-center py-4 space-y-5 animate-fadeIn">
-                <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-4xl shadow-xl shadow-emerald-500/10">
+                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 border-2 border-emerald-400 rounded-full flex items-center justify-center mx-auto text-4xl shadow-lg">
                   🎉
                 </div>
 
                 <div>
-                  <h2 className="text-2xl font-black text-white">¡Factura CFDI 4.0 Generada!</h2>
-                  <p className="text-xs text-slate-300 mt-1 max-w-md mx-auto">
-                    El comprobante fiscal digital ha sido emitido y certificado exitosamente.
+                  <h2 className="text-2xl font-black text-slate-900">¡Factura CFDI 4.0 Generada!</h2>
+                  <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
+                    El comprobante fiscal digital ha sido emitido y certificado exitosamente ante el SAT.
                   </p>
                 </div>
 
                 {/* UUID Card */}
-                <div className="bg-slate-800/90 border border-emerald-500/40 rounded-2xl p-4 text-left text-xs space-y-2 max-w-md mx-auto">
-                  <div className="flex justify-between items-center border-b border-slate-700/60 pb-2">
-                    <span className="text-slate-400 font-semibold">Folio Interno:</span>
-                    <span className="font-mono font-black text-amber-300">#{stampedResult.folio}</span>
+                <div className="bg-slate-50 border border-emerald-300 rounded-2xl p-4 text-left text-xs space-y-2 max-w-md mx-auto shadow-sm">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="text-slate-600 font-semibold">Folio Interno:</span>
+                    <span className="font-mono font-black text-amber-700">#{stampedResult.folio}</span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-slate-400 font-semibold block">Folio Fiscal SAT (UUID):</span>
-                    <span className="font-mono font-black text-white text-[11px] block bg-slate-950 p-2.5 rounded-lg border border-slate-700 select-all break-all">
+                    <span className="text-slate-600 font-semibold block">Folio Fiscal SAT (UUID):</span>
+                    <span className="font-mono font-black text-slate-900 text-[11px] block bg-white p-2.5 rounded-lg border border-slate-300 select-all break-all shadow-inner">
                       {stampedResult.uuid}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center pt-1 text-slate-400">
+                  <div className="flex justify-between items-center pt-1 text-slate-600">
                     <span>Receptor:</span>
-                    <span className="font-bold text-white truncate max-w-[200px]">{razonSocial} ({rfc})</span>
+                    <span className="font-bold text-slate-900 truncate max-w-[200px]">{razonSocial} ({rfc})</span>
                   </div>
                 </div>
 
@@ -864,7 +864,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       href={stampedResult.pdfUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-lg transition no-underline"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md hover:shadow-lg transition no-underline"
                     >
                       <Download className="w-4 h-4" />
                       <span>Descargar PDF</span>
@@ -874,29 +874,29 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                         href={stampedResult.xmlUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-lg transition no-underline"
+                        className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md transition no-underline"
                       >
-                        <FileText className="w-4 h-4 text-amber-400" />
+                        <FileText className="w-4 h-4 text-amber-300" />
                         <span>Descargar XML</span>
                       </a>
                     )}
                   </div>
                 ) : (
-                  <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-2xl text-xs text-emerald-300 flex items-center gap-2.5 text-left max-w-md mx-auto">
-                    <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-400" />
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2.5 text-left max-w-md mx-auto">
+                    <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-600" />
                     <span>Tu factura electrónica con PDF y XML será enviada a tu correo: <strong>{email}</strong></span>
                   </div>
                 )}
 
-                <p className="text-[11px] text-slate-400 max-w-md mx-auto">
-                  ✉️ Copia enviada a: <strong className="text-sky-300">{email}</strong>
+                <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                  ✉️ Copia enviada a: <strong className="text-sky-700">{email}</strong>
                 </p>
 
                 {onClose && (
                   <button
                     type="button"
                     onClick={onClose}
-                    className="w-full max-w-md mx-auto block bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition text-xs shadow-md border-none cursor-pointer mt-4"
+                    className="w-full max-w-md mx-auto block bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition text-xs shadow-md border-none cursor-pointer mt-4"
                   >
                     Finalizar y Cerrar
                   </button>
@@ -907,25 +907,25 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
             ) : step === 2 && draftResult ? (
               <div className="space-y-5 animate-fadeIn">
                 <div className="text-center">
-                  <h2 className="text-lg font-black text-white flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <h2 className="text-lg font-black text-slate-900 flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                     Borrador de Pre-Factura CFDI 4.0
                   </h2>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Verifica el desglose de impuestos antes de certificar ante el SAT.
                   </p>
                 </div>
 
                 {/* Error de Timbrado si ocurrió */}
                 {stampError && (
-                  <div className="p-4 bg-rose-950/60 border border-rose-600/60 rounded-2xl text-xs text-rose-200 space-y-2">
-                    <div className="flex items-center gap-2 font-bold text-rose-300 text-sm">
-                      <AlertCircle className="w-5 h-5 shrink-0" />
+                  <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-800 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-rose-900 text-sm">
+                      <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
                       <span>{stampError.title}</span>
                     </div>
                     <p>{stampError.explanation}</p>
                     {stampError.tip && (
-                      <div className="p-2.5 bg-rose-900/40 rounded-xl text-rose-200 text-[11px] font-medium">
+                      <div className="p-2.5 bg-rose-100/70 rounded-xl text-rose-900 text-[11px] font-medium border border-rose-200">
                         💡 <strong>Sugerencia:</strong> {stampError.tip}
                       </div>
                     )}
@@ -933,38 +933,38 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                 )}
 
                 {/* Resumen Fiscal */}
-                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 text-xs space-y-2.5">
-                  <div className="flex justify-between border-b border-slate-700/60 pb-2 font-bold">
-                    <span className="text-slate-400">Pre-Factura Folio:</span>
-                    <span className="text-amber-300 font-mono text-sm">#{draftResult.folio}</span>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-2.5 shadow-sm">
+                  <div className="flex justify-between border-b border-slate-200 pb-2 font-bold">
+                    <span className="text-slate-600">Pre-Factura Folio:</span>
+                    <span className="text-amber-700 font-mono text-sm">#{draftResult.folio}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-700/60 pb-2">
-                    <span className="text-slate-400">Receptor:</span>
-                    <span className="text-white font-bold text-right truncate max-w-[240px]">{razonSocial}</span>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-600">Receptor:</span>
+                    <span className="text-slate-900 font-bold text-right truncate max-w-[240px]">{razonSocial}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-700/60 pb-2 font-mono">
-                    <span className="text-slate-400">RFC / C.P.:</span>
-                    <span className="text-amber-300">{rfc} | C.P. {cp}</span>
+                  <div className="flex justify-between border-b border-slate-200 pb-2 font-mono">
+                    <span className="text-slate-600">RFC / C.P.:</span>
+                    <span className="text-amber-700 font-bold">{rfc} | C.P. {cp}</span>
                   </div>
                   {draftResult.desglose && (
                     <>
-                      <div className="flex justify-between text-slate-300 pt-1">
+                      <div className="flex justify-between text-slate-700 pt-1">
                         <span>Subtotal (Base):</span>
                         <span className="font-mono font-bold">${Number(draftResult.desglose.subtotal).toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between text-slate-300">
+                      <div className="flex justify-between text-slate-700">
                         <span>IVA Trasladado (16%):</span>
                         <span className="font-mono font-bold">${Number(draftResult.desglose.iva).toFixed(2)}</span>
                       </div>
                       {Number(draftResult.desglose.retencion_isr) > 0 && (
-                        <div className="flex justify-between text-rose-400">
+                        <div className="flex justify-between text-rose-700">
                           <span>Retención ISR:</span>
                           <span className="font-mono font-bold">-${Number(draftResult.desglose.retencion_isr).toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between text-sm font-black text-emerald-400 border-t border-slate-700/80 pt-2">
+                      <div className="flex justify-between text-sm font-black text-emerald-700 border-t border-slate-200 pt-2">
                         <span>Total a Facturar:</span>
-                        <span className="font-mono">${Number(draftResult.desglose.total).toFixed(2)} MXN</span>
+                        <span className="font-mono font-bold">${Number(draftResult.desglose.total).toFixed(2)} MXN</span>
                       </div>
                     </>
                   )}
@@ -976,7 +976,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     type="button"
                     onClick={handleTimbrar}
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2 transition text-sm sm:text-base cursor-pointer border-none disabled:opacity-50"
+                    className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2 transition text-sm sm:text-base cursor-pointer border-none disabled:opacity-50"
                   >
                     <Sparkles className="w-5 h-5" />
                     <span>⚡ TIMBRAR ANTE EL SAT (FINKOK)</span>
@@ -986,7 +986,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     <button
                       type="button"
                       onClick={() => setStep(1)}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition border border-slate-700 cursor-pointer"
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition border border-slate-300 shadow-sm cursor-pointer"
                     >
                       <Edit3 className="w-4 h-4" />
                       <span>Modificar Datos</span>
@@ -994,7 +994,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     <button
                       type="button"
                       onClick={handleDescartarBorrador}
-                      className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition border border-rose-800/50 cursor-pointer"
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition border border-rose-200 shadow-sm cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span>Descartar</span>
@@ -1007,28 +1007,28 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
             ) : (
               <form onSubmit={handleGenerarPreFactura} className="space-y-4 sm:space-y-5">
                 <div className="text-center mb-3">
-                  <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center gap-2">
-                    <FileText className="w-5 h-5 text-amber-400" />
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center justify-center gap-2">
+                    <FileText className="w-5 h-5 text-amber-600" />
                     Emisión de Factura CFDI 4.0
                   </h2>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Ingresa tu RFC y datos fiscales para emitir tu factura electrónica.
                   </p>
                 </div>
 
                 {/* Banner de Pre-Factura Lista */}
                 {(matchedAccount?.rfc || (rfc && razonSocial && cp)) && (
-                  <div className="p-3.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-amber-200 animate-fadeIn">
+                  <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-amber-900 shadow-sm animate-fadeIn">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">⏳</span>
                       <div>
-                        <span className="font-black text-amber-300 block">Pre-Factura Lista en MySQL (Esperando Timbrado)</span>
-                        <span className="text-[11px] text-slate-300">Datos fiscales registrados para RFC: <strong className="font-mono text-white">{rfc || matchedAccount?.rfc}</strong></span>
+                        <span className="font-black text-amber-950 block">Pre-Factura Lista en MySQL (Esperando Timbrado)</span>
+                        <span className="text-[11px] text-amber-800">Datos fiscales registrados para RFC: <strong className="font-mono text-slate-900">{rfc || matchedAccount?.rfc}</strong></span>
                       </div>
                     </div>
                     <button
                       type="submit"
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs shadow-md transition cursor-pointer border-none whitespace-nowrap"
+                      className="bg-amber-600 hover:bg-amber-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-md transition cursor-pointer border-none whitespace-nowrap"
                     >
                       ⚡ Continuar a Timbrar →
                     </button>
@@ -1037,20 +1037,20 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
 
                 {/* Badge de Reconocimiento / Autocomplete */}
                 {autoCompleted && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs text-amber-300 animate-fadeIn">
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between text-xs text-amber-900 shadow-sm animate-fadeIn">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>¡Cliente Detectado! <strong className="text-white">{matchedCustomerName}</strong></span>
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>¡Cliente Detectado! <strong className="text-slate-900">{matchedCustomerName}</strong></span>
                     </div>
-                    <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                    <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">
                       Datos Rellenados
                     </span>
                   </div>
                 )}
 
                 {errorMessage && (
-                  <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-semibold flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                     <span>{errorMessage}</span>
                   </div>
                 )}
@@ -1058,8 +1058,8 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                 {/* Fila 1: Celular y RFC */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                      <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-amber-600" />
                       Teléfono Celular *
                     </label>
                     <input
@@ -1069,14 +1069,14 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       placeholder="10 dígitos"
                       value={phone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-wider focus:outline-none transition"
+                      className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-wider focus:outline-none transition shadow-sm"
                     />
-                    <p className="text-[10px] text-slate-500 mt-0.5">Llave de contacto y envío</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Llave de contacto y envío</p>
                   </div>
 
                   <div className="relative">
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                      <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-amber-600" />
                       RFC del Receptor *
                     </label>
                     <input
@@ -1089,42 +1089,42 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       onFocus={() => {
                         if (rfc.length >= 3) searchMatches(rfc, "rfc");
                       }}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-amber-300 rounded-xl px-3.5 py-2.5 text-sm font-black font-mono tracking-widest uppercase focus:outline-none transition"
+                      className="w-full bg-amber-50/50 border border-amber-300 focus:border-amber-600 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-sm font-black font-mono tracking-widest uppercase focus:outline-none transition shadow-sm"
                     />
                     
                     {isSearchingClient && activeSuggestionField === "rfc" ? (
-                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 font-medium animate-fadeIn">
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mt-1 font-medium animate-fadeIn">
                         <span className="relative flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                         </span>
                         <span>Buscando en el padrón de clientes</span>
-                        <span className="inline-flex gap-0.5 text-amber-400 font-bold tracking-widest animate-pulse">...</span>
+                        <span className="inline-flex gap-0.5 text-amber-600 font-bold tracking-widest animate-pulse">...</span>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-slate-500 mt-0.5">Detección automática a partir de 3 letras</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Detección automática a partir de 3 letras</p>
                     )}
 
                     {/* Dropdown de Sugerencias RFC */}
                     {activeSuggestionField === "rfc" && suggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border-2 border-amber-500/80 rounded-2xl shadow-2xl z-[50] overflow-hidden max-h-56 overflow-y-auto">
-                        <div className="p-2 bg-slate-800/90 text-[11px] font-bold text-amber-300 border-b border-slate-700 flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-amber-400" />
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-amber-500 rounded-2xl shadow-2xl z-[50] overflow-hidden max-h-56 overflow-y-auto">
+                        <div className="p-2 bg-amber-50 text-[11px] font-bold text-amber-900 border-b border-amber-200 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-600" />
                           <span>Clientes encontrados ({suggestions.length}) - Clic para autocompletar:</span>
                         </div>
                         {suggestions.map((sug, idx) => (
                           <div
                             key={idx}
                             onClick={() => applyCustomer(sug)}
-                            className="p-3 hover:bg-amber-500/20 cursor-pointer transition border-b border-slate-800 last:border-none text-left"
+                            className="p-3 hover:bg-amber-50 cursor-pointer transition border-b border-slate-100 last:border-none text-left"
                           >
-                            <div className="font-black text-white text-xs truncate">
+                            <div className="font-black text-slate-900 text-xs truncate">
                               {sug.razonSocial || sug.name || sug.nombre || "Sin Razón Social"}
                             </div>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                              <span className="font-mono font-bold text-amber-300">{sug.rfc}</span>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                              <span className="font-mono font-bold text-amber-700">{sug.rfc}</span>
                               {(sug.cp || sug.codigoPostal) && <span>• C.P. {sug.cp || sug.codigoPostal}</span>}
-                              {(sug.emailFacturacion || sug.email) && <span className="truncate text-sky-400">• {sug.emailFacturacion || sug.email}</span>}
+                              {(sug.emailFacturacion || sug.email) && <span className="truncate text-sky-700">• {sug.emailFacturacion || sug.email}</span>}
                             </div>
                           </div>
                         ))}
@@ -1135,8 +1135,8 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
 
                 {/* Fila 2: Razón Social */}
                 <div className="relative">
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-amber-400" />
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-amber-600" />
                     Nombre o Razón Social (Exacto como en Constancia SAT) *
                   </label>
                   <input
@@ -1148,42 +1148,42 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     onFocus={() => {
                       if (razonSocial.length >= 3) searchMatches(razonSocial, "razonSocial");
                     }}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold uppercase focus:outline-none transition"
+                    className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-sm font-bold uppercase focus:outline-none transition shadow-sm"
                   />
                   
                   {isSearchingClient && activeSuggestionField === "razonSocial" ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-1 font-medium animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mt-1 font-medium animate-fadeIn">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                       </span>
                       <span>Buscando en el padrón de clientes</span>
-                      <span className="inline-flex gap-0.5 text-amber-400 font-bold tracking-widest animate-pulse">...</span>
+                      <span className="inline-flex gap-0.5 text-amber-600 font-bold tracking-widest animate-pulse">...</span>
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-500 mt-0.5">En CFDI 4.0 debe omitirse el régimen de capital (sin S.A. de C.V.)</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">En CFDI 4.0 debe omitirse el régimen de capital (sin S.A. de C.V.)</p>
                   )}
 
                   {/* Dropdown de Sugerencias Razón Social */}
                   {activeSuggestionField === "razonSocial" && suggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border-2 border-amber-500/80 rounded-2xl shadow-2xl z-[50] overflow-hidden max-h-56 overflow-y-auto">
-                      <div className="p-2 bg-slate-800/90 text-[11px] font-bold text-amber-300 border-b border-slate-700 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-400" />
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-amber-500 rounded-2xl shadow-2xl z-[50] overflow-hidden max-h-56 overflow-y-auto">
+                      <div className="p-2 bg-amber-50 text-[11px] font-bold text-amber-900 border-b border-amber-200 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-600" />
                         <span>Clientes encontrados ({suggestions.length}) - Clic para autocompletar:</span>
                       </div>
                       {suggestions.map((sug, idx) => (
                         <div
                           key={idx}
                           onClick={() => applyCustomer(sug)}
-                          className="p-3 hover:bg-amber-500/20 cursor-pointer transition border-b border-slate-800 last:border-none text-left"
+                          className="p-3 hover:bg-amber-50 cursor-pointer transition border-b border-slate-100 last:border-none text-left"
                         >
-                          <div className="font-black text-white text-xs truncate">
+                          <div className="font-black text-slate-900 text-xs truncate">
                             {sug.razonSocial || sug.name || sug.nombre}
                           </div>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                            <span className="font-mono font-bold text-amber-300">{sug.rfc}</span>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                            <span className="font-mono font-bold text-amber-700">{sug.rfc}</span>
                             {(sug.cp || sug.codigoPostal) && <span>• C.P. {sug.cp || sug.codigoPostal}</span>}
-                            {(sug.emailFacturacion || sug.email) && <span className="truncate text-sky-400">• {sug.emailFacturacion || sug.email}</span>}
+                            {(sug.emailFacturacion || sug.email) && <span className="truncate text-sky-700">• {sug.emailFacturacion || sug.email}</span>}
                           </div>
                         </div>
                       ))}
@@ -1193,13 +1193,13 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
 
                 {/* Fila 3: Régimen Fiscal */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Régimen Fiscal (SAT) *
                   </label>
                   <select
                     value={regimenFiscal}
                     onChange={(e) => setRegimenFiscal(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
+                    className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium shadow-sm"
                   >
                     {SAT_REGIMENES_FISCALES.map((r) => (
                       <option key={r.code} value={r.code}>
@@ -1212,13 +1212,13 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                 {/* Fila 4: Uso CFDI y Código Postal */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
                       Uso de CFDI *
                     </label>
                     <select
                       value={usoCfdi}
                       onChange={(e) => setUsoCfdi(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
+                      className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium shadow-sm"
                     >
                       {SAT_USOS_CFDI.map((u) => (
                         <option key={u.code} value={u.code}>
@@ -1229,8 +1229,8 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-amber-600" />
                       C.P. Fiscal (5 dígitos) *
                     </label>
                     <input
@@ -1240,7 +1240,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       placeholder="80000"
                       value={cp}
                       onChange={(e) => setCp(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-widest text-center focus:outline-none transition"
+                      className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-sm font-bold font-mono tracking-widest text-center focus:outline-none transition shadow-sm"
                     />
                   </div>
                 </div>
@@ -1248,14 +1248,14 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                 {/* Fila 5: Forma de Pago y Correo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                      <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <CreditCard className="w-3.5 h-3.5 text-amber-600" />
                       Forma de Pago SAT *
                     </label>
                     <select
                       value={formaPago}
                       onChange={(e) => setFormaPago(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium"
+                      className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none transition font-medium shadow-sm"
                     >
                       <option value="01">01 - Efectivo</option>
                       <option value="04">04 - Tarjeta de Crédito</option>
@@ -1266,8 +1266,8 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Mail className="w-3.5 h-3.5 text-amber-600" />
                       Correo para Factura *
                     </label>
                     <input
@@ -1276,14 +1276,14 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                       placeholder="ejemplo@correo.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-sky-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition"
+                      className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none transition shadow-sm"
                     />
                   </div>
                 </div>
 
                 {/* Fila 6: Domicilio Fiscal */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Domicilio Fiscal (Calle, Número, Colonia, Municipio, Estado)
                   </label>
                   <input
@@ -1291,7 +1291,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
                     placeholder="Opcional para tus registros fiscales"
                     value={direccionFiscal}
                     onChange={(e) => setDireccionFiscal(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 text-white rounded-xl px-3.5 py-2 text-xs focus:outline-none transition"
+                    className="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-slate-900 rounded-xl px-3.5 py-2 text-xs focus:outline-none transition shadow-sm"
                   />
                 </div>
 
@@ -1320,7 +1320,7 @@ Tus datos fiscales y solicitud de factura para el ticket #${draftResult.folio} h
           </div>
 
           {/* Pie de Página */}
-          <div className="bg-slate-950/80 border-t border-slate-800 px-6 py-4 text-center text-[11px] text-slate-500">
+          <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 text-center text-[11px] text-slate-500">
             🔒 Tus datos fiscales están protegidos y son utilizados exclusivamente para la generación de tus Comprobantes Fiscales Digitales (CFDI).
           </div>
         </div>

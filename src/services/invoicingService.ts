@@ -632,8 +632,6 @@ export async function testConexionFacturacion(
       })
     });
 
-    clearTimeout(timeoutId);
-
     const parseResult = await safeParseJsonResponse<any>(res, "prueba de conexión");
     if (!parseResult.ok || !parseResult.data) {
       return { ok: false, error: parseResult.error || `Error HTTP ${res.status}` };
@@ -644,3 +642,41 @@ export async function testConexionFacturacion(
     return { ok: false, error: err.message || "No se pudo conectar con el servidor." };
   }
 }
+
+/**
+ * Accion: 'ver_log' - Obtiene las últimas líneas del archivo facturas.log del servidor PHP
+ */
+export async function obtenerLogServidorFacturacion(
+  apiUrl: string
+): Promise<{ ok: boolean; log?: string; log_path?: string; error?: string }> {
+  const url = apiUrl || DEFAULT_INVOICING_API_URL;
+  if (!url) return { ok: false, error: "No hay URL configurada." };
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        accion: "ver_log",
+        action: "ver_log"
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    const parseResult = await safeParseJsonResponse<any>(res, "lectura de facturas.log");
+    if (!parseResult.ok || !parseResult.data) {
+      return { ok: false, error: parseResult.error || `Error HTTP ${res.status}` };
+    }
+
+    return parseResult.data;
+  } catch (err: any) {
+    return { ok: false, error: err.message || "No se pudo consultar facturas.log del servidor." };
+  }
+}
+
+
