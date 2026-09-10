@@ -663,10 +663,10 @@ if ($accion === 'listar_facturas' || $accion === 'listar_no_timbradas' || $accio
 
     // 1. Pre-cargar catálogo de clientes en memoria para evitar errores de JOIN en MySQL
     $clientMap = array();
-    $qCliAll = dbQuery("SELECT id, NOMBRE, RFC, CP, REGIMEN, USOCFDI, EMAIL, TELEFONO FROM clientes");
+    $qCliAll = dbQuery("SELECT * FROM clientes");
     if ($qCliAll) {
         while ($rC = dbFetchAssoc($qCliAll)) {
-            $cId = strval(getVal($rC, 'id'));
+            $cId = strval(getVal($rC, 'id', getVal($rC, 'ID', getVal($rC, 'ID_CLIENTE', getVal($rC, 'id_cliente', getVal($rC, 'idCliente', ''))))));
             if (!empty($cId)) {
                 $clientMap[$cId] = $rC;
             }
