@@ -936,7 +936,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
     return recipients;
   };
 
-  const sendToWhatsApp = async () => {
+  const sendToWhatsApp = () => {
     try {
       const avgTicket = dailyHistory.length > 0 ? (totalProducts - paymentBreakdown.discount) / dailyHistory.length : 0;
       const totalPieces = productSummary.reduce((sum, p) => sum + (p.quantity || 0), 0);
@@ -947,11 +947,16 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
       text += `🕒 *Emisión:* ${new Date().toLocaleTimeString('es-MX')}\n`;
       text += `----------------------------------\n\n`;
 
-      text += `💰 *RESUMEN DE CAJA:*\n`;
+      text += `💰 *RESUMEN GENERAL:*\n`;
       text += `• Total Cuentas Cobradas: *${dailyHistory.length}*\n`;
-      text += `• Venta Neta: *$${(totalProducts - paymentBreakdown.discount).toFixed(2)}*\n`;
+      text += `• Total Cuentas: *$${totalAccounts.toFixed(2)}*\n`;
+      text += `• Total Productos: *$${totalProducts.toFixed(2)}*\n`;
+      if (paymentBreakdown.discount > 0) {
+        text += `• (-) Descuentos: *-$${paymentBreakdown.discount.toFixed(2)}*\n`;
+      }
+      text += `• Venta Neta (Ajustada): *$${(totalProducts - paymentBreakdown.discount).toFixed(2)}*\n`;
       text += `• Ticket Promedio: *$${avgTicket.toFixed(2)}*\n`;
-      text += `• Piezas Vendidas: *${totalPieces}*\n\n`;
+      text += `• Piezas Vendidas: *${totalPieces} piezas*\n\n`;
 
       text += `💳 *DESGLOSE POR FORMA DE PAGO:*\n`;
       text += `• 💵 Efectivo: *$${paymentBreakdown.cash.toFixed(2)}*\n`;
@@ -969,18 +974,12 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onCl
         text += `• Total Cancelado: *$${totalCancellations.toFixed(2)}*\n\n`;
       }
 
-      text += `🌮 *TOP PRODUCTOS VENDIDOS:*\n`;
-      let count = 0;
+      text += `🍔 *PRODUCTOS VENDIDOS:*\n`;
       groupedProducts.forEach(group => {
-        if (count < 12) {
-          text += `*${group.groupName}*\n`;
-          group.items.forEach(p => {
-            if (count < 12) {
-              text += `• ${p.quantity}x ${p.name} → $${p.total.toFixed(2)}\n`;
-              count++;
-            }
-          });
-        }
+        text += `\n*${group.groupName}*\n`;
+        group.items.forEach(p => {
+          text += `• ${p.quantity}x ${p.name} → $${p.total.toFixed(2)}\n`;
+        });
       });
       text += `\n----------------------------------\n`;
       text += `Generado por Cocinet POS ✨`;
