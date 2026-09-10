@@ -158,9 +158,9 @@ if (isset($data['accion'])) {
 
 facturasLog("Peticion recibida: Metodo=" . $_SERVER['REQUEST_METHOD'] . " | Accion=" . ($accion ? $accion : 'NINGUNA/DEFAULT') . " | Payload=" . substr($rawInput ? $rawInput : serialize($_GET), 0, 200));
 
-// Si se abre directo en navegador sin parámetros, ejecutar test_conexion por defecto
-if (empty($accion)) {
-    $accion = 'test_conexion';
+// Si se abre directo en navegador sin parámetros o con GET, listar facturas por defecto
+if (empty($accion) || $accion === 'test_conexion' || $accion === 'ping') {
+    $accion = 'listar_facturas';
 }
 
 // Base URL para descargas de PDF y XML
