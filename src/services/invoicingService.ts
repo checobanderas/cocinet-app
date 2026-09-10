@@ -508,6 +508,162 @@ export interface ListInvoicesResponse {
 }
 
 /**
+ * Parser de respaldo para servidores legados PHP que tienen lstfacturas.php y lstclientes.php
+ */
+export async function fetchAndParseLegacyPhpInvoices(
+  apiUrl: string,
+  filters?: {
+    estado?: "todas" | "timbradas" | "no_timbradas" | "pendientes_datos";
+    busqueda?: string;
+    fecha_inicio?: string;
+    fecha_fin?: string;
+    limite?: number;
+  }
+): Promise<ListInvoicesResponse> {
+  try {
+    const baseDir = apiUrl.substring(0, apiUrl.lastIndexOf("/") + 1) || apiUrl;
+    const lstFacturasUrl = `${baseDir}lstfacturas.php`;
+    const lstClientesUrl = `${baseDir}lstclientes.php`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const [facturasRes, clientesRes] = await Promise.all([
+      fetch(lstFacturasUrl, { signal: controller.signal }).catch(() => null),
+      fetch(lstClientesUrl, { signal: controller.signal }).catch(() => null),
+    ]);
+
+    clearTimeout(timeoutId);
+
+    const facturasHtml = facturasRes && facturasRes.ok ? await facturasRes.text() : "";
+    const clientesHtml = clientesRes && clientesRes.ok ? await clientesRes.text() : "";
+
+    if (!facturasHtml) {
+      return { ok: false, error: "No se pudo consultar el listado de facturas del servidor PHP." };
+    }
+
+    // Parse mapa de clientes de lstclientes.php
+    const clientMap = new Map<string, { id: string; rfc: string; razonSocial: string; cp: string; regimen: string; email: string }>();
+    if (clientesHtml) {
+      const trMatches = clientesHtml.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+      for (const tr of trMatches) {
+        const tdMatches = tr.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+        const cells = tdMatches.map((td) =>
+          td.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
+        );
+        if (cells.length >= 3 && cells[0]) {
+          const id = cells[0];
+          const rfc = cells[1] || "";
+          const razonSocial = cells[2] || "";
+          const cp = cells[3] || "";
+          const regimen = cells[4] || "";
+          const email = cells[14] || cells[13] || cells[12] || "";
+          clientMap.set(id, { id, rfc, razonSocial, cp, regimen, email });
+        }
+      }
+    }
+
+    // Parse facturas de lstfacturas.php
+    const parts = facturasHtml.split(/<tr\s+/i);
+    let facturas: ApiInvoiceItem[] = [];
+
+    for (let i = 1; i < parts.length; i++) {
+      const chunk = parts[i];
+      if (!chunk.includes('id="ttt"') && !chunk.includes("id='ttt'")) {
+        continue;
+      }
+
+      const classMatch = chunk.match(/class=["']?([^"'\s>]+)/i);
+      const rowId = classMatch ? classMatch[1] : "";
+
+      const tdMatches = chunk.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+      const cells = tdMatches.map((td) =>
+        td.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
+      );
+
+      if (cells.length >= 7) {
+        const idCliente = cells[2] || "";
+        const folioStr = cells[3] || "";
+        const fecha = cells[4] || "";
+        const subtotalRaw = (cells[5] || "0").replace(/[$,]/g, "");
+        const ivaRaw = (cells[6] || "0").replace(/[$,]/g, "");
+        const totalRaw = (cells[9] || cells[7] || "0").replace(/[$,]/g, "");
+        const xmlFile = cells[10] || "";
+        const folioNum = parseInt(folioStr.replace(/\D/g, ""), 10) || parseInt(rowId, 10) || 0;
+        const serie = folioStr.replace(/\d+/g, "") || "D";
+
+        const client = clientMap.get(idCliente) || {
+          id: idCliente,
+          rfc: "XAXX010101000",
+          razonSocial: `Cliente #${idCliente}`,
+          email: "",
+          cp: "",
+          regimen: "",
+        };
+
+        const cleanXml = xmlFile.trim();
+        const xmlUrl = cleanXml ? `${baseDir}${cleanXml}` : undefined;
+        const pdfUrl = rowId ? `${baseDir}pdf.php?id=${rowId}` : undefined;
+
+        facturas.push({
+          folio: folioNum,
+          serie,
+          fecha,
+          ticket: folioNum,
+          ticket_id: folioNum,
+          rfc: client.rfc || "XAXX010101000",
+          razon_social: client.razonSocial || `Cliente #${idCliente}`,
+          email: client.email || "",
+          subtotal: parseFloat(subtotalRaw) || 0,
+          iva: parseFloat(ivaRaw) || 0,
+          total: parseFloat(totalRaw) || 0,
+          timbrada: true,
+          xml_url: xmlUrl,
+          pdf_url: pdfUrl,
+          cp: client.cp,
+          regimen_fiscal: client.regimen,
+        });
+      }
+    }
+
+    // Filtrar si se solicitó búsqueda o fechas
+    if (filters?.busqueda) {
+      const q = filters.busqueda.toLowerCase().trim();
+      facturas = facturas.filter(
+        (f) =>
+          f.rfc.toLowerCase().includes(q) ||
+          f.razon_social.toLowerCase().includes(q) ||
+          String(f.folio).includes(q)
+      );
+    }
+    if (filters?.fecha_inicio) {
+      facturas = facturas.filter((f) => !f.fecha || f.fecha >= filters.fecha_inicio!);
+    }
+    if (filters?.fecha_fin) {
+      facturas = facturas.filter((f) => !f.fecha || f.fecha <= filters.fecha_fin!);
+    }
+
+    const totalTimbradas = facturas.length;
+    const montoTimbrado = facturas.reduce((acc, f) => acc + (f.total || 0), 0);
+
+    return {
+      ok: true,
+      resumen: {
+        total: totalTimbradas,
+        timbradas: totalTimbradas,
+        no_timbradas: 0,
+        monto_total_timbrado: montoTimbrado,
+        monto_total_no_timbrado: 0,
+      },
+      facturas,
+    };
+  } catch (err: any) {
+    console.error("Error al parsear facturas legacy de PHP:", err);
+    return { ok: false, error: err.message || "Error al procesar facturas del servidor." };
+  }
+}
+
+/**
  * Accion: 'listar_facturas' - Obtiene facturas timbradas y borradores de MySQL
  */
 export async function listarFacturasFromApi(
@@ -534,20 +690,42 @@ export async function listarFacturasFromApi(
       body: JSON.stringify({
         accion: "listar_facturas",
         action: "listar_facturas",
-        ...filters
-      })
+        ...filters,
+      }),
     });
 
     clearTimeout(timeoutId);
 
     const parseResult = await safeParseJsonResponse<ListInvoicesResponse>(res, "listado de facturas");
+    
+    // Si la API devolvió respuesta válida con facturas, retornamos
+    if (parseResult.ok && parseResult.data && Array.isArray(parseResult.data.facturas) && parseResult.data.facturas.length > 0) {
+      return parseResult.data;
+    }
+
+    // Si la API devolvió stats pero el array de facturas está vacío (o si falló),
+    // consultamos automáticamente el endpoint legacy lstfacturas.php para poblar la lista
+    const legacyFallback = await fetchAndParseLegacyPhpInvoices(url, filters);
+    if (legacyFallback.ok && legacyFallback.facturas && legacyFallback.facturas.length > 0) {
+      // Preservar stats de la API si vinieron
+      if (parseResult.ok && parseResult.data && parseResult.data.resumen) {
+        legacyFallback.resumen = parseResult.data.resumen;
+      }
+      return legacyFallback;
+    }
+
     if (!parseResult.ok || !parseResult.data) {
       return { ok: false, error: parseResult.error || `Error al consultar facturas (HTTP ${res.status})` };
     }
 
     return parseResult.data;
   } catch (err: any) {
-    console.error("Error al listar facturas desde API:", err);
+    console.warn("Fallo al conectar con endpoint principal, intentando fallback legacy lstfacturas.php:", err);
+    // Intentar fallback legacy directamente
+    const legacyFallback = await fetchAndParseLegacyPhpInvoices(url, filters);
+    if (legacyFallback.ok) {
+      return legacyFallback;
+    }
     return { ok: false, error: err.message || "Error al conectar con la API de facturación." };
   }
 }
