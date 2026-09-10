@@ -501,9 +501,13 @@ if ($accion === 'preparar') {
     // Generar PDF borrador si existe el generador FPDF
     $pdfUrl = '';
     if (file_exists(__DIR__ . '/facturapdf.php')) {
-        $_GET['folio'] = $folio;
+        $_GET['folio'] = strval($folio);
+        $_GET['id'] = strval($folio);
+        $_GET['ID'] = $clienteId;
         $_GET['es_borrador'] = 1;
+        ob_start();
         @include_once __DIR__ . '/facturapdf.php';
+        ob_end_clean();
         $pdfUrl = $baseUrl . "facturas/factura_{$folio}.pdf?v=" . time();
     }
 
@@ -536,12 +540,32 @@ if ($accion === 'timbrar') {
         exit;
     }
 
+    // Obtener datos del borrador y cliente para inicializar variables
+    $qFactCheck = dbQuery("SELECT * FROM facturas WHERE folio = $folio OR FOLIO = $folio LIMIT 1");
+    $rFactCheck = dbFetchAssoc($qFactCheck);
+    $clienteId = intval(getVal($rFactCheck, 'ID_CLIENTE', getVal($rFactCheck, 'id_cliente', 0)));
+    if (!empty($rFactCheck['serie'])) {
+        $serie = trim($rFactCheck['serie']);
+    }
+
+    if (session_status() === PHP_SESSION_NONE) {
+        @session_start();
+    }
+    $_SESSION['DB'] = $dbName;
+    $_GET['id'] = strval($folio);
+    $_GET['ID'] = $clienteId;
+    $_GET['folio'] = strval($folio);
+    $_POST['folio'] = $folio;
+    $_POST['serie'] = $serie;
+    $probarfolio = strval($folio);
+    $cli = $clienteId;
+    $ID = $clienteId;
+
     // 1. Crear el XML firmado con creacfdi.php
     if (file_exists(__DIR__ . '/creacfdi.php')) {
-        $_POST['folio'] = $folio;
-        $_POST['serie'] = $serie;
-        $_GET['id'] = $folio;
-        require_once __DIR__ . '/creacfdi.php';
+        ob_start();
+        @include __DIR__ . '/creacfdi.php';
+        $creaCfdiOut = ob_get_clean();
     } else {
         echo json_encode(array('ok' => false, 'error' => 'No se encontró el módulo creacfdi.php en el servidor.'));
         exit;
@@ -553,7 +577,9 @@ if ($accion === 'timbrar') {
         $_POST['serie'] = $serie;
         $_GET['id'] = "facturas/factura_{$folio}.xml";
         $_GET['folio'] = $folio;
-        require_once __DIR__ . '/timbrar.php';
+        ob_start();
+        @include __DIR__ . '/timbrar.php';
+        $timbrarOut = ob_get_clean();
         
         if (isset($uuid) && !empty($uuid)) {
             dbQuery("UPDATE facturas SET timbrada = 1, estado = 'TIMBRADA', uuid = '$uuid', FechaTimbrado = NOW() WHERE folio = $folio");
@@ -561,7 +587,9 @@ if ($accion === 'timbrar') {
             if (file_exists(__DIR__ . '/facturapdf.php')) {
                 $_GET['folio'] = $folio;
                 $_GET['es_borrador'] = 0;
+                ob_start();
                 @include __DIR__ . '/facturapdf.php';
+                ob_end_clean();
             }
 
             echo json_encode(array(
