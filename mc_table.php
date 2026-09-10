@@ -177,14 +177,18 @@ foreach ($xml->xpath('//t:TimbreFiscalDigital') as $tfd) {
 $sql='select * from clientes where emisor = 1';
 $emisor=celda($_SESSION['DB'],$sql);
 
-$sql="select id_cliente from facturas where folio = '" . $_GET['folio'] ."'" ;
-//echo $sql . "<br>";
+$targetFolio = isset($_GET['folio']) ? trim($_GET['folio']) : (isset($_GET['id']) ? trim($_GET['id']) : '');
+$sql = "select ID_CLIENTE, id_cliente from facturas where folio = '" . $targetFolio ."' or FOLIO = '" . $targetFolio . "'" ;
+$rowFactCli = celda($_SESSION['DB'], $sql);
+$cli = !empty($rowFactCli['ID_CLIENTE']) ? $rowFactCli['ID_CLIENTE'] : (!empty($rowFactCli['id_cliente']) ? $rowFactCli['id_cliente'] : 0);
+$cli = intval($cli);
 
-
-$cli=dato("id_cliente",$_SESSION['DB'],$sql);
-//echo $cli. "<br>";
-$sql='select * from clientes where ID = ' . $cli ;
-$cliente=celda($_SESSION['DB'],$sql);
+if ($cli > 0) {
+    $sql = 'select * from clientes where ID = ' . $cli . ' or id = ' . $cli;
+    $cliente = celda($_SESSION['DB'], $sql);
+} else {
+    $cliente = array();
+}
 
 
 $sql='select * from facturas where folio= "' . $_GET['folio'] .'"';

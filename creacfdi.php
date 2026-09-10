@@ -39,19 +39,26 @@ $cer = "certificados/elcer.cer.pem";
 
 $sql='select * from clientes where emisor = "1"';
 $elemisor=celda($_SESSION['DB'],$sql);
-//echo $emisor . "<br>";
 $empresa=$elemisor['nomcomercial'];
 $direccion=" Calle:".$elemisor['calle']. " Col:".$elemisor['colonia'];
-$sql="select id_cliente from facturas where folio = '" . $_GET['id'] ."'" ;
-//echo $sql . "<br>";
-$cli=dato("id_cliente",$_SESSION['DB'],$sql);
-//echo $cli. "<br>";
-$sql='select * from clientes where id = ' . $cli ;
-$cliente=celda($_SESSION['DB'],$sql);
 
+$folioTarget = isset($_GET['id']) ? trim($_GET['id']) : (isset($_POST['folio']) ? trim($_POST['folio']) : (isset($_GET['folio']) ? trim($_GET['folio']) : ''));
+$probarfolio = !empty($probarfolio) ? $probarfolio : $folioTarget;
 
-$sql='select * from facturas where FOLIO= "' . $probarfolio .'"';
-$factura=celda('',$sql);
+$sql = "select ID_CLIENTE, id_cliente from facturas where folio = '" . $folioTarget ."'" ;
+$rowFactCli = celda($_SESSION['DB'], $sql);
+$cli = !empty($rowFactCli['ID_CLIENTE']) ? $rowFactCli['ID_CLIENTE'] : (!empty($rowFactCli['id_cliente']) ? $rowFactCli['id_cliente'] : 0);
+$cli = intval($cli);
+
+if ($cli > 0) {
+    $sql = 'select * from clientes where id = ' . $cli ;
+    $cliente = celda($_SESSION['DB'], $sql);
+} else {
+    $cliente = array();
+}
+
+$sql = 'select * from facturas where FOLIO= "' . $probarfolio .'" or folio = "' . $probarfolio . '"';
+$factura = celda($_SESSION['DB'], $sql);
 
 $sql='select * from parametros' ;
 $parametros=celda($_SESSION['DB'],$sql);
