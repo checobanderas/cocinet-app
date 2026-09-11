@@ -401,7 +401,7 @@ export const BluetoothConfigModal: React.FC<BluetoothConfigModalProps> = ({
                             {cfg.mode === "bluetooth" && (
                               <div className="flex items-center justify-between pt-2 border-t border-slate-200/80">
                                 <div className="flex items-center gap-1.5">
-                                  {activeBtConnections && activeBtConnections[areaKey] ? (
+                                  {activeBtConnections && (activeBtConnections[areaKey] || (cfg.printerName && activeBtConnections[cfg.printerName])) ? (
                                     <span className="text-emerald-600 font-black flex items-center gap-1 text-xs">
                                       🟢 Vinculado {cfg.printerName ? `(${cfg.printerName})` : ""}
                                     </span>

@@ -260,25 +260,30 @@ export async function createTransport(
 ): Promise<WebBluetoothTransport | WindowsSpoolerTransport | RawBtTransport | DatabaseQueueTransport | ConsoleMockTransport> {
   const tId = tenantId || getActiveTenantId();
   const settings = getTenantPrinterSettings(tId);
-  const areaConfig = settings[area] || { mode: "windows", printerName: area, windowsPort: "3010" };
+  const normalizedArea = (area.toLowerCase() === "caja" || area.toLowerCase() === "cuenta") ? "cuentas" : area.toLowerCase();
+  const areaConfig = settings[normalizedArea] || settings[area] || { mode: "windows", printerName: area, windowsPort: "3010" };
 
   if (areaConfig.mode === "disabled") {
     return new ConsoleMockTransport(area);
   }
 
   if (areaConfig.mode === "windows") {
-    return new WindowsSpoolerTransport(area, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
+    return new WindowsSpoolerTransport(normalizedArea, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
   }
 
   if (areaConfig.mode === "bluetooth") {
-    return new WebBluetoothTransport(areaConfig.printerName || area);
+    return new WebBluetoothTransport(normalizedArea, areaConfig.printerName);
   }
 
-  if (WebBluetoothTransport.isConnected(area)) {
-    return new WebBluetoothTransport(area);
+  if (areaConfig.mode === "rawbt") {
+    return new RawBtTransport(areaConfig.printerName || normalizedArea, true);
   }
 
-  return new WindowsSpoolerTransport(area, "3010", areaConfig.printerName || area, tId);
+  if (WebBluetoothTransport.isConnected(normalizedArea, areaConfig.printerName)) {
+    return new WebBluetoothTransport(normalizedArea, areaConfig.printerName);
+  }
+
+  return new WindowsSpoolerTransport(normalizedArea, areaConfig.windowsPort || "3010", areaConfig.printerName || area, tId);
 }
 
 // ─── Transports ───────────────────────────────────────────────────────────────
@@ -388,7 +393,7 @@ export class WindowsSpoolerTransport {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
 
         const res = await fetch(`http://localhost:${port}/print`, {
           method: "POST",
@@ -500,9 +505,11 @@ export class ConsoleMockTransport {
  */
 export class WebBluetoothTransport {
   static activeConnections: Record<string, { device: any; server: any; writeCharacteristic: any }> = {};
+  area: string;
   printerName?: string;
 
-  constructor(printerName?: string) {
+  constructor(area: string = "cuentas", printerName?: string) {
+    this.area = area;
     this.printerName = printerName;
   }
 
@@ -510,19 +517,20 @@ export class WebBluetoothTransport {
     return typeof navigator !== "undefined" && "bluetooth" in navigator;
   }
 
-  static isConnected(area?: string): boolean {
+  static isConnected(area?: string, printerName?: string): boolean {
     if (!area) {
       return Object.values(WebBluetoothTransport.activeConnections).some(
         c => c.device && c.server?.connected && c.writeCharacteristic
       );
     }
-    const conn = WebBluetoothTransport.activeConnections[area];
+    const conn = WebBluetoothTransport.activeConnections[area] || 
+                 (printerName ? WebBluetoothTransport.activeConnections[printerName] : null);
     return !!(conn && conn.device && conn.server?.connected && conn.writeCharacteristic);
   }
 
   static async scanAndConnect(area: string = "cuentas"): Promise<{ success: boolean; deviceName?: string; error?: string }> {
     if (!WebBluetoothTransport.isSupported()) {
-      return { success: false, error: "Web Bluetooth API no está soportado en este navegador. Usa Chrome o Edge." };
+      return { success: false, error: "Web Bluetooth API no está soportado en este navegador. Usa Google Chrome o Microsoft Edge." };
     }
 
     try {
@@ -532,7 +540,17 @@ export class WebBluetoothTransport {
           "000018f0-0000-1000-8000-00805f9b34fb", // Common Serial/Printer service
           "49535343-fe7d-41a3-93d0-8609310014f5", // ISSC Transparent service
           "00001101-0000-1000-8000-00805f9b34fb", // SPP UUID
-          "0000e7e0-0000-1000-8000-00805f9b34fb"  // Custom ESC/POS service
+          "0000e7e0-0000-1000-8000-00805f9b34fb", // Custom ESC/POS service
+          "e7810a71-73ae-499d-8c15-faa9aef0c3f2", // Feasycom BLE printer
+          "0000af00-0000-1000-8000-00805f9b34fb", // JP-58 printer
+          "0000ff00-0000-1000-8000-00805f9b34fb", // Custom FF00
+          "0000fee7-0000-1000-8000-00805f9b34fb", // Wechat / POS printer service
+          "0000ff02-0000-1000-8000-00805f9b34fb",
+          "0000ffe0-0000-1000-8000-00805f9b34fb", // HM-10 UART
+          "0000fff0-0000-1000-8000-00805f9b34fb",
+          "000018f1-0000-1000-8000-00805f9b34fb",
+          "00001800-0000-1000-8000-00805f9b34fb",
+          "0000180a-0000-1000-8000-00805f9b34fb"
         ]
       });
 
@@ -558,14 +576,23 @@ export class WebBluetoothTransport {
       }
 
       if (!charFound) {
-        return { success: false, error: `Se conectó con '${device.name || device.id}', pero no se encontró un servicio de escritura compatible.` };
+        return { success: false, error: `Se conectó con '${device.name || device.id}', pero no se encontró un canal de escritura ESC/POS compatible.` };
       }
 
-      WebBluetoothTransport.activeConnections[area] = {
+      const connObj = {
         device,
         server,
         writeCharacteristic: charFound
       };
+
+      WebBluetoothTransport.activeConnections[area] = connObj;
+      if (device.name) {
+        WebBluetoothTransport.activeConnections[device.name] = connObj;
+      }
+
+      device.addEventListener("gattserverdisconnected", () => {
+        console.warn(`[Bluetooth] Dispositivo '${device.name || area}' desconectado.`);
+      });
 
       return { success: true, deviceName: device.name || device.id };
     } catch (err: any) {
@@ -575,6 +602,68 @@ export class WebBluetoothTransport {
       console.error("Error al conectar por Web Bluetooth:", err);
       return { success: false, error: err.message || "No se pudo establecer conexión Bluetooth." };
     }
+  }
+
+  static async tryAutoReconnect(area: string, printerName?: string): Promise<boolean> {
+    if (!WebBluetoothTransport.isSupported()) return false;
+    try {
+      const existingConn = WebBluetoothTransport.activeConnections[area] || 
+                           (printerName ? WebBluetoothTransport.activeConnections[printerName] : null);
+      if (existingConn?.device) {
+        if (!existingConn.server?.connected) {
+          const server = await existingConn.device.gatt.connect();
+          existingConn.server = server;
+          const services = await server.getPrimaryServices();
+          for (const service of services) {
+            const characteristics = await service.getCharacteristics();
+            for (const char of characteristics) {
+              if (char.properties.write || char.properties.writeWithoutResponse) {
+                existingConn.writeCharacteristic = char;
+                return true;
+              }
+            }
+          }
+        }
+        return true;
+      }
+
+      if (typeof (navigator as any).bluetooth?.getDevices === "function") {
+        const devices = await (navigator as any).bluetooth.getDevices();
+        if (devices && devices.length > 0) {
+          const targetDevice = (printerName
+            ? devices.find((d: any) => d.name === printerName || d.id === printerName)
+            : null) || devices[0];
+
+          if (targetDevice) {
+            const server = await targetDevice.gatt.connect();
+            const services = await server.getPrimaryServices();
+            let charFound: any = null;
+            for (const service of services) {
+              try {
+                const characteristics = await service.getCharacteristics();
+                for (const char of characteristics) {
+                  if (char.properties.write || char.properties.writeWithoutResponse) {
+                    charFound = char;
+                    break;
+                  }
+                }
+              } catch {}
+              if (charFound) break;
+            }
+
+            if (charFound) {
+              const connObj = { device: targetDevice, server, writeCharacteristic: charFound };
+              WebBluetoothTransport.activeConnections[area] = connObj;
+              if (targetDevice.name) WebBluetoothTransport.activeConnections[targetDevice.name] = connObj;
+              return true;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Bluetooth] Intento de auto-reconexión falló:", e);
+    }
+    return false;
   }
 
   static async disconnect(area?: string): Promise<void> {
@@ -593,16 +682,35 @@ export class WebBluetoothTransport {
     }
   }
 
-  async send(prn: string) {
-    const area = this.printerName || "cuentas";
-    if (!WebBluetoothTransport.isConnected(area)) {
-      console.warn(`Web Bluetooth no está conectado activamente por GATT para el área: ${area}. Encolando para impresión en servidor...`);
-      new DatabaseQueueTransport(area).send(prn);
-      return;
+  async send(prn: string): Promise<boolean> {
+    const area = this.area || "cuentas";
+    let isConn = WebBluetoothTransport.isConnected(area, this.printerName);
+
+    if (!isConn) {
+      console.log(`[Bluetooth] Intentando auto-reconexión para área '${area}' (${this.printerName || 'sin nombre'})...`);
+      isConn = await WebBluetoothTransport.tryAutoReconnect(area, this.printerName);
     }
 
-    const conn = WebBluetoothTransport.activeConnections[area];
-    if (!conn) return;
+    if (!isConn) {
+      console.warn(`[Bluetooth] Impresora Bluetooth '${this.printerName || area}' no está conectada por GATT.`);
+      
+      if (isAndroid()) {
+        console.log(`[Bluetooth] Entorno Android detectado: fallback a RawBT Transport.`);
+        new RawBtTransport(this.printerName || area, true).send(prn);
+        return true;
+      }
+
+      notifyPrinterEvent({
+        title: "⚠️ Impresora Bluetooth no conectada",
+        message: `No se pudo conectar a la impresora Bluetooth '${this.printerName || area}'. Asegúrate de que esté encendida y vinculada desde la Configuración de Impresoras.`,
+        type: "warning",
+      });
+      return false;
+    }
+
+    const conn = WebBluetoothTransport.activeConnections[area] || 
+                 (this.printerName ? WebBluetoothTransport.activeConnections[this.printerName] : null);
+    if (!conn || !conn.writeCharacteristic) return false;
 
     try {
       // Convertir raw string URL percent-encoded a Uint8Array
@@ -620,7 +728,7 @@ export class WebBluetoothTransport {
       }
 
       const buffer = new Uint8Array(bytes);
-      const chunkSize = 100;
+      const chunkSize = 80;
       for (let offset = 0; offset < buffer.length; offset += chunkSize) {
         const chunk = buffer.slice(offset, offset + chunkSize);
         if (conn.writeCharacteristic.properties.writeWithoutResponse) {
@@ -628,28 +736,37 @@ export class WebBluetoothTransport {
         } else {
           await conn.writeCharacteristic.writeValueWithResponse(chunk);
         }
+        await new Promise((r) => setTimeout(r, 10));
       }
-    } catch (err) {
-      console.error("Error al enviar datos por Web Bluetooth:", err);
-      new DatabaseQueueTransport(area).send(prn);
+
+      console.log(`✅ [Bluetooth] Impresión enviada exitosamente a '${this.printerName || area}' (${buffer.length} bytes)`);
+      return true;
+    } catch (err: any) {
+      console.error("[Bluetooth] Error al transmitir datos a la impresora Bluetooth:", err);
+      notifyPrinterEvent({
+        title: "❌ Error de Impresión Bluetooth",
+        message: `Fallo al transmitir a la impresora '${this.printerName || area}': ${err?.message || "Desconexión"}`,
+        type: "error",
+      });
+      return false;
     }
   }
 }
 
 // ─── Generador de Páginas de Prueba ──────────────────────────────────────────
 
-export function sendTestReceipt(logicalKey: string, customName: string, tenantId?: string) {
-  const area = (logicalKey.toLowerCase() as PrinterArea) || "cuentas";
+export async function sendTestReceipt(logicalKey: string, customName: string, tenantId?: string) {
+  const normalizedArea = (logicalKey.toLowerCase() === "caja" || logicalKey.toLowerCase() === "cuenta") ? "cuentas" : logicalKey.toLowerCase();
   const settings = getTenantPrinterSettings(tenantId);
-  const areaConfig = settings[area] || { mode: "windows", printerName: customName || area, windowsPort: "3010" };
+  const areaConfig = settings[normalizedArea] || settings[logicalKey] || { mode: "windows", printerName: customName || normalizedArea, windowsPort: "3010" };
   const driver = new EscPosDriver();
-  const targetPrinterName = areaConfig.printerName || customName || area;
+  const targetPrinterName = areaConfig.printerName || customName || normalizedArea;
 
-  if (areaConfig.mode === "windows" || isWindows()) {
+  if (areaConfig.mode === "windows") {
     const port = areaConfig.windowsPort || "3010";
-    const transport = new WindowsSpoolerTransport(area, port, targetPrinterName, tenantId);
+    const transport = new WindowsSpoolerTransport(normalizedArea, port, targetPrinterName, tenantId);
     const job = new PosPrinterJob(driver, transport as any);
-    buildTestJob(job, area, targetPrinterName, `Puerto de Windows (Puerto ${port})`).execute();
+    await buildTestJob(job, normalizedArea, targetPrinterName, `Puerto de Windows (Puerto ${port})`).execute();
     return {
       success: true,
       message: `Página de prueba enviada a '${targetPrinterName}' vía Puerto de Windows ${port}.`,
@@ -657,7 +774,7 @@ export function sendTestReceipt(logicalKey: string, customName: string, tenantId
   } else if (areaConfig.mode === "rawbt") {
     const transport = new RawBtTransport(targetPrinterName, true);
     const job = new PosPrinterJob(driver, transport as any);
-    buildTestJob(job, area, targetPrinterName, "App RawBT (Bluetooth)").execute();
+    await buildTestJob(job, normalizedArea, targetPrinterName, "App RawBT (Bluetooth)").execute();
     return {
       success: true,
       message: `Página de prueba enviada a '${targetPrinterName}' vía App RawBT.`,
@@ -665,27 +782,17 @@ export function sendTestReceipt(logicalKey: string, customName: string, tenantId
   } else if (areaConfig.mode === "disabled") {
     return {
       success: false,
-      message: `Impresora deshabilitada para el área '${area}'.`,
+      message: `Impresora deshabilitada para el área '${normalizedArea}'.`,
     };
   } else {
-    // Bluetooth / GATT
-    if (WebBluetoothTransport.isConnected(area)) {
-      const transport = new WebBluetoothTransport(area);
-      const job = new PosPrinterJob(driver, transport as any);
-      buildTestJob(job, area, targetPrinterName, "Web Bluetooth Directo (Nativo)").execute();
-      return {
-        success: true,
-        message: `Página de prueba enviada a '${targetPrinterName}' vía Web Bluetooth Directo (Nativo).`,
-      };
-    } else {
-      const transport = new RawBtTransport(targetPrinterName, true);
-      const job = new PosPrinterJob(driver, transport as any);
-      buildTestJob(job, area, targetPrinterName, "App RawBT (Bluetooth)").execute();
-      return {
-        success: true,
-        message: `Página de prueba enviada a '${targetPrinterName}' vía App RawBT.`,
-      };
-    }
+    // Modo Bluetooth Directo
+    const transport = new WebBluetoothTransport(normalizedArea, targetPrinterName);
+    const job = new PosPrinterJob(driver, transport as any);
+    await buildTestJob(job, normalizedArea, targetPrinterName, "Bluetooth Directo (Nativo GATT)").execute();
+    return {
+      success: true,
+      message: `Página de prueba enviada a '${targetPrinterName}' vía Bluetooth Directo.`,
+    };
   }
 }
 
@@ -836,7 +943,7 @@ export class EscPosDriver {
 
 export class PosPrinterJob {
   driver: EscPosDriver;
-  transport: RawBtTransport | WindowsSpoolerTransport | ConsoleMockTransport;
+  transport: RawBtTransport | WindowsSpoolerTransport | ConsoleMockTransport | WebBluetoothTransport | DatabaseQueueTransport;
   buffer: string[];
 
   ALIGNMENT_LEFT = 0;
@@ -872,7 +979,7 @@ export class PosPrinterJob {
 
   constructor(
     driver: EscPosDriver,
-    transport: RawBtTransport | WindowsSpoolerTransport | ConsoleMockTransport
+    transport: RawBtTransport | WindowsSpoolerTransport | ConsoleMockTransport | WebBluetoothTransport | DatabaseQueueTransport
   ) {
     this.driver = driver;
     this.transport = transport;
@@ -895,7 +1002,11 @@ export class PosPrinterJob {
   }
 
   print(string: string) {
-    const bytes = new TextEncoder().encode(string);
+    const cleanStr = String(string ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\x20-\x7E\n\r]/g, " ");
+    const bytes = new TextEncoder().encode(cleanStr);
     let s = "";
     bytes.forEach((b) => {
       s += this.driver.encodeByte(b);

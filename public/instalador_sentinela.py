@@ -145,10 +145,10 @@ def verify_service_status():
         return False
 
 def configure_printer_sizes(target_dir, env_mode="production"):
-    """Pregunta al usuario por consola interactiva los nombres, anchos de papel, logotipo y fuentes de las impresoras."""
+    """Pregunta al usuario por consola interactiva los nombres, anchos de papel, logotipo, respaldos y tamaños de tipografía GDI."""
     config_file = os.path.join(target_dir, "printer_config.json")
     
-    # Valores base por defecto
+    # Valores base por defecto optimizados con letra grande y legible
     current_config = {
         "PRINTER_MAP": {
             "cuentas": "CUENTAS",
@@ -162,11 +162,19 @@ def configure_printer_sizes(target_dir, env_mode="production"):
         },
         "LOGO_PATH": "C:\\buzon\\logo.jpg",
         "FONT_NAME": "Arial",
-        "FONT_SIZE_PT": 16.0,
+        "FONT_SIZE_PT": 12.0,
+        "HEADER_FONT_SIZE_PT": 18.0,
+        "ITEM_FONT_SIZE_PT": 14.0,
+        "TOTAL_FONT_SIZE_PT": 16.0,
+        "MARGIN_LEFT_PX": 10,
+        "MARGIN_RIGHT_PX": 25,
+        "LINE_SPACING": 4,
+        "SHOW_DIVIDER": True,
+        "BACKUP_FOLDER": "C:\\buzon\\respaldos",
         "ENVIRONMENT": env_mode,
         "DEBUG_VERBOSE": (env_mode == "testing"),
         "DB_PATH": "restaurant.db",
-        "LOG_FILE": "sentinel.log",
+        "LOG_FILE": "sentinel_printer.log",
         "POLL_INTERVAL_SECONDS": 2,
         "DEDUP_TTL_SECONDS": 10
     }
@@ -176,9 +184,9 @@ def configure_printer_sizes(target_dir, env_mode="production"):
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if "PRINTER_MAP" in data:
+                if "PRINTER_MAP" in data and isinstance(data["PRINTER_MAP"], dict):
                     current_config["PRINTER_MAP"].update(data["PRINTER_MAP"])
-                if "PRINTER_PAPER_SIZES" in data:
+                if "PRINTER_PAPER_SIZES" in data and isinstance(data["PRINTER_PAPER_SIZES"], dict):
                     current_config["PRINTER_PAPER_SIZES"].update(data["PRINTER_PAPER_SIZES"])
                 if "LOGO_PATH" in data:
                     current_config["LOGO_PATH"] = data["LOGO_PATH"]
@@ -186,6 +194,22 @@ def configure_printer_sizes(target_dir, env_mode="production"):
                     current_config["FONT_NAME"] = data["FONT_NAME"]
                 if "FONT_SIZE_PT" in data:
                     current_config["FONT_SIZE_PT"] = float(data["FONT_SIZE_PT"])
+                if "HEADER_FONT_SIZE_PT" in data:
+                    current_config["HEADER_FONT_SIZE_PT"] = float(data["HEADER_FONT_SIZE_PT"])
+                if "ITEM_FONT_SIZE_PT" in data:
+                    current_config["ITEM_FONT_SIZE_PT"] = float(data["ITEM_FONT_SIZE_PT"])
+                if "TOTAL_FONT_SIZE_PT" in data:
+                    current_config["TOTAL_FONT_SIZE_PT"] = float(data["TOTAL_FONT_SIZE_PT"])
+                if "MARGIN_LEFT_PX" in data:
+                    current_config["MARGIN_LEFT_PX"] = int(data["MARGIN_LEFT_PX"])
+                if "MARGIN_RIGHT_PX" in data:
+                    current_config["MARGIN_RIGHT_PX"] = int(data["MARGIN_RIGHT_PX"])
+                if "LINE_SPACING" in data:
+                    current_config["LINE_SPACING"] = int(data["LINE_SPACING"])
+                if "SHOW_DIVIDER" in data:
+                    current_config["SHOW_DIVIDER"] = bool(data["SHOW_DIVIDER"])
+                if "BACKUP_FOLDER" in data:
+                    current_config["BACKUP_FOLDER"] = data["BACKUP_FOLDER"]
                 if "DB_PATH" in data:
                     current_config["DB_PATH"] = data["DB_PATH"]
                 if "LOG_FILE" in data:
@@ -198,7 +222,7 @@ def configure_printer_sizes(target_dir, env_mode="production"):
             pass
             
     print("\n" + "="*80)
-    print("    ⚙️  CONFIGURACIÓN DE IMPRESORAS, ANCHOS DE PAPEL Y LOGOTIPO ⚙️")
+    print("    ⚙️  CONFIGURACIÓN DE IMPRESORAS, TIPOGRAFÍA, TAMAÑOS Y RESPALDOS ⚙️")
     print("="*80)
     
     # Listar impresoras instaladas en Windows
@@ -208,68 +232,121 @@ def configure_printer_sizes(target_dir, env_mode="production"):
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
         installed_list = [p[2] for p in win32print.EnumPrinters(flags)]
         if installed_list:
-            print("🖨️  Impresoras detectadas en este equipo:")
+            print("🖨️  Impresoras detectadas en este equipo Windows:")
             for p in installed_list:
                 print(f"   • {p}")
             print("")
     except Exception:
         pass
 
-    print("Por favor, ingresa los datos correspondientes.\n")
+    print("💡 Presiona [ENTER] en cada opción para aceptar los valores recomendados:\n")
     
-    # Preguntar ruta del logotipo
-    default_logo = current_config.get("LOGO_PATH", "C:\\buzon\\logo.jpg")
-    logo_input = input(f"➤ Ruta física del logotipo (.jpg) (Enter para '{default_logo}'): ").strip()
-    new_logo = logo_input if logo_input else default_logo
-    print(f"   ↳ Logotipo configurado en: '{new_logo}'\n")
-    
-    # Preguntar tipografía y tamaño
-    default_font = current_config.get("FONT_NAME", "Arial")
-    font_input = input(f"➤ Nombre de la tipografía (Enter para '{default_font}'): ").strip()
-    new_font = font_input if font_input else default_font
-    
-    default_size = current_config.get("FONT_SIZE_PT", 16.0)
-    size_input = input(f"➤ Tamaño de letra base en puntos (Enter para '{default_size}'): ").strip()
-    try:
-        new_size = float(size_input) if size_input else default_size
-    except Exception:
-        new_size = default_size
-        
-    print(f"   ↳ Tipografía configurada: '{new_font}' con tamaño {new_size} pt.\n")
-    
+    # 1. Impresoras por área
     new_map = {}
     new_sizes = {}
-    
     for area in ["cuentas", "cocina", "barra"]:
-        default_name = current_config["PRINTER_MAP"].get(area, "CUENTAS")
-        # Si la predeterminada no coincide con ninguna instalada, sugerir la primera disponible de Windows
+        default_name = current_config["PRINTER_MAP"].get(area, area.upper())
         if installed_list and not any(p.upper() == default_name.upper() for p in installed_list):
-            default_name = installed_list[0]
+            # Sugerir la que coincida por nombre o la primera instalada
+            matched = [p for p in installed_list if area.lower() in p.lower()]
+            if matched:
+                default_name = matched[0]
+            elif installed_list:
+                default_name = installed_list[0]
 
-        name = input(f"➤ Nombre de impresora en Windows para '{area}' (Enter para '{default_name}'): ").strip()
+        name = input(f"➤ Impresora Windows para '{area.upper()}' (Enter para '{default_name}'): ").strip()
         new_map[area] = name if name else default_name
         
-        default_size = current_config["PRINTER_PAPER_SIZES"][area]
-        size_in = input(f"   ¿Ancho de papel de esta impresora? (Enter para '{default_size}', o ingresa '58' o '80'): ").strip()
-        if size_in == "58":
+        default_paper = current_config["PRINTER_PAPER_SIZES"].get(area, "80mm")
+        size_in = input(f"   ¿Ancho de papel para '{area}'? (Enter para '{default_paper}', o ingresa '58' o '80'): ").strip()
+        if size_in == "58" or size_in == "58mm":
             new_sizes[area] = "58mm"
-        elif size_in == "80":
+        elif size_in == "80" or size_in == "80mm":
             new_sizes[area] = "80mm"
         else:
-            new_sizes[area] = default_size
+            new_sizes[area] = default_paper
             
-        print(f"   ↳ Guardado: Impresora '{new_map[area]}' con papel {new_sizes[area]}.\n")
+        print(f"   ↳ Asignado: '{new_map[area]}' ({new_sizes[area]})\n")
+
+    # 2. Tipografía y Tamaños de Letra para Cuentas / Cobro (GDI)
+    print("--- 🎨 CONFIGURACIÓN DE CUENTAS / COBRO (Modo GDI con Logotipo) ---")
+    print("   ↳ Nota: Las comandas de cocina y barra se imprimen en ESC/POS directo con letra grande por hardware.")
+    
+    default_font = current_config.get("FONT_NAME", "Arial")
+    font_input = input(f"➤ Tipografía para cuentas (Enter para '{default_font}'): ").strip()
+    new_font = font_input if font_input else default_font
+    
+    # Encabezados
+    def_header_pt = current_config.get("HEADER_FONT_SIZE_PT", 18.0)
+    in_header = input(f"➤ Tamaño Encabezados / Títulos de cuenta (Enter para '{def_header_pt} pt'): ").strip()
+    try:
+        new_header_pt = float(in_header) if in_header else def_header_pt
+    except Exception:
+        new_header_pt = def_header_pt
         
+    # Platillos / Items de la cuenta
+    def_item_pt = current_config.get("ITEM_FONT_SIZE_PT", 14.0)
+    in_item = input(f"➤ Tamaño Platillos en la cuenta (Enter para '{def_item_pt} pt'): ").strip()
+    try:
+        new_item_pt = float(in_item) if in_item else def_item_pt
+    except Exception:
+        new_item_pt = def_item_pt
+
+    # Totales
+    def_total_pt = current_config.get("TOTAL_FONT_SIZE_PT", 16.0)
+    in_total = input(f"➤ Tamaño Totales / Subtotales (Enter para '{def_total_pt} pt'): ").strip()
+    try:
+        new_total_pt = float(in_total) if in_total else def_total_pt
+    except Exception:
+        new_total_pt = def_total_pt
+
+    # Base general
+    def_base_pt = current_config.get("FONT_SIZE_PT", 12.0)
+    in_base = input(f"➤ Tamaño Letra Base general (Enter para '{def_base_pt} pt'): ").strip()
+    try:
+        new_base_pt = float(in_base) if in_base else def_base_pt
+    except Exception:
+        new_base_pt = def_base_pt
+
+    print(f"   ↳ Tipografía: '{new_font}' | Encabezado: {new_header_pt}pt | Platillos: {new_item_pt}pt | Totales: {new_total_pt}pt\n")
+
+    # 3. Logotipo y Respaldos
+    print("--- 📁 RUTAS DE LOGOTIPO Y RESPALDOS LOCALES ---")
+    default_logo = current_config.get("LOGO_PATH", "C:\\buzon\\logo.jpg")
+    logo_input = input(f"➤ Ruta física del logotipo (.jpg/.png) (Enter para '{default_logo}'): ").strip()
+    new_logo = logo_input if logo_input else default_logo
+
+    default_backup = current_config.get("BACKUP_FOLDER", "C:\\buzon\\respaldos")
+    backup_input = input(f"➤ Carpeta para respaldos de turnos y ventas (Enter para '{default_backup}'): ").strip()
+    new_backup = backup_input if backup_input else default_backup
+
     config_payload = {
+        "_COMENTARIO_MODO": "PRINT_MODE define la operacion: 'hybrid' (Comandas en ESC/POS rapido y Cuentas en GDI con logo), 'raw' (todo en ESC/POS) o 'gdi' (todo en GDI).",
+        "PRINT_MODE": "hybrid",
         "PRINTER_MAP": new_map,
         "PRINTER_PAPER_SIZES": new_sizes,
+        "_SECCION_CUENTAS_Y_TICKETS_COBRO_GDI": "=== PARAMETROS PARA CUENTAS / COBRO (Modo GDI Vectorial con Logo) ===",
         "LOGO_PATH": new_logo,
         "FONT_NAME": new_font,
-        "FONT_SIZE_PT": new_size,
+        "HEADER_FONT_SIZE_PT": new_header_pt,
+        "ITEM_FONT_SIZE_PT": new_item_pt,
+        "TOTAL_FONT_SIZE_PT": new_total_pt,
+        "FONT_SIZE_PT": new_base_pt,
+        "MARGIN_LEFT_PX": current_config.get("MARGIN_LEFT_PX", 10),
+        "MARGIN_RIGHT_PX": current_config.get("MARGIN_RIGHT_PX", 25),
+        "LINE_SPACING": current_config.get("LINE_SPACING", 4),
+        "SHOW_DIVIDER": current_config.get("SHOW_DIVIDER", True),
+        "_SECCION_COMANDAS_COCINA_BARRA_ESCPOS": "=== PARAMETROS PARA COMANDAS DE COCINA Y BARRA (Modo ESC/POS Nativo Rapido) ===",
+        "COMANDAS_MODO": "ESC/POS",
+        "COMANDAS_TAMANO_ENCABEZADO": "DOBLE_ALTO_Y_ANCHO",
+        "COMANDAS_TAMANO_PLATILLOS": "DOBLE_ALTO_Y_NEGRITA",
+        "COMANDAS_NOTAS_RESALTADAS": True,
+        "_SECCION_RESPALDOS_Y_SISTEMA": "=== RUTAS Y RESPALDOS LOCALES ===",
+        "BACKUP_FOLDER": new_backup,
         "ENVIRONMENT": env_mode,
         "DEBUG_VERBOSE": (env_mode == "testing"),
         "DB_PATH": current_config.get("DB_PATH", "restaurant.db"),
-        "LOG_FILE": current_config.get("LOG_FILE", "sentinel.log"),
+        "LOG_FILE": current_config.get("LOG_FILE", "sentinel_printer.log"),
         "POLL_INTERVAL_SECONDS": current_config.get("POLL_INTERVAL_SECONDS", 2),
         "DEDUP_TTL_SECONDS": current_config.get("DEDUP_TTL_SECONDS", 10),
         "ERROR_CODES": {
@@ -282,12 +359,21 @@ def configure_printer_sizes(target_dir, env_mode="production"):
         }
     }
     
-    try:
-        with open(config_file, "w", encoding="utf-8") as f:
-            json.dump(config_payload, f, indent=4, ensure_ascii=False)
-        print(f"✅ [OK] Configuración guardada en: {config_file}\n")
-    except Exception as e:
-        print(f"⚠️ [AVISO] No se pudo escribir el archivo de configuración ({e}).")
+    # Guardar en target_dir y en las rutas raíz
+    save_targets = [
+        config_file,
+        os.path.join(os.path.dirname(os.path.dirname(target_dir)), "printer_config.json"),
+        os.path.join(os.path.dirname(target_dir), "printer_config.json")
+    ]
+    for st in save_targets:
+        try:
+            os.makedirs(os.path.dirname(st), exist_ok=True)
+            with open(st, "w", encoding="utf-8") as f:
+                json.dump(config_payload, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+            
+    print(f"✅ [OK] Configuración guardada exitosamente en: {config_file}\n")
 
 def purge_all_cocinet_services():
     """Busca, detiene y elimina TODOS los servicios de Windows anteriores o duplicados que contengan 'Cocinet' y libera handles bloqueados (servicios fantasma)."""
@@ -369,7 +455,7 @@ def main():
 
     # 5. Instalar/Actualizar Dependencias del Sistema
     print("📦 [PROCESANDO] Instalando y actualizando librerías de Python requeridas...")
-    deps = ["pywin32", "Flask", "flask-cors", "pillow"]
+    deps = ["pywin32", "Flask", "flask-cors", "flask-sock", "simple-websocket", "pillow"]
     for dep in deps:
         if not run_command(f'"{sys.executable}" -m pip install --upgrade {dep}', f"Instalar/Actualizar paquete '{dep}'"):
             print(f"🛑 [PASO 5 FALLADO] No se pudo instalar la dependencia crítica: {dep}")

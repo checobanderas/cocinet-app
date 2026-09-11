@@ -391,27 +391,47 @@ async function startServer() {
     res.download(filePath);
   });
 
+  const PRINTER_CONFIG_PATHS = [
+    path.join(process.cwd(), 'public', 'Cocinet_Windows_App', 'printer_config.json'),
+    path.join(process.cwd(), 'printer_config.json'),
+    path.join(process.cwd(), 'dist', 'printer_config.json'),
+    path.join(process.cwd(), 'dist', 'Cocinet_Windows_App', 'printer_config.json')
+  ];
+
   app.get('/api/sentinel/config', (req, res) => {
-    const configPath = path.join(process.cwd(), 'printer_config.json');
-    if (fs.existsSync(configPath)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        return res.json({ success: true, config: data });
-      } catch (e) {}
+    for (const p of PRINTER_CONFIG_PATHS) {
+      if (fs.existsSync(p)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          return res.json({ success: true, config: data });
+        } catch (e) {}
+      }
     }
     res.json({ success: false, error: 'Config file not found' });
   });
 
   app.post('/api/sentinel/config', (req, res) => {
-    const configPath = path.join(process.cwd(), 'printer_config.json');
     try {
       const data = req.body || {};
       let existing = {};
-      if (fs.existsSync(configPath)) {
-        try { existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch (e) {}
+      
+      for (const p of PRINTER_CONFIG_PATHS) {
+        if (fs.existsSync(p)) {
+          try {
+            existing = JSON.parse(fs.readFileSync(p, 'utf-8'));
+            break;
+          } catch (e) {}
+        }
       }
+
       const updated = { ...existing, ...data };
-      fs.writeFileSync(configPath, JSON.stringify(updated, null, 4), 'utf-8');
+      for (const p of PRINTER_CONFIG_PATHS) {
+        try {
+          const dir = path.dirname(p);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(p, JSON.stringify(updated, null, 4), 'utf-8');
+        } catch (e) {}
+      }
       return res.json({ success: true, config: updated });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e.message });

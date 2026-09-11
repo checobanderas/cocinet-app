@@ -1627,13 +1627,40 @@ return (
                                                     </a>
                                                   )}
 
+                                                  {/* Botón Ver Cuentas (Turno / Día Actual) */}
+                                                  <a
+                                                    href={`/?tenant=${encodeURIComponent(company.id)}&action=cuentas`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md border-none uppercase tracking-wider no-underline hover:scale-105 active:scale-95"
+                                                    style={{ backgroundColor: "#059669" }}
+                                                    title={`Ver Cuentas del Turno y Cuentas Activas de ${company.name}`}
+                                                  >
+                                                    <span>🧾</span>
+                                                    <span>Ver Cuentas</span>
+                                                    <span className="text-[10px] opacity-80">↗</span>
+                                                  </a>
+
+                                                  {/* Botón Ver Historial (Cuentas Cerradas) */}
+                                                  <a
+                                                    href={`/?tenant=${encodeURIComponent(company.id)}&action=historial`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md border-none uppercase tracking-wider no-underline hover:scale-105 active:scale-95"
+                                                    style={{ backgroundColor: "#4f46e5" }}
+                                                    title={`Ver Historial de Cuentas Pagadas de ${company.name}`}
+                                                  >
+                                                    <span>📜</span>
+                                                    <span>Ver Historial</span>
+                                                    <span className="text-[10px] opacity-80">↗</span>
+                                                  </a>
+
                                                   {/* 3. Botón de ENTRAR AL POS / TURNO (1-Click Login) */}
                                                   <a
                                                     href={`/?tenant=${encodeURIComponent(company.id)}&action=login`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md border-none uppercase tracking-wider no-underline hover:scale-105 active:scale-95"
-                                                    style={{ backgroundColor: "#059669" }}
+                                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md border-none uppercase tracking-wider no-underline hover:scale-105 active:scale-95"
                                                     title={`Conectar a ${company.name} y abrir punto de venta en nueva pestaña`}
                                                   >
                                                     <span>⚡</span>
@@ -1694,7 +1721,7 @@ return (
                                     <th className="p-3">Tipo</th>
                                     <th className="p-3">RFC</th>
                                     <th className="p-3">Usuarios</th>
-                                    <th className="p-3">Facturación API</th>
+                                    <th className="p-3">Supervisión en Vivo</th>
                                     <th className="p-3 text-right">Acciones Rápidas</th>
                                   </tr>
                                 </thead>
@@ -1763,14 +1790,35 @@ return (
                                           </a>
                                         </td>
 
+                                        {/* SUPERVISIÓN EN VIVO: VER CUENTAS Y VER HISTORIAL */}
                                         <td className="p-3 whitespace-nowrap">
-                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                            hasInvoicing
-                                              ? "bg-emerald-100 text-emerald-800"
-                                              : "bg-slate-100 text-slate-400"
-                                          }`}>
-                                            {hasInvoicing ? "🟢 Conectada" : "⚪ No config."}
-                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <a
+                                              href={`/?tenant=${encodeURIComponent(company.id)}&action=cuentas`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black cursor-pointer border-none shadow-xs uppercase tracking-wider no-underline transition hover:scale-105 active:scale-95"
+                                              style={{ backgroundColor: "#059669" }}
+                                              title={`Ver Cuentas del Turno y Cuentas Activas del Día de ${company.name}`}
+                                            >
+                                              <span>🧾</span>
+                                              <span>Ver Cuentas</span>
+                                              <span className="text-[10px] opacity-80">↗</span>
+                                            </a>
+
+                                            <a
+                                              href={`/?tenant=${encodeURIComponent(company.id)}&action=historial`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black cursor-pointer border-none shadow-xs uppercase tracking-wider no-underline transition hover:scale-105 active:scale-95"
+                                              style={{ backgroundColor: "#4f46e5" }}
+                                              title={`Ver Historial de Cuentas Cerradas y Pagadas de ${company.name}`}
+                                            >
+                                              <span>📜</span>
+                                              <span>Ver Historial</span>
+                                              <span className="text-[10px] opacity-80">↗</span>
+                                            </a>
+                                          </div>
                                         </td>
 
                                         <td className="p-3 text-right whitespace-nowrap">
@@ -1791,8 +1839,7 @@ return (
                                               href={`/?tenant=${encodeURIComponent(company.id)}&action=login`}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black cursor-pointer border-none shadow-xs uppercase tracking-wider no-underline transition hover:scale-105 active:scale-95"
-                                              style={{ backgroundColor: "#059669" }}
+                                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-black cursor-pointer border-none shadow-xs uppercase tracking-wider no-underline transition hover:scale-105 active:scale-95"
                                               title={`Entrar a ${company.name} en una nueva pestaña`}
                                             >
                                               <span>⚡ Entrar</span>

@@ -157,8 +157,8 @@ export const formatComandaItemStructured = (
   totalWidth: number = 32
 ): { productLines: string[]; noteLines: string[]; allLines: string[] } => {
   const cleanName = String(rawName || "").trim().toUpperCase();
-  const qtyStr = `[ ${quantity} ] `;
-  const indent = "      "; // 6 espacios de sangría alineado con el texto
+  const qtyStr = `${quantity}  `;
+  const indent = "   "; // sangría para saltos de línea
   const productLines: string[] = [];
   const noteLines: string[] = [];
 

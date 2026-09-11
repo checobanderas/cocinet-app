@@ -1,11 +1,11 @@
-import { numeroALetras, formatReceiptItemLines, formatComandaItemLines, formatNotificationDate } from './utils/formatters';
+import { numeroALetras, formatReceiptItemLines, formatComandaItemLines, formatComandaItemStructured, formatNotificationDate } from './utils/formatters';
 import InstallPWA from "./components/InstallPWA";
 import NotificationsModal from "./components/NotificationsModal";
 import RecipeAddInsumoModal from "./components/RecipeAddInsumoModal";
 import { PrinterTemplateModal } from "./components/PrinterTemplateModal";
 import { NumpadModal } from "./components/modals/NumpadModal";
 import { parseStructuredExcelCatalog } from "./services/excelMenuParser";
-import { getComandaDestinations, executePrintComanda, getLastInternalFolio } from "./services/comandaPrintService";
+import { getComandaDestinations, executePrintComanda, getLastInternalFolio, getComandaSizeSettings } from "./services/comandaPrintService";
 import { executePrintTicket } from "./services/receiptPrintService";
 import { executeImportTenantMenu, executeReplicateMenuToTenants } from "./services/tenantMenuSyncService";
 import {
@@ -1231,6 +1231,50 @@ export default function App() {
                 "⚡ Punto de Venta Conectado",
                 `Has ingresado a la sucursal: ${found.name} ⭐ (Cargando datos en vivo)`,
                 "success"
+              );
+            } else if (actionParam === "cuentas" || actionParam === "corte" || actionParam === "shift") {
+              document.title = `🧾 Cuentas del Turno: ${found.name || found.sucursalDefault} | COCINET`;
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
+
+              const tempUsers = getTenantUsers(found.id);
+              const targetUser = tempUsers.find((u) => u.id === `${found.id}-admin`) || 
+                                 tempUsers.find((u) => u.id === `${found.id}-sistemas`) ||
+                                 tempUsers.find((u) => u.role === "admin") ||
+                                 tempUsers[0];
+              if (targetUser) {
+                setCurrentUser(targetUser);
+              }
+              setAppMode("corte-tabla");
+              setLoginSubStep("tenant");
+              triggerAppNotification(
+                "🧾 Cuentas del Turno Actual",
+                `Supervisión en vivo de cuentas para ${found.name}.`,
+                "success"
+              );
+            } else if (actionParam === "historial" || actionParam === "closed-accounts" || actionParam === "history") {
+              document.title = `📜 Historial de Cuentas: ${found.name || found.sucursalDefault} | COCINET`;
+              setIsOwnerUnlocked(true);
+              localStorage.setItem("cocinet_is_owner_unlocked", "true");
+              setActiveOwnerFilter(found.ownerKey);
+              localStorage.setItem("cocinet_active_owner_filter", found.ownerKey);
+
+              const tempUsers = getTenantUsers(found.id);
+              const targetUser = tempUsers.find((u) => u.id === `${found.id}-admin`) || 
+                                 tempUsers.find((u) => u.id === `${found.id}-sistemas`) ||
+                                 tempUsers.find((u) => u.role === "admin") ||
+                                 tempUsers[0];
+              if (targetUser) {
+                setCurrentUser(targetUser);
+              }
+              setAppMode("closed-accounts");
+              setLoginSubStep("tenant");
+              triggerAppNotification(
+                "📜 Historial de Cuentas",
+                `Historial de cuentas cerradas y cobradas de ${found.name}.`,
+                "info"
               );
             } else if (actionParam === "facturacion" || actionParam === "factura") {
               document.title = `🧾 Facturación CFDI: ${found.name || found.sucursalDefault} | COCINET`;
@@ -3325,6 +3369,7 @@ export default function App() {
       localStorage.removeItem("cocinet_active_owner_filter");
       localStorage.removeItem("cocinet_restricted_owner_key");
       localStorage.removeItem("pos_selected_tenant");
+      localStorage.setItem("cocinet_login_view_mode", "view3");
 
       setOwnerPasswordInput("");
       setPinAttempts(0);
@@ -3338,103 +3383,113 @@ export default function App() {
       return;
     }
 
-    // A. IF A TENANT IS ALREADY SELECTED OR TERMINAL IS LOCKED TO A TENANT
-    const lockedTenantId = getLockedTerminalTenantId();
-    let activeTenantForLogin = selectedTenant;
-    if (!activeTenantForLogin && lockedTenantId) {
-      const foundLocked = COMPANY_CATALOG.find((c) => c.id === lockedTenantId);
-      if (foundLocked) {
-        activeTenantForLogin = foundLocked;
-        setSelectedTenant(foundLocked);
+    // 1. OWNER / DUEÑO / SUPERVISOR ACCESS
+    // If the entered PIN matches ANY owner or supervisor, unlock the owner's multi-branch dashboard
+    const allOwnerPins: Record<string, string> = { ...OWNER_PINS, ...customOwnerPins };
+    const allSupervisorPins: Record<string, string> = { ...OWNER_SUPERVISOR_PINS, ...customOwnerSupervisorPins };
+
+    let matchedOwnerKey: string | null = null;
+    let isSupervisor = false;
+
+    for (const [k, p] of Object.entries(allOwnerPins)) {
+      if (p === enteredPin) {
+        matchedOwnerKey = k;
+        break;
       }
     }
 
-    if (activeTenantForLogin) {
-      let matchedUser: User | null = null;
-      const matchedTenant: CompanyTenant = activeTenantForLogin;
-
-      // 1. Sistemas global PIN (4020) for this tenant
-      if (enteredPin === "4020") {
-        const companyUsers = getTenantUsers(matchedTenant.id);
-        const existingSistemas = companyUsers.find(u => u.id.endsWith("-sistemas") || u.role === "admin");
-        matchedUser = existingSistemas || {
-          id: `${matchedTenant.id}-sistemas`,
-          name: `Sistemas (${matchedTenant.sucursalDefault || matchedTenant.name}) ⚙️`,
-          role: "admin",
-          pin: enteredPin,
-          avatar: "fa-solid fa-laptop-code",
-          tenantId: matchedTenant.id,
-        };
-      }
-      // 2. Owner / Supervisor PIN for this tenant's owner
-      else if (
-        (matchedTenant.ownerKey && OWNER_PINS[matchedTenant.ownerKey] === enteredPin) ||
-        (matchedTenant.ownerKey && OWNER_SUPERVISOR_PINS[matchedTenant.ownerKey] === enteredPin) ||
-        enteredPin === "2026"
-      ) {
-        const companyUsers = getTenantUsers(matchedTenant.id);
-        const existingAdmin = companyUsers.find(u => u.id.endsWith("-admin") || u.role === "admin");
-        matchedUser = existingAdmin || {
-          id: `${matchedTenant.id}-admin`,
-          name: `Propietario (${matchedTenant.name}) 👑`,
-          role: "admin",
-          pin: enteredPin,
-          avatar: "fa-solid fa-user-shield",
-          tenantId: matchedTenant.id,
-        };
-      }
-      // 3. Regular assigned employees of this specific tenant
-      else {
-        const companyUsers = getTenantUsers(matchedTenant.id);
-        const user = companyUsers.find((u) => u.pin === enteredPin);
-        if (user) {
-          matchedUser = user;
+    if (!matchedOwnerKey) {
+      for (const [k, p] of Object.entries(allSupervisorPins)) {
+        if (p === enteredPin) {
+          matchedOwnerKey = k;
+          isSupervisor = true;
+          break;
         }
       }
+    }
 
-      if (matchedUser) {
-        setSelectedTenant(matchedTenant);
-        setCurrentUser(matchedUser);
+    const lockedTenantId = getLockedTerminalTenantId();
+    const activeTenantForLogin = selectedTenant || (lockedTenantId ? COMPANY_CATALOG.find((c) => c.id === lockedTenantId) : null);
+
+    if (!matchedOwnerKey && enteredPin === "2026") {
+      matchedOwnerKey = activeTenantForLogin?.ownerKey || customOwners[0]?.key || "1";
+    }
+
+    if (matchedOwnerKey) {
+      setIsOwnerUnlocked(true);
+      setActiveOwnerFilter(matchedOwnerKey);
+      setRestrictedOwnerKey(matchedOwnerKey);
+      setSelectedTenant(null);
+      setSelectedLoginUser(null);
+      setCurrentUser(null);
+      setShowPinPanel(true);
+      setLoginSubStep("tenant");
+
+      localStorage.setItem("cocinet_is_owner_unlocked", "true");
+      localStorage.setItem("cocinet_active_owner_filter", matchedOwnerKey);
+      localStorage.setItem("cocinet_restricted_owner_key", matchedOwnerKey);
+      localStorage.setItem("cocinet_login_view_mode", "view3");
+      localStorage.removeItem("pos_selected_tenant");
+
+      const ownerName = customOwners.find((o: any) => o.key === matchedOwnerKey)?.name || "Propietario";
+      triggerAppNotification(
+        isSupervisor ? "📋 Acceso Supervisor Autorizado" : "🔑 Acceso Propietario Autorizado",
+        `Bienvenido al panel de sucursales de ${ownerName}.`,
+        "success"
+      );
+      setOwnerPasswordInput("");
+      setPinAttempts(0);
+      return;
+    }
+
+    // 2. SISTEMAS GLOBAL ACCESS (4020)
+    if (enteredPin === "4020") {
+      setIsOwnerUnlocked(true);
+      setActiveOwnerFilter(null);
+      setIsSystemsMode(true);
+      setSelectedTenant(null);
+      setSelectedLoginUser(null);
+      setCurrentUser(null);
+      setShowPinPanel(true);
+      setLoginSubStep("tenant");
+      localStorage.setItem("cocinet_is_owner_unlocked", "true");
+      localStorage.setItem("cocinet_is_systems", "true");
+      localStorage.removeItem("cocinet_active_owner_filter");
+      localStorage.removeItem("pos_selected_tenant");
+      localStorage.setItem("cocinet_login_view_mode", "view3");
+      triggerAppNotification(
+        "⚙️ Acceso de Sistemas Autorizado",
+        "Visualización de todas las sucursales activa en modo Sistemas.",
+        "info"
+      );
+      setOwnerPasswordInput("");
+      setPinAttempts(0);
+      return;
+    }
+
+    // 3. EMPLOYEE ACCESS FOR A SPECIFIC TENANT
+    if (activeTenantForLogin) {
+      const companyUsers = getTenantUsers(activeTenantForLogin.id);
+      const user = companyUsers.find((u) => u.pin === enteredPin);
+
+      if (user) {
+        setSelectedTenant(activeTenantForLogin);
+        setCurrentUser(user);
         setOwnerPasswordInput("");
         setPinAttempts(0);
-
-        if (matchedUser.id.endsWith("-sistemas") || enteredPin === "4020") {
-          setIsOwnerUnlocked(true);
-          setActiveOwnerFilter(null);
-          localStorage.setItem("cocinet_is_owner_unlocked", "true");
-          localStorage.removeItem("cocinet_active_owner_filter");
-
-          setIsSystemsMode(true);
-          localStorage.setItem("cocinet_is_systems", "true");
-          setRestrictedOwnerKey(null);
-          localStorage.removeItem("cocinet_restricted_owner_key");
-        } else if (matchedUser.id.endsWith("-admin") || matchedUser.role === "admin") {
-          setIsOwnerUnlocked(true);
-          setActiveOwnerFilter(matchedTenant.ownerKey);
-          localStorage.setItem("cocinet_is_owner_unlocked", "true");
-          localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
-
-          setIsSystemsMode(false);
-          localStorage.setItem("cocinet_is_systems", "false");
-          setRestrictedOwnerKey(matchedTenant.ownerKey);
-          localStorage.setItem("cocinet_restricted_owner_key", matchedTenant.ownerKey);
-        } else {
-          setIsOwnerUnlocked(false);
-          setActiveOwnerFilter(matchedTenant.ownerKey);
-          localStorage.setItem("cocinet_is_owner_unlocked", "false");
-          localStorage.setItem("cocinet_active_owner_filter", matchedTenant.ownerKey);
-
-          setIsSystemsMode(false);
-          localStorage.setItem("cocinet_is_systems", "false");
-          setRestrictedOwnerKey(null);
-          localStorage.removeItem("cocinet_restricted_owner_key");
-        }
-
+        setIsOwnerUnlocked(false);
+        setActiveOwnerFilter(activeTenantForLogin.ownerKey);
+        localStorage.setItem("cocinet_is_owner_unlocked", "false");
+        localStorage.setItem("cocinet_active_owner_filter", activeTenantForLogin.ownerKey);
+        setIsSystemsMode(false);
+        localStorage.setItem("cocinet_is_systems", "false");
+        setRestrictedOwnerKey(null);
+        localStorage.removeItem("cocinet_restricted_owner_key");
         setLoginSubStep("tenant");
 
         triggerAppNotification(
           "⚡ Ingreso Exitoso",
-          `Bienvenido, ${matchedUser.name} a la sucursal ${matchedTenant.name}.`,
+          `Bienvenido, ${user.name} a la sucursal ${activeTenantForLogin.name}.`,
           "success"
         );
 
@@ -3442,7 +3497,7 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (e) {}
 
-        if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
+        if (user.role === "admin" || user.id.endsWith("-sistemas")) {
           setAppMode("corte-tabla");
         } else {
           setAppMode(getPreferredTablesMode());
@@ -3461,76 +3516,14 @@ export default function App() {
       } else {
         triggerAppNotification(
           "❌ PIN Incorrecto",
-          `El PIN ingresado no corresponde a ningún usuario autorizado en ${selectedTenant?.name || "esta sucursal"}. Intento ${nextAttempts}/3.`,
+          `El PIN ingresado no corresponde a ningún usuario autorizado en ${activeTenantForLogin.name}. Intento ${nextAttempts}/3.`,
           "warning"
         );
       }
       return;
     }
 
-    // B. GLOBAL PIN SCREEN (No tenant chosen yet)
-    if (enteredPin === "4020") {
-      setIsOwnerUnlocked(true);
-      setActiveOwnerFilter(null);
-      setIsSystemsMode(true);
-      setSelectedTenant(null);
-      setSelectedLoginUser(null);
-      setCurrentUser(null);
-      setShowPinPanel(true);
-      setLoginSubStep("tenant");
-      localStorage.setItem("cocinet_is_owner_unlocked", "true");
-      localStorage.setItem("cocinet_is_systems", "true");
-      localStorage.removeItem("cocinet_active_owner_filter");
-      localStorage.removeItem("pos_selected_tenant");
-      triggerAppNotification(
-        "⚙️ Acceso de Sistemas Autorizado",
-        "Visualización de todas las sucursales activa en modo Sistemas.",
-        "info"
-      );
-      setOwnerPasswordInput("");
-      setPinAttempts(0);
-      return;
-    }
-
-    const matchedOwnerEntry = Object.entries(OWNER_PINS).find(([key, pin]) => pin === enteredPin);
-    if (matchedOwnerEntry) {
-      const ownerKey = matchedOwnerEntry[0];
-      setIsOwnerUnlocked(true);
-      setActiveOwnerFilter(ownerKey);
-      localStorage.setItem("cocinet_is_owner_unlocked", "true");
-      localStorage.setItem("cocinet_active_owner_filter", ownerKey);
-
-      const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
-      triggerAppNotification(
-        "🔑 Acceso Propietario Autorizado",
-        `Bienvenido al grupo de empresas de ${ownerName}.`,
-        "success"
-      );
-      setOwnerPasswordInput("");
-      setPinAttempts(0);
-      return;
-    }
-
-    const matchedSupervisorEntry = Object.entries(OWNER_SUPERVISOR_PINS).find(([key, pin]) => pin === enteredPin);
-    if (matchedSupervisorEntry) {
-      const ownerKey = matchedSupervisorEntry[0];
-      setIsOwnerUnlocked(true);
-      setActiveOwnerFilter(ownerKey);
-      localStorage.setItem("cocinet_is_owner_unlocked", "true");
-      localStorage.setItem("cocinet_active_owner_filter", ownerKey);
-
-      const ownerName = UNIQUE_OWNERS.find(o => o.key === ownerKey)?.name || "Propietario";
-      triggerAppNotification(
-        "📋 Acceso Supervisor Autorizado",
-        `Acceso en rol de SUPERVISOR a las sucursales de ${ownerName}.`,
-        "info"
-      );
-      setOwnerPasswordInput("");
-      setPinAttempts(0);
-      return;
-    }
-
-    // Fallback search across all tenants if entering from global keypad
+    // 4. Fallback search across all tenants if entering from global keypad
     let matchedUser: User | null = null;
     let matchedTenant: CompanyTenant | null = null;
     for (const company of COMPANY_CATALOG) {
@@ -5045,20 +5038,13 @@ export default function App() {
         }
       }
 
-      let printerName: string = "cuentas";
       if (pedido.tipo === "comanda") {
-        const areaLower = (pedido.area || "general").toLowerCase();
-        if (areaLower === "kitchen" || areaLower === "cocina") {
-          printerName = "cocina";
-        } else if (areaLower === "bar" || areaLower === "barra") {
-          printerName = "barra";
-        } else {
-          printerName = "cocina"; // fallback
-        }
+        console.log(`[WindowsAutoPrint] Comanda #${pedido.folio} omitida en cola de red (se imprime directamente desde el panel con fuente 2x2).`);
+        return;
       }
 
       const targetTenantId = pedido.tenantId || selectedTenant?.id;
-      const transport = await createTransport(printerName as any, targetTenantId);
+      const transport = await createTransport("cuentas" as any, targetTenantId);
       const driver = new EscPosDriver();
       const job = new PosPrinterJob(driver, transport as any);
 
@@ -5066,16 +5052,21 @@ export default function App() {
 
       if (pedido.tipo === "comanda") {
         job.center();
-        job.setPrintMode(job.FONT_SIZE_NORMAL).bold(true);
+        job.bold(true);
         job.printLine("================================");
         const destLabel = printerName === "cocina" ? "COCINA" : printerName === "barra" ? "BARRA" : "GENERAL";
-        job.printLine(`*** ${destLabel} - MESA: ${pedido.mesa} ***`);
-        job.bold(false);
+        job.doubleSize(true);
+        job.printLine(destLabel);
+        job.printLine(`MESA: ${pedido.mesa}`);
+        job.normalSize();
+        job.bold(true);
+        job.printLine("================================");
         const timeStr = pedido.timestamp ? new Date(pedido.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         job.printLine(`Cmd #${pedido.folio || "S/F"} | Hora: ${timeStr}`);
         if (pedido.mesero) {
           job.printLine(`MESERO: ${pedido.mesero.toUpperCase()}`);
         }
+        job.bold(false);
         job.printLine("================================");
         
         if (pedido.deliveryClientName || pedido.deliveryAddress) {
@@ -5113,34 +5104,53 @@ export default function App() {
               new Set(pedido.items.map((i: any) => i.comensal || 1))
             ).sort((a: any, b: any) => Number(a) - Number(b));
             
+            const hasMultiplePlates = plates.length > 1;
+
             plates.forEach((plateNum) => {
-              job.center().bold(true).printLine(`-- COMENSAL ${plateNum} --`).bold(false).left();
+              if (hasMultiplePlates) {
+                job.center().doubleSize(true).bold(true).printLine(`-- COMENSAL ${plateNum} --`).normalSize().bold(false).left();
+              }
               pedido.items
                 .filter((i: any) => (i.comensal || 1) === plateNum)
                 .forEach((item: any) => {
-                  const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
-                  job.bold(true);
-                  lines.forEach((l) => job.printLine(l));
-                  job.bold(false);
+                  const { productLines, noteLines } = formatComandaItemStructured(item.cantidad || 1, item.nombre, item.notas || item.notes, sizeCfg.wrapWidth);
+                  job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
+                  productLines.forEach((l) => job.printLine(l));
+                  job.normalSize();
+                  if (noteLines.length > 0) {
+                    job.bold(true);
+                    noteLines.forEach((nl) => job.printLine(nl));
+                    job.bold(false);
+                  }
                   job.printLine("--------------------------------");
                 });
             });
           } else {
             pedido.items?.forEach((item: any) => {
-              const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
-              job.bold(true);
-              lines.forEach((l) => job.printLine(l));
-              job.bold(false);
+              const { productLines, noteLines } = formatComandaItemStructured(item.cantidad || 1, item.nombre, item.notas || item.notes, sizeCfg.wrapWidth);
+              job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
+              productLines.forEach((l) => job.printLine(l));
+              job.normalSize();
+              if (noteLines.length > 0) {
+                job.bold(true);
+                noteLines.forEach((nl) => job.printLine(nl));
+                job.bold(false);
+              }
               job.printLine("--------------------------------");
             });
           }
         } else {
           // Bar or General
           pedido.items?.forEach((item: any) => {
-            const lines = formatComandaItemLines(item.cantidad || 1, item.nombre, item.notas || item.notes, 32);
-            job.bold(true);
-            lines.forEach((l) => job.printLine(l));
-            job.bold(false);
+            const { productLines, noteLines } = formatComandaItemStructured(item.cantidad || 1, item.nombre, item.notas || item.notes, sizeCfg.wrapWidth);
+            job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
+            productLines.forEach((l) => job.printLine(l));
+            job.normalSize();
+            if (noteLines.length > 0) {
+              job.bold(true);
+              noteLines.forEach((nl) => job.printLine(nl));
+              job.bold(false);
+            }
             job.printLine("--------------------------------");
           });
         }
@@ -5288,18 +5298,39 @@ export default function App() {
     const pendingPedidos = printerQueue.filter((p) => p.impreso === false || p.impreso === undefined);
 
     pendingPedidos.forEach((pedido) => {
-      const itemKey = `${pedido.tipo || "comanda"}_${pedido.folio || pedido.id}_${pedido.area || "general"}`;
+      if (pedido.tipo === "comanda") {
+        updatePedidoInFirebase(selectedTenant.id, pedido.id, { impreso: true }).catch(() => {});
+        return;
+      }
+
+      const gSet = typeof window !== "undefined" ? (window as any).__cocinet_processed_prints : null;
       const isAlreadyProcessed = 
+        pedido.impreso === true ||
         processedPrintIdsRef.current.has(pedido.id) ||
         processedPrintIdsRef.current.has(itemKey) ||
-        (pedido.tipo === "cuenta" && pedido.folio && processedPrintIdsRef.current.has(pedido.folio));
+        (pedido.folio && processedPrintIdsRef.current.has(pedido.folio)) ||
+        (pedido.folioInterno && processedPrintIdsRef.current.has(pedido.folioInterno)) ||
+        (gSet && (
+          gSet.has(pedido.id) ||
+          gSet.has(itemKey) ||
+          (pedido.folio && gSet.has(pedido.folio)) ||
+          (pedido.folioInterno && gSet.has(pedido.folioInterno)) ||
+          (pedido.folio && gSet.has(`comanda_${pedido.folio}_${pedido.area || 'cocina'}`)) ||
+          (pedido.folioInterno && gSet.has(`comanda_${pedido.folioInterno}_${pedido.area || 'cocina'}`))
+        ));
 
-      if (isAlreadyProcessed) return;
+      if (isAlreadyProcessed) {
+        updatePedidoInFirebase(selectedTenant.id, pedido.id, { impreso: true }).catch(() => {});
+        return;
+      }
 
       processedPrintIdsRef.current.add(pedido.id);
       processedPrintIdsRef.current.add(itemKey);
-      if (pedido.tipo === "cuenta" && pedido.folio) {
+      if (pedido.folio) {
         processedPrintIdsRef.current.add(pedido.folio);
+      }
+      if (pedido.folioInterno) {
+        processedPrintIdsRef.current.add(pedido.folioInterno);
       }
 
       // Validar antigüedad: no imprimir si fue creado hace más de 2 minutos o si carece de timestamp válido
@@ -5772,13 +5803,13 @@ export default function App() {
 
   useEffect(() => {
     if (showBluetoothConfigModal) {
-      setActiveBtConnections({
-        cuentas: WebBluetoothTransport.isConnected("cuentas"),
-        cocina: WebBluetoothTransport.isConnected("cocina"),
-        barra: WebBluetoothTransport.isConnected("barra")
+      const conns: Record<string, boolean> = {};
+      Object.keys(tenantPrinterConfig).forEach((key) => {
+        conns[key] = WebBluetoothTransport.isConnected(key, tenantPrinterConfig[key]?.printerName);
       });
+      setActiveBtConnections(conns);
     }
-  }, [showBluetoothConfigModal]);
+  }, [showBluetoothConfigModal, tenantPrinterConfig]);
 
   useEffect(() => {
     if (selectedTenant?.id) {
@@ -6580,7 +6611,7 @@ export default function App() {
 
   const handleSelectCompanyWithPinCheck = (
     company: CompanyTenant,
-    context: "login" | "admin",
+    context: "login" | "admin" | "cuentas" | "historial",
   ) => {
     setIsSwitchingTenant(true);
     setSwitchingTenantName(company.name);
@@ -6591,19 +6622,34 @@ export default function App() {
 
     if (isOwnerUnlocked) {
       setSelectedTenant(company);
-      if (context === "login") {
-        const tenantUsers = getTenantUsers(company.id);
-        const adminUser = tenantUsers.find((u) => u.id === `${company.id}-admin`) || 
-                          tenantUsers.find((u) => u.id === `${company.id}-sistemas`) ||
-                          tenantUsers[0];
-        if (adminUser) {
-          setCurrentUser(adminUser);
-        }
-        
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (e) {}
+      const tenantUsers = getTenantUsers(company.id);
+      const adminUser = tenantUsers.find((u) => u.id === `${company.id}-admin`) || 
+                        tenantUsers.find((u) => u.id === `${company.id}-sistemas`) ||
+                        tenantUsers.find((u) => u.role === "admin") ||
+                        tenantUsers[0];
+      if (adminUser) {
+        setCurrentUser(adminUser);
+      }
+      
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
 
+      if (context === "cuentas") {
+        setAppMode("corte-tabla");
+        triggerAppNotification(
+          "🧾 Cuentas del Turno Actual",
+          `Supervisando cuentas en vivo de: ${company.name} ⭐`,
+          "success",
+        );
+      } else if (context === "historial") {
+        setAppMode("closed-accounts");
+        triggerAppNotification(
+          "📜 Historial de Cuentas",
+          `Consultando historial de cuentas pagadas para: ${company.name} ⭐`,
+          "info",
+        );
+      } else if (context === "login") {
         if (adminUser && (adminUser.role === "admin" || adminUser.id.endsWith("-sistemas"))) {
           setAppMode("corte-tabla");
         } else {
@@ -6614,31 +6660,23 @@ export default function App() {
           `Conectado a la sucursal: ${company.name} ⭐ (Cargando datos en vivo)`,
           "success",
         );
-        const newWsEvent = {
-          id: "ws-tenant-" + Date.now(),
-          uid: "tenant-uuid-" + company.id,
-          event: "TENANT_SWITCH",
-          topic: `sync:auth_isolate`,
-          timestamp: getMexicoISOString(),
-          details: `🔌 Acceso directo de propietario/supervisor para la sucursal [${company.name}] | Base de datos sincronizada continuamente.`,
-        };
-        setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
       } else {
         triggerAppNotification(
           "🏢 Matriz Conectada - Panel Administrativo",
           `Has ingresado al panel de administración para: ${company.name} ⭐`,
           "success",
         );
-        const newWsEvent = {
-          id: "ws-admin-tenant-" + Date.now(),
-          uid: "tenant-uuid-" + company.id,
-          event: "ADMIN_TENANT_SWITCH",
-          topic: `sync:auth_isolate`,
-          timestamp: getMexicoISOString(),
-          details: `🔌 Panel administrativo accedido para: [${company.name}]`,
-        };
-        setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
       }
+
+      const newWsEvent = {
+        id: "ws-tenant-" + Date.now(),
+        uid: "tenant-uuid-" + company.id,
+        event: "TENANT_SWITCH",
+        topic: `sync:auth_isolate`,
+        timestamp: getMexicoISOString(),
+        details: `🔌 Acceso directo para la sucursal [${company.name}] modo [${context}]`,
+      };
+      setWebsocketSyncLog((prev) => [newWsEvent, ...prev]);
 
       setTimeout(() => {
         setIsSwitchingTenant(false);
@@ -6899,13 +6937,11 @@ export default function App() {
 
 
 
-  const handleScanBluetoothDevice = async (area: "cuentas" | "cocina" | "barra" = "cuentas") => {
+  const handleScanBluetoothDevice = async (area: "cuentas" | "cocina" | "barra" | string = "cuentas") => {
     if (!WebBluetoothTransport.isSupported()) {
       const msg = `⚠️ Web Bluetooth no está soportado o requiere HTTPS.\n\n` +
-        `Como estás accediendo desde el celular por HTTP, la búsqueda automática de Bluetooth no es posible por razones de seguridad de Chrome.\n\n` +
-        `Para configurar tu impresora:\n` +
-        `1. Escribe el nombre exacto de la impresora Bluetooth en el cuadro de texto (ej. el nombre que tiene vinculada en tu teléfono).\n` +
-        `2. Selecciona la opción 'App RawBT (Android)' como tu Modo de Conexión Principal en la parte superior.`;
+        `Para usar Bluetooth en Chrome/Edge, asegúrate de acceder por HTTPS o localhost.\n\n` +
+        `Si estás accediendo desde un celular Android por HTTP, puedes utilizar la app RawBT para conectar tu impresora Bluetooth.`;
       
       window.alert(msg);
       triggerAppNotification("⚠️ Bluetooth no soportado", msg, "warning");
@@ -6931,10 +6967,29 @@ export default function App() {
           localStorage.setItem("bluetooth_printer_barra", res.deviceName);
         }
 
-        // Actualizar estado de conexión activa
-        setActiveBtConnections(prev => ({ ...prev, [area]: true }));
+        // Actualizar tenantPrinterConfig con el nuevo nombre y modo bluetooth
+        setTenantPrinterConfig((prev) => {
+          const current = prev[area] || { id: area, name: area, mode: "bluetooth", printerName: area, windowsPort: "3010" };
+          const updated = {
+            ...prev,
+            [area]: {
+              ...current,
+              mode: "bluetooth" as PrinterMode,
+              printerName: res.deviceName || area,
+            },
+          };
+          saveTenantPrinterSettingsToLocal(selectedTenant?.id || "default", updated);
+          return updated;
+        });
 
-        const msg = `Impresora Bluetooth vinculada a ${area === "cuentas" ? "Cuentas" : area === "cocina" ? "Cocina" : "Barra"}: ${res.deviceName} 🖨️`;
+        // Actualizar estado de conexión activa
+        setActiveBtConnections((prev) => ({
+          ...prev,
+          [area]: true,
+          [res.deviceName!]: true,
+        }));
+
+        const msg = `Impresora Bluetooth vinculada a ${area.toUpperCase()}: ${res.deviceName} 🖨️`;
         window.alert(`✅ ¡Éxito!\n\n${msg}`);
         triggerAppNotification("🖨️ Impresora Vinculada", msg, "success");
       } else if (res.error) {
@@ -6950,12 +7005,11 @@ export default function App() {
     }
   };
 
-  const handleTestPrinter = async (area: "cuentas" | "cocina" | "barra" = "cuentas", printerName?: string) => {
+  const handleTestPrinter = async (area: "cuentas" | "cocina" | "barra" | string = "cuentas", printerName?: string) => {
     try {
-      await sendTestReceipt(area, printerName || "Impresora de Prueba", selectedTenant?.id);
-      const msg = `Ticket de prueba enviado a ${area === "cuentas" ? "Cuentas" : area === "cocina" ? "Cocina" : "Barra"}`;
-      window.alert(`✅ ¡Éxito!\n\n${msg}`);
-      triggerAppNotification("📄 Ticket de Prueba", msg, "success");
+      const res = await sendTestReceipt(area, printerName || "Impresora de Prueba", selectedTenant?.id);
+      const msg = res?.message || `Ticket de prueba enviado a ${area.toUpperCase()}`;
+      triggerAppNotification("📄 Ticket de Prueba", msg, res?.success ? "success" : "warning");
     } catch (err: any) {
       console.error("Error al enviar prueba de impresión:", err);
       const msg = `Error al imprimir prueba: ${err?.message || "Error de conexión"}`;

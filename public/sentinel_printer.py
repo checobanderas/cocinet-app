@@ -67,7 +67,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sock import Sock
 
@@ -75,14 +75,14 @@ from flask_sock import Sock
 PORT    = 3010
 VERSION = "7.0.0-PRO"
 
-# MODO DE IMPRESIÓN PREDETERMINADO: "gdi" o "raw"
-PRINT_MODE = "gdi"
+# MODO DE IMPRESIÓN PREDETERMINADO: "hybrid" (Comandas en ESC/POS rápido, Cuentas en GDI), "raw" o "gdi"
+PRINT_MODE = "hybrid"
 
 # ─── Logging Rotativo & Registro de Caídas (Crash Log) ──────────────
 LOG_FILE = os.path.join(BASE_DIR, "sentinel_printer.log")
 CRASH_LOG_FILE = os.path.join(BASE_DIR, "sentinel_crash.log")
 PROCESOSPICO_LOG_FILE = os.path.join(BASE_DIR, "procesospico.log")
-PROCESOSPICO_ROOT_FILE = os.path.join(os.path.dirname(BASE_DIR), "procesospico.log")
+PROCESOSPICO_ROOT_FILE = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "procesospico.log")
 pico_lock = threading.Lock()
 
 def log_proceso_pico(source: str, tipo: str, operacion: str, duracion_ms: float, status: str = "OK", detalles: dict = None):
@@ -144,7 +144,7 @@ def get_logger():
 log = get_logger()
 
 # ─── Flask App & WebSockets (Puerto 3010) ─────────────────────────
-app = Flask(__name__, static_folder="dist", static_url_path="/")
+app = Flask(__name__)
 CORS(app)
 sock = Sock(app)
 
@@ -318,6 +318,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, "printer_config.json")
 
 def load_printer_config():
     default_config = {
+        "PRINT_MODE": "hybrid",
         "PRINTER_MAP": {
             "cuentas": "CUENTAS",
             "cocina":  "COCINA",
@@ -338,20 +339,24 @@ def load_printer_config():
         "MARGIN_RIGHT_PX": 25,
         "LINE_SPACING": 4,
         "SHOW_DIVIDER": True,
+        "COMANDAS_MODO": "ESC/POS",
+        "COMANDAS_TAMANO_ENCABEZADO": "DOBLE_ALTO_Y_ANCHO",
+        "COMANDAS_TAMANO_PLATILLOS": "2x2",
+        "COMANDAS_NOTAS_RESALTADAS": True,
         "BACKUP_FOLDER": "C:\\buzon\\respaldos"
     }
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                if isinstance(data, dict):
+                    default_config.update(data)
+                if "PRINT_MODE" in data:
+                    default_config["PRINT_MODE"] = str(data["PRINT_MODE"]).strip().lower()
                 if "PRINTER_MAP" in data and isinstance(data["PRINTER_MAP"], dict):
                     default_config["PRINTER_MAP"].update(data["PRINTER_MAP"])
                 if "PRINTER_PAPER_SIZES" in data and isinstance(data["PRINTER_PAPER_SIZES"], dict):
                     default_config["PRINTER_PAPER_SIZES"].update(data["PRINTER_PAPER_SIZES"])
-                if "LOGO_PATH" in data:
-                    default_config["LOGO_PATH"] = data["LOGO_PATH"]
-                if "FONT_NAME" in data:
-                    default_config["FONT_NAME"] = data["FONT_NAME"]
                 if "FONT_SIZE_PT" in data:
                     default_config["FONT_SIZE_PT"] = float(data["FONT_SIZE_PT"])
                 if "HEADER_FONT_SIZE_PT" in data:
@@ -368,8 +373,6 @@ def load_printer_config():
                     default_config["LINE_SPACING"] = int(data["LINE_SPACING"])
                 if "SHOW_DIVIDER" in data:
                     default_config["SHOW_DIVIDER"] = bool(data["SHOW_DIVIDER"])
-                if "BACKUP_FOLDER" in data:
-                    default_config["BACKUP_FOLDER"] = data["BACKUP_FOLDER"]
         except Exception as e:
             log.error(f"Error cargando config de impresoras: {e}")
     else:
@@ -379,6 +382,35 @@ def load_printer_config():
         except Exception:
             pass
     return default_config
+
+def save_printer_config(new_config: dict) -> dict:
+    global PRINTER_MAP, PRINTER_PAPER_SIZES, LOGO_PATH, FONT_NAME, FONT_SIZE_PT, BACKUP_FOLDER
+    current = load_printer_config()
+    current.update(new_config)
+
+    # Rutas sincronizadas para que todos los procesos lean la misma configuración
+    target_files = [
+        CONFIG_FILE,
+        os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "printer_config.json"),
+        os.path.join(os.path.dirname(BASE_DIR), "printer_config.json"),
+        os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "dist", "printer_config.json"),
+    ]
+
+    for tf in target_files:
+        try:
+            os.makedirs(os.path.dirname(tf), exist_ok=True)
+            with open(tf, "w", encoding="utf-8") as f:
+                json.dump(current, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+
+    PRINTER_MAP = current.get("PRINTER_MAP", {})
+    PRINTER_PAPER_SIZES = current.get("PRINTER_PAPER_SIZES", {})
+    LOGO_PATH = current.get("LOGO_PATH", "logo.png")
+    FONT_NAME = current.get("FONT_NAME", "Segoe UI")
+    FONT_SIZE_PT = float(current.get("FONT_SIZE_PT", 11.0))
+    BACKUP_FOLDER = current.get("BACKUP_FOLDER", "C:\\buzon\\respaldos")
+    return current
 
 config_printers = load_printer_config()
 PRINTER_MAP = config_printers["PRINTER_MAP"]
@@ -394,6 +426,8 @@ def sanitize_text(text: str) -> str:
         return ""
     text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
     text = re.sub(r'(?:LE[01]|E[01]|!\d+)', '', text)
+    text = re.sub(r'^a(?=[A-Z0-9\(\$])', '', text)
+    text = re.sub(r'(?<=[0-9\)\w])a{1,3}$', '', text)
     return text.strip()
 
 # ─── Parser de Comandos ESC/POS ───────────────────────────────────
@@ -456,7 +490,7 @@ def parse_escpos(raw_bytes: bytes) -> list:
                         continue
                 elif cmd == 0x45:
                     if i + 2 < n:
-                        new_bold = bool(raw_bytes[i + 2])
+                        new_bold = raw_bytes[i + 2] in (1, ord('1'), 0x01)
                         if new_bold != bold:
                             flush_current()
                             bold = new_bold
@@ -1027,7 +1061,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     x_right = width - margin_right
                     
                 desc_w = width - margin_left - margin_right - (pr_w + 15 if imp_str else 0)
-                prefix = f"{qty_val}x " if qty_str else ""
+                prefix = f"{qty_val}  " if qty_str else ""
                 full_desc = prefix + desc
                 y = wrap_and_draw_text(hDC, full_desc, margin_left, margin_right, desc_w, y, align=0, line_spacing=2)
                 y += 2
@@ -1112,20 +1146,24 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     label = parts[0].strip().upper() + ":"
                     val = parts[1].strip() if len(parts) > 1 else ""
 
-                is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not label.startswith("💳") and not label.startswith("💵") and not label.startswith("🪙")
+                is_payment_label = label.startswith("💳") or label.startswith("💵") or label.startswith("💸") or label.startswith("📲") or any(k in label for k in ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "LUPAY"])
+                is_total_label = ("TOTAL" in label and "SUBTOTAL" not in label) and not label.startswith("PAGADO") and not is_payment_label and not label.startswith("🪙")
                 
-                lbl_pt = pt * 1.15 if is_total_label else pt
+                lbl_pt = pt * 1.20 if is_total_label else (pt * 1.25 if is_payment_label else pt)
                 if is_total_label:
                     lbl_str = "TOTAL:"
-                elif label.startswith("💳") or label.startswith("💵") or label.startswith("💸") or label.startswith("📲"):
-                    lbl_str = label
-                    lbl_pt = pt * 1.25
+                elif is_payment_label:
+                    lbl_str = label.rstrip(":")
                 else:
                     lbl_str = label
-                fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold or label.startswith("💳") or label.startswith("💵"), use_emoji_font=has_emoji(lbl_str))
+                fl = get_font(FONT_NAME, lbl_pt, is_total_label or is_bold or is_payment_label, use_emoji_font=has_emoji(lbl_str))
                 hDC.SelectObject(fl)
                 
-                if val:
+                if is_payment_label and not val:
+                    y += 4
+                    y = wrap_and_draw_text(hDC, lbl_str, margin_left, margin_right, printable_width, y, align=1, line_spacing=6)
+                    y += 4
+                elif val:
                     lbl_w, lbl_h = hDC.GetTextExtent(lbl_str)
                     x_lbl = margin_left
                     hDC.TextOut(x_lbl, y, lbl_str)
@@ -1173,13 +1211,10 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
                     pass
                 pending_total_amount = None
 
-            if text.startswith('*') or text.startswith('>') or text.startswith('>>') or "NOTA:" in text.upper() or text.startswith('OBS:'):
-                # Notas personalizadas: Fuente destacada, más grande y en negrita cursiva para máxima claridad
-                note_pt = pt * 1.12
-                f_note = get_font(FONT_NAME, note_pt, True, is_italic=True, use_emoji_font=has_emoji(text))
-                hDC.SelectObject(f_note)
-                indent_x = margin_left + 15
-                y = wrap_and_draw_text(hDC, text, indent_x, margin_right, printable_width - 15, y, align=0, line_spacing=2)
+            if text.startswith('*') or text.startswith('>'):
+                f_italic = get_font(FONT_NAME, pt, False, is_italic=True, use_emoji_font=has_emoji(text))
+                hDC.SelectObject(f_italic)
+                y = wrap_and_draw_text(hDC, text, margin_left + 40, margin_right, printable_width - 40, y, align=0, line_spacing=3)
                 continue
                 
             if any(k in clean_upper for k in ["GRACIAS POR SU VISITA", "VUELVA PRONTO", "GRACIAS POR SU PREFERENCIA", "¡GRACIAS"]):
@@ -1194,11 +1229,7 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
             hDC.SelectObject(f_line)
             y = wrap_and_draw_text(hDC, text, margin_left, margin_right, printable_width, y, align=alignment, line_spacing=4)
             
-        # Ahorro de papel: 20px para comandas de cocina/barra, 60px para cuentas
-        if ticket_type.lower() in ["cocina", "barra"]:
-            y += 20
-        else:
-            y += 60
+        y += 90
         hDC.EndPage()
         hDC.EndDoc()
     finally:
@@ -1234,23 +1265,35 @@ def send_gdi_to_printer(printer_name: str, data_bytes: bytes, ticket_type: str =
 
 def print_data(printer_name: str, data_bytes: bytes, ticket_type: str = "comanda"):
     """
-    Arquitectura Híbrida Inteligente:
-      - 'cocina' / 'barra' / 'comanda' -> ESC/POS RAW Nativo (Instantáneo, <30ms, máxima estabilidad en horas pico)
-      - 'cuentas' / 'caja' / 'recibo'  -> GDI Vectorial (Tipografía estilizada, logotipo, desglose formal y emojis)
+    Bypass unificado para impresión:
+    - Modo 'hybrid' (predeterminado y óptimo para restaurantes):
+        * Cuentas / Cobro / Cortes ('cuentas'): Renderizado GDI vectorial con logo y tipografía personalizada.
+        * Comandas de Cocina y Barra ('cocina', 'barra'): ESC/POS directo a hardware (< 50ms) sin bloqueos ni contención de Windows.
+    - Modo 'gdi': Todo en GDI vectorial.
+    - Modo 'raw': Todo en ESC/POS directo.
     """
-    is_comanda = any(k in str(ticket_type).lower() for k in ["cocina", "barra", "comanda"])
-    
-    if is_comanda:
-        notify_step("2_PROCESS_EXEC", f"⚡ Imprimiendo comanda en modo ESC/POS RAW nativo ultrarrápido para [{printer_name}] ({ticket_type})", status="INFO")
-        send_raw_to_printer(printer_name, data_bytes)
-    elif PRINT_MODE.lower() == "gdi":
+    global PRINT_MODE
+    config_printers = load_printer_config()
+    active_mode = config_printers.get("PRINT_MODE", PRINT_MODE).lower()
+
+    use_gdi = False
+    if active_mode == "gdi":
+        use_gdi = True
+    elif active_mode == "raw":
+        use_gdi = False
+    else:  # Modo 'hybrid'
+        is_cuenta = str(ticket_type).lower() in ["cuentas", "cuenta", "corte", "cobro", "ticket", "caja"]
+        use_gdi = is_cuenta
+
+    if use_gdi:
         try:
-            notify_step("2_PROCESS_EXEC", f"🎨 Renderizando ticket de cobro/cuenta en modo GDI para [{printer_name}] ({ticket_type})", status="INFO")
+            notify_step("2_PROCESS_EXEC", f"🎨 Renderizando ticket de cuenta en modo GDI ({ticket_type}) para [{printer_name}]", status="INFO")
             send_gdi_to_printer(printer_name, data_bytes, ticket_type)
         except Exception as e:
-            notify_step("PRINT_FALLBACK", f"Fallo en GDI: {e}. Reintentando con bypass RAW...", status="WARNING")
+            notify_step("PRINT_FALLBACK", f"Fallo en GDI: {e}. Reintentando con bypass RAW directo...", status="WARNING")
             send_raw_to_printer(printer_name, data_bytes)
     else:
+        notify_step("2_PROCESS_EXEC", f"⚡ Enviando comanda en modo ESC/POS directo ({ticket_type}) para [{printer_name}]", status="INFO")
         send_raw_to_printer(printer_name, data_bytes)
 
 # ─── Endpoints de Flask ───────────────────────────────────────────
@@ -1281,24 +1324,6 @@ def receive_proceso_pico_log():
         return jsonify({"ok": True, "received": len(logs) if isinstance(logs, list) else 1}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
-
-@app.route("/config", methods=["GET", "POST"])
-def manage_config():
-    if request.method == "POST":
-        try:
-            data = request.get_json(silent=True) or {}
-            current = load_printer_config()
-            current.update(data)
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(current, f, indent=4, ensure_ascii=False)
-            load_printer_config()
-            notify_step("CONFIG_UPDATE", "Configuración de impresoras actualizada")
-            return jsonify({"success": True, "config": current})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-    else:
-        cfg = load_printer_config()
-        return jsonify({"success": True, "config": cfg})
 
 @app.route("/download/<filename>", methods=["GET"])
 def download_sentinel_file(filename):
@@ -1336,6 +1361,56 @@ def list_printers():
     default = win32print.GetDefaultPrinter()
     return jsonify({"printers": installed, "default": default, "mapped": PRINTER_MAP})
 
+@app.route("/config", methods=["GET", "POST"], endpoint="config_page")
+@app.route("/api/config", methods=["GET", "POST"], endpoint="config_api")
+def manage_config():
+    if request.method == "POST":
+        try:
+            payload = {}
+            if request.is_json:
+                payload = request.get_json(silent=True) or {}
+            else:
+                form_data = request.form.to_dict()
+                payload = form_data
+
+            clean_cfg = {}
+            if "FONT_NAME" in payload:
+                clean_cfg["FONT_NAME"] = str(payload["FONT_NAME"]).strip()
+            if "FONT_SIZE_PT" in payload:
+                clean_cfg["FONT_SIZE_PT"] = float(payload["FONT_SIZE_PT"])
+            if "HEADER_FONT_SIZE_PT" in payload:
+                clean_cfg["HEADER_FONT_SIZE_PT"] = float(payload["HEADER_FONT_SIZE_PT"])
+            if "ITEM_FONT_SIZE_PT" in payload:
+                clean_cfg["ITEM_FONT_SIZE_PT"] = float(payload["ITEM_FONT_SIZE_PT"])
+            if "TOTAL_FONT_SIZE_PT" in payload:
+                clean_cfg["TOTAL_FONT_SIZE_PT"] = float(payload["TOTAL_FONT_SIZE_PT"])
+            if "MARGIN_LEFT_PX" in payload:
+                clean_cfg["MARGIN_LEFT_PX"] = int(payload["MARGIN_LEFT_PX"])
+            if "MARGIN_RIGHT_PX" in payload:
+                clean_cfg["MARGIN_RIGHT_PX"] = int(payload["MARGIN_RIGHT_PX"])
+            if "LINE_SPACING" in payload:
+                clean_cfg["LINE_SPACING"] = int(payload["LINE_SPACING"])
+            if "SHOW_DIVIDER" in payload:
+                val = payload["SHOW_DIVIDER"]
+                clean_cfg["SHOW_DIVIDER"] = val in [True, "true", "True", "1", 1, "on"]
+            if "LOGO_PATH" in payload:
+                clean_cfg["LOGO_PATH"] = str(payload["LOGO_PATH"]).strip()
+            if "BACKUP_FOLDER" in payload:
+                clean_cfg["BACKUP_FOLDER"] = str(payload["BACKUP_FOLDER"]).strip()
+
+            if "PRINTER_MAP" in payload and isinstance(payload["PRINTER_MAP"], dict):
+                clean_cfg["PRINTER_MAP"] = payload["PRINTER_MAP"]
+            if "PRINTER_PAPER_SIZES" in payload and isinstance(payload["PRINTER_PAPER_SIZES"], dict):
+                clean_cfg["PRINTER_PAPER_SIZES"] = payload["PRINTER_PAPER_SIZES"]
+
+            updated = save_printer_config(clean_cfg)
+            return jsonify({"success": True, "config": updated})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    cfg = load_printer_config()
+    return jsonify({"success": True, "config": cfg})
+
 print_lock = threading.Lock()
 internal_print_queue = queue.Queue()
 
@@ -1356,15 +1431,6 @@ def purge_stuck_windows_jobs(printer_name: str):
             win32print.ClosePrinter(hPrinter)
     except Exception as e:
         notify_step("SPOOLER_CLEANUP_ERR", f"No se pudo limpiar el spooler de {printer_name}: {e}", status="WARNING")
-
-def purge_all_installed_spoolers():
-    """Purga preventivamente trabajos atascados en todas las impresoras instaladas al arrancar."""
-    try:
-        printers = get_installed_printers()
-        for p in printers:
-            purge_stuck_windows_jobs(p)
-    except Exception as e:
-        notify_step("SPOOLER_INIT_CLEANUP_ERR", f"Error en purga preventiva inicial del spooler: {e}", status="WARNING")
 
 def internal_print_worker():
     notify_step("WORKER_START", "Hilo de cola de impresión interna iniciado.", status="INFO")
@@ -1388,6 +1454,7 @@ def internal_print_worker():
                 # Bloqueo para que solo 1 ticket a la vez vaya al spooler y no lo sature
                 with print_lock:
                     print_data(printer_name, raw_bytes, ticket_type=printer_key)
+                    time.sleep(0.35)  # Pausa de seguridad para que el puerto e impresora de red liberen el socket
                     
                 notify_step("WORKER_COMPLETE", f"🎉 Ticket impreso exitosamente en [{printer_name}]", status="SUCCESS")
             except Exception as print_ex:
@@ -1417,8 +1484,16 @@ def print_ticket():
     
     notify_step("1_RECEIVE", f"Solicitud de impresión recibida vía POST /print para clave '{printer_key}'", extra_data={"bytes_len": len(raw_bytes)})
 
-    if check_duplicate_and_register(raw_bytes, printer_key):
-        notify_step("2_PROCESS_DUP", f"Ticket duplicado detectado por Hash para '{printer_key}', omitiendo impresión", status="WARNING")
+    try:
+        text_repr = raw_bytes.decode("utf-8", errors="ignore")
+        if "*** COCINA" in text_repr or "*** BARRA" in text_repr or "*** GENERAL" in text_repr:
+            notify_step("DROP_SMALL_TICKET", f"🚫 Parche de supresión: Comanda pequeña duplicada para '{printer_key}' descartada en el servidor.", status="WARNING")
+            return jsonify({"success": True, "ignored": True, "reason": "suppressed_small_ticket", "bytes_sent": 0})
+    except Exception:
+        pass
+
+    if check_duplicate_and_register(raw_bytes):
+        notify_step("2_PROCESS_DUP", "Ticket duplicado detectado por Hash, omitiendo impresión", status="WARNING")
         return jsonify({"success": True, "ignored": True, "reason": "duplicate", "bytes_sent": 0})
         
     # Encolar para impresión asíncrona
@@ -1471,10 +1546,10 @@ def backup_sale():
         return jsonify({"success": False, "error": str(e)}), 500
 
 # ─── Respaldo de Movimientos del Turno (C:\buzon\respaldos\turnos) ─────────────
-@app.route("/backup-turno", methods=["POST"])
-@app.route("/api/backup-turno", methods=["POST"])
+@app.route("/backup-turno", methods=["POST"], endpoint="backup_turno_root")
+@app.route("/api/backup-turno", methods=["POST"], endpoint="backup_turno_api")
 def backup_turno():
-    """
+    r"""
     Guarda el respaldo completo del turno (sesión, corte, cuentas, gastos y movimientos)
     en formato JSON legible en la subcarpeta C:\buzon\respaldos\turnos\.
     """
@@ -1612,7 +1687,7 @@ def manage_single_backup_turno(filename):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route("/test-print", methods=["POST"])
+@app.route("/test-print", methods=["GET", "POST"])
 def test_print():
     try:
         data         = request.get_json(silent=True) or {}
@@ -1695,18 +1770,73 @@ def diag_print():
         add_log(err_msg)
         return jsonify({"success": False, "logs": logs, "error": str(e)}), 500
 
+# ─── Servir Aplicación Web SPA (React dist) en Puerto 3010 ─────────
+def get_dist_dir():
+    candidates = [
+        os.path.join(BASE_DIR, "dist"),
+        os.path.join(os.path.dirname(BASE_DIR), "dist"),
+        os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "dist"),
+        r"C:\buzon\TAREAS\cocinet-app2\cocinet-app-main antes del exe\dist",
+        r"C:\buzon\TAREAS\cocinet-app2\cocinet-app-main antes del exe\public\Cocinet_Windows_App\dist",
+    ]
+    for c in candidates:
+        if os.path.exists(c) and os.path.isdir(c):
+            return c
+    return None
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_spa(path):
+    if path.startswith("api/"):
+        return jsonify({"error": "Endpoint not found"}), 404
+
+    dist_dir = get_dist_dir()
+    if dist_dir and os.path.exists(dist_dir):
+        target_path = os.path.join(dist_dir, path)
+        if path and os.path.exists(target_path) and not os.path.isdir(target_path):
+            return send_from_directory(dist_dir, path)
+        index_file = os.path.join(dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return send_from_directory(dist_dir, "index.html")
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>COCINET PRO - Sentinel</title>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+            .card {{ background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #334155; text-align: center; max-width: 480px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
+            h1 {{ color: #10b981; font-size: 24px; margin-bottom: 12px; }}
+            p {{ color: #94a3b8; line-height: 1.6; font-size: 14px; }}
+            .badge {{ display: inline-block; background: #064e3b; color: #34d399; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }}
+            code {{ background: #334155; color: #f1f5f9; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <span class="badge">● SERVICIO ACTIVO (Puerto {PORT})</span>
+            <h1>COCINET Print Sentinel v{VERSION}</h1>
+            <p>El servicio de impresión en segundo plano está operando correctamente.</p>
+            <p style="color: #f59e0b; margin-top: 15px;">⚠️ Para visualizar la interfaz de Cocinet en este puerto, ejecute <code>python empaquetar_windows.py</code> para compilar la carpeta <code>dist</code>.</p>
+        </div>
+    </body>
+    </html>
+    """, 200
+
 # ─── Deduplicación por Hash en Memoria RAM ─────────────────────────
 _recent_ticket_hashes = {}
 
-def generar_hash(raw_bytes: bytes, printer_key: str = "") -> str:
-    return hashlib.md5((printer_key or "cuentas").encode("utf-8") + b"|" + raw_bytes).hexdigest()
+def generar_hash(raw_bytes: bytes) -> str:
+    return hashlib.md5(raw_bytes).hexdigest()
 
-def check_duplicate_and_register(raw_bytes: bytes, printer_key: str = "") -> bool:
-    ticket_hash = generar_hash(raw_bytes, printer_key)
+def check_duplicate_and_register(raw_bytes: bytes, job_id: str = None) -> bool:
+    ticket_hash = generar_hash(raw_bytes)
     now = time.time()
     
-    # Limpiar hashes de más de 2 segundos (evita dobles clicks pero no bloquea Cocina/Barra ni reimpresiones legítimas)
-    expired = [h for h, t in list(_recent_ticket_hashes.items()) if now - t > 2]
+    # Limpiar hashes de más de 2.5 segundos (evita dobles clics pero permite reimpresiones rápidas)
+    expired = [h for h, t in list(_recent_ticket_hashes.items()) if now - t > 2.5]
     for h in expired:
         _recent_ticket_hashes.pop(h, None)
         
@@ -1716,18 +1846,13 @@ def check_duplicate_and_register(raw_bytes: bytes, printer_key: str = "") -> boo
     _recent_ticket_hashes[ticket_hash] = now
     return False
 
-# ─── Polling DB & Auto-Depuración ──────────────────────────────────
+# ─── Polling DB ───────────────────────────────────────────────────
 def db_polling_loop():
     db_path = os.path.join(BASE_DIR, "restaurant.db")
     notify_step("DB_POLL_START", f"Iniciando polling de base de datos SQLite en: {db_path}")
-    
-    last_cleanup_ts = 0
-    
     while True:
         try:
-            conn = sqlite3.connect(db_path, timeout=10)
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA busy_timeout=5000;")
+            conn = sqlite3.connect(db_path, timeout=30)
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS print_queue (
@@ -1742,43 +1867,12 @@ def db_polling_loop():
                 )
             """)
             conn.commit()
-            
-            now_ts = time.time()
-            # 1. Limpieza periódica cada hora: purgar historial con más de 3 días
-            if now_ts - last_cleanup_ts > 3600:
-                cursor.execute("DELETE FROM print_queue WHERE created_at < datetime('now', '-3 days')")
-                purged_count = cursor.rowcount
-                if purged_count > 0:
-                    conn.commit()
-                    notify_step("DB_PURGE_OLD", f"Se purgaron {purged_count} registros antiguos (>3 días) de la cola de impresión.", status="INFO")
-                last_cleanup_ts = now_ts
-
-            # 2. Expirar tickets pendientes que llevan más de 15 minutos (evita arrojar rollos de tickets al abrir/reiniciar)
-            cursor.execute("""
-                UPDATE print_queue 
-                SET status='expired', updated_at=CURRENT_TIMESTAMP 
-                WHERE status='pending' AND created_at < datetime('now', '-15 minutes')
-            """)
-            expired_count = cursor.rowcount
-            if expired_count > 0:
-                conn.commit()
-                notify_step("DB_POLL_EXPIRED", f"Se descartaron {expired_count} tickets pendientes antiguos (>15 min) para evitar sobreimpresión masiva.", status="WARNING")
-
             conn.close()
             
-            # 3. Consultar únicamente tickets pendientes recientes (creados en los últimos 15 minutos)
-            conn = sqlite3.connect(db_path, timeout=10)
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA busy_timeout=5000;")
+            conn = sqlite3.connect(db_path, timeout=30)
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, printer_key, raw_data 
-                FROM print_queue 
-                WHERE status='pending' AND created_at >= datetime('now', '-15 minutes')
-                ORDER BY created_at ASC
-                LIMIT 5
-            """)
+            cursor.execute("SELECT id, printer_key, raw_data FROM print_queue WHERE status='pending'")
             jobs = cursor.fetchall()
             
             if jobs:
@@ -1797,12 +1891,6 @@ def db_polling_loop():
                     
                     if check_duplicate_and_register(raw_bytes, job_id):
                         notify_step("2_PROCESS_DB_DUP", f"Ticket duplicado omitido en DB cola (ID: {job_id})", status="WARNING")
-                        conn2 = sqlite3.connect(db_path, timeout=10)
-                        conn2.execute("PRAGMA journal_mode=WAL;")
-                        cursor2 = conn2.cursor()
-                        cursor2.execute("UPDATE print_queue SET status='ignored_duplicate', updated_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
-                        conn2.commit()
-                        conn2.close()
                         continue
                     
                     printer_name = resolve_printer_name(printer_key)
@@ -1810,8 +1898,7 @@ def db_polling_loop():
                     with print_lock:
                         print_data(printer_name, raw_bytes, ticket_type=printer_key)
                     
-                    conn2 = sqlite3.connect(db_path, timeout=10)
-                    conn2.execute("PRAGMA journal_mode=WAL;")
+                    conn2 = sqlite3.connect(db_path, timeout=30)
                     cursor2 = conn2.cursor()
                     cursor2.execute("""
                         UPDATE print_queue
@@ -1824,8 +1911,7 @@ def db_polling_loop():
                     
                 except Exception as ex:
                     notify_step("4_ERROR_DB", f"❌ Error procesando trabajo DB {job_id}: {ex}", status="ERROR")
-                    conn2 = sqlite3.connect(db_path, timeout=10)
-                    conn2.execute("PRAGMA journal_mode=WAL;")
+                    conn2 = sqlite3.connect(db_path, timeout=30)
                     cursor2 = conn2.cursor()
                     cursor2.execute("UPDATE print_queue SET status='failed', updated_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
                     conn2.commit()
@@ -1863,19 +1949,8 @@ class CocinetPrinterService(win32serviceutil.ServiceFramework):
         flask_thread.start()
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
 
-from flask import send_from_directory
-
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def serve_react_app(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, "index.html")
-
 def run_flask():
     try:
-        purge_all_installed_spoolers()
         db_thread = threading.Thread(target=db_polling_loop, daemon=True)
         db_thread.start()
         

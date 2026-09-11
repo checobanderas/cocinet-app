@@ -25,6 +25,65 @@ export function getComandaDestinations(comanda: Comanda): ("kitchen" | "bar")[] 
   return Array.from(dests);
 }
 
+export interface ComandaSizeConfig {
+  widthMul: number;
+  heightMul: number;
+  wrapWidth: number;
+}
+
+// Sincronización en segundo plano sin bloquear jamás la impresión en caliente
+if (typeof window !== "undefined") {
+  setTimeout(() => {
+    fetch("http://localhost:3010/download/printer_config.json", { cache: "no-cache" })
+      .catch(() => fetch("/printer_config.json", { cache: "no-cache" }))
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (cfg && cfg.COMANDAS_TAMANO_PLATILLOS) {
+          localStorage.setItem("pos_comandas_tamano_platillos", String(cfg.COMANDAS_TAMANO_PLATILLOS));
+        }
+      })
+      .catch(() => {});
+  }, 1000);
+}
+
+export function getComandaSizeSettings(): ComandaSizeConfig {
+  const localOverride = typeof localStorage !== "undefined" ? localStorage.getItem("pos_comandas_tamano_platillos") : null;
+  const rawSize = String(localOverride || "2x2").trim().toUpperCase();
+
+  // 1. Soporte para formato numérico exacto: "2x2", "3x3", "5x3", "2x4", "3x2", etc.
+  const numMatch = rawSize.match(/^(\d+)\s*[X*x,]\s*(\d+)$/);
+  if (numMatch) {
+    const w = Math.min(8, Math.max(1, parseInt(numMatch[1], 10)));
+    const h = Math.min(8, Math.max(1, parseInt(numMatch[2], 10)));
+    const autoWrap = Math.max(6, Math.floor(42 / w));
+    return { widthMul: w, heightMul: h, wrapWidth: autoWrap };
+  }
+
+  // 2. Si se ingresa solo un número (ej. "2" o "3") se asume simétrico: 2x2, 3x3
+  if (/^\d+$/.test(rawSize)) {
+    const n = Math.min(8, Math.max(1, parseInt(rawSize, 10)));
+    const autoWrap = Math.max(6, Math.floor(42 / n));
+    return { widthMul: n, heightMul: n, wrapWidth: autoWrap };
+  }
+
+  // 3. Aliases descriptivos
+  if (rawSize.includes("GIGANTE")) {
+    return { widthMul: 3, heightMul: 3, wrapWidth: 14 };
+  }
+  if (rawSize === "DOBLE_ALTO" || (rawSize.includes("ALTO") && !rawSize.includes("ANCHO"))) {
+    return { widthMul: 1, heightMul: 2, wrapWidth: 32 };
+  }
+  if (rawSize === "DOBLE_ANCHO" || (rawSize.includes("ANCHO") && !rawSize.includes("ALTO"))) {
+    return { widthMul: 2, heightMul: 1, wrapWidth: 21 };
+  }
+  if (rawSize === "NORMAL") {
+    return { widthMul: 1, heightMul: 1, wrapWidth: 40 };
+  }
+
+  // Por defecto: 2x2 (Doble Ancho y Doble Alto)
+  return { widthMul: 2, heightMul: 2, wrapWidth: 21 };
+}
+
 export async function executePrintComanda(options: ComandaPrintOptions): Promise<boolean> {
   const {
     tableLabel,
@@ -49,6 +108,22 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
   }
 
   try {
+    if (typeof window !== "undefined") {
+      const gSet = ((window as any).__cocinet_processed_prints = (window as any).__cocinet_processed_prints || new Set());
+      if (comanda.folio) {
+        gSet.add(comanda.folio);
+        gSet.add(`comanda_${comanda.folio}_${target || "general"}`);
+        gSet.add(`comanda_${comanda.folio}_cocina`);
+        gSet.add(`comanda_${comanda.folio}_barra`);
+      }
+      if (comanda.folioInterno) {
+        gSet.add(comanda.folioInterno);
+        gSet.add(`comanda_${comanda.folioInterno}_${target || "general"}`);
+        gSet.add(`comanda_${comanda.folioInterno}_cocina`);
+        gSet.add(`comanda_${comanda.folioInterno}_barra`);
+      }
+    }
+
     // Sincronización en paralelo con Firestore Printer Queue (Centinela) 🖨️
     if (selectedTenant) {
       const dClient = selectedDeliveryClient?.name || (selectedTable as any)?.deliveryClientName || null;
@@ -68,6 +143,7 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
           destination: getProductDestination(i.product),
         })),
         tipo: "comanda",
+        impreso: true,
         area: target === "bar" ? "barra" : target === "kitchen" ? "cocina" : (target || "cocina"),
         timestamp: getMexicoISOString(),
         mesero: comanda.createdBy?.name || "S/M",
@@ -77,10 +153,6 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         deliveryNotes: dNotes,
         generalNotes: comanda.generalNotes || null,
       }).catch((err) => console.warn("Centinela Sync Error:", err));
-    }
-
-    if (systemLocalWindowsAutoPrint) {
-      return true;
     }
 
     const printerArea: PrinterArea = target === "bar" ? "barra" : "cocina";
@@ -109,6 +181,7 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
       })
     }).catch(() => {});
 
+    const sizeCfg = getComandaSizeSettings();
     const transport = await createTransport(printerArea, selectedTenant?.id);
     const driver = new EscPosDriver();
     const job = new PosPrinterJob(driver, transport as any);
@@ -192,7 +265,7 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
         if (hasMultiplePlates) {
           job
             .center()
-            .doubleHeight(true)
+            .doubleSize(true)
             .bold(true)
             .printLine(`-- COMENSAL ${plateNum} --`)
             .normalSize()
@@ -207,11 +280,11 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
               item.quantity,
               getFormattedProductName(item.product),
               item.notes,
-              32
+              sizeCfg.wrapWidth
             );
 
-            // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS para máxima visibilidad en comanda
-            job.doubleHeight(true).bold(true);
+            // Cantidad y producto con tamaño dinámico y negritas
+            job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
             productLines.forEach((l) => job.printLine(l));
             job.normalSize();
 
@@ -248,10 +321,15 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
 
       Object.values(grouped).forEach((item) => {
         const notesStr = Array.from(new Set(item.notes)).join(", ");
-        const { productLines, noteLines } = formatComandaItemStructured(item.quantity, item.name, notesStr, 32);
+        const { productLines, noteLines } = formatComandaItemStructured(
+          item.quantity,
+          item.name,
+          notesStr,
+          sizeCfg.wrapWidth
+        );
 
-        // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS
-        job.doubleHeight(true).bold(true);
+        // Cantidad y producto con tamaño dinámico y negritas
+        job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
         productLines.forEach((l) => job.printLine(l));
         job.normalSize();
 
@@ -271,11 +349,11 @@ export async function executePrintComanda(options: ComandaPrintOptions): Promise
           item.quantity,
           getFormattedProductName(item.product),
           item.notes,
-          32
+          sizeCfg.wrapWidth
         );
 
-        // Cantidad y producto en FUENTE DE DOBLE ALTURA y NEGRITAS
-        job.doubleHeight(true).bold(true);
+        // Cantidad y producto con tamaño dinámico y negritas
+        job.setFontSize(sizeCfg.widthMul, sizeCfg.heightMul).bold(true);
         productLines.forEach((l) => job.printLine(l));
         job.normalSize();
 

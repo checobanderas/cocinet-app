@@ -582,7 +582,7 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
                                         wordBreak: "break-word",
                                       }}
                                     >
-                                      {item.quantity}x{" "}
+                                      {item.quantity}{" "}
                                       {getFormattedProductName(item.product)}
                                       {item.isCancelled && (
                                         <span
