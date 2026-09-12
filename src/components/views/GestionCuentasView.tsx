@@ -4,6 +4,9 @@ import { IonCol, IonContent, IonGrid, IonPage, IonRow, IonText, useIonAlert } fr
 import { formatTableName } from '../../utils/formatters';
 
 
+import { TablesMode } from '../../utils/appHelpers';
+import { TablesModeSwitcher } from '../common/TablesModeSwitcher';
+
 interface GestionCuentasViewProps {
   cart: any;
   isListening: any;
@@ -26,7 +29,7 @@ interface GestionCuentasViewProps {
   companyConfig?: any;
   currentUser?: any;
   updateCompanyConfig?: (updates: any) => void;
-  onSwitchTablesMode?: (mode: "floorplan" | "gestion_cuentas") => void;
+  onSwitchTablesMode?: (mode: TablesMode) => void;
   handleTableClick?: (table: any) => void;
 }
 
@@ -224,32 +227,27 @@ return (
       <IonPage>
         {renderMaterialHeader({
           title: (() => {
-            if (!selectedTableGestion) return "Gestión de Cuentas (Windows)";
+            if (!selectedTableGestion) {
+              return selectedTenant?.sucursalDefault ? `🏢 ${selectedTenant.sucursalDefault}` : (selectedTenant?.name ? `🏢 ${selectedTenant.name}` : "Cocinet");
+            }
             const z = (selectedTableGestion.zone || "").toLowerCase();
             const l = (selectedTableGestion.label || "").toLowerCase();
             let emoji = "🍽️";
             if (z.includes("llevar") || l.includes("llevar")) emoji = "🛍️";
             else if (z.includes("domicilio") || l.includes("domicilio") || z.includes("reparto") || l.includes("reparto")) emoji = "🏍️";
             const tableCode = formatTableName(selectedTableGestion.zone || "", selectedTableGestion.label || "");
-            return `Gestionando Cuenta ${emoji} (${tableCode})`;
+            return `Cuenta ${emoji} ${tableCode}`;
           })(),
-          subtitle: selectedTenant?.name || "Cocinet",
+          subtitle: selectedTableGestion 
+            ? `Área: ${selectedTableGestion.zone || "Principal"}` 
+            : (selectedTenant?.sucursalDefault && selectedTenant?.name ? `📍 ${selectedTenant.name}` : "📍 Gestión de Cuentas"),
           showBack: !!selectedTableGestion,
           onBack: () => setSelectedTableGestion(null),
           showMenu: !selectedTableGestion,
           actions: (
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {!selectedTableGestion && onSwitchTablesMode && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => onSwitchTablesMode("floorplan")}
-                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-black text-[11px] sm:text-xs transition-all cursor-pointer border border-blue-500/40 shadow-sm"
-                  title="Cambiar a Mapa de Mesas (Pestañas)"
-                >
-                  <span>🍽️</span>
-                  <span className="hidden sm:inline">Mapa de Mesas</span>
-                </motion.button>
+              {!selectedTableGestion && (
+                <TablesModeSwitcher currentMode="gestion_cuentas" onSwitchMode={onSwitchTablesMode} />
               )}
               {isOnline && (
                 <motion.button

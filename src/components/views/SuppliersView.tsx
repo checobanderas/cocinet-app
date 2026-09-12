@@ -1,5 +1,6 @@
 import { SupplierModal } from '../modals/SupplierModal';
 import { addSupplierToFirebase, deleteSupplierFromFirebase, updateSupplierInFirebase } from '../../utils/firestore';
+import { getPreferredTablesMode } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonIcon, IonPage } from '@ionic/react';
@@ -73,7 +74,7 @@ const handleSaveSupplier = async (e: React.FormEvent) => {
         title: "Catálogo de Proveedores",
         subtitle: `Proveedores registrados: ${suppliers.length}`,
         showBack: true,
-        onBack: () => setAppMode("floorplan"),
+        onBack: () => setAppMode(getPreferredTablesMode()),
         actions: (
           <motion.button
             whileHover={{ scale: 1.05 }}

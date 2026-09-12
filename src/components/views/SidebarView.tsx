@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonIcon } from '@ionic/react';
 import { closeOutline, logoToUse, restaurantOutline } from 'ionicons/icons';
+import { setPreferredTablesMode } from '../../utils/appHelpers';
 
 interface SidebarViewProps {
   logoToUse: any;
@@ -24,6 +25,7 @@ interface SidebarViewProps {
   setConfigActiveTab: any;
   setManageMenuTab: any;
   setSelectedTableGestion: any;
+  setSelectedTableId?: any;
   setShowBluetoothConfigModal: any;
   setShowBranchSwitcherModal: any;
   setShowSidebar: any;
@@ -53,6 +55,7 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
   setConfigActiveTab,
   setManageMenuTab,
   setSelectedTableGestion,
+  setSelectedTableId,
   setShowBluetoothConfigModal,
   setShowBranchSwitcherModal,
   setShowSidebar,
@@ -505,9 +508,7 @@ return (
 
                     <button
                       onClick={() => {
-                        try {
-                          localStorage.setItem("cocinet_preferred_tables_view", "floorplan");
-                        } catch (e) {}
+                        setPreferredTablesMode("floorplan", currentUser?.id, selectedTenant?.id);
                         setAppMode("floorplan");
                         setSelectedTableGestion(null);
                         setCheckoutReturnMode(null);
@@ -526,9 +527,7 @@ return (
                     </button>
                     <button
                       onClick={() => {
-                        try {
-                          localStorage.setItem("cocinet_preferred_tables_view", "gestion_cuentas");
-                        } catch (e) {}
+                        setPreferredTablesMode("gestion_cuentas", currentUser?.id, selectedTenant?.id);
                         setAppMode("gestion_cuentas");
                         setSelectedTableGestion(null);
                         setCheckoutReturnMode(null);
@@ -544,6 +543,26 @@ return (
                         💻
                       </span>
                       <span>Gestión de Cuentas</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPreferredTablesMode("cuentas_celular", currentUser?.id, selectedTenant?.id);
+                        setAppMode("cuentas_celular");
+                        setSelectedTableGestion(null);
+                        if (setSelectedTableId) setSelectedTableId(null);
+                        setCheckoutReturnMode(null);
+                        setShowSidebar(false);
+                      }}
+                      className={`flex items-center gap-3 w-full p-3 mt-2 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer text-left ${
+                        appMode === "cuentas_celular"
+                          ? "bg-gradient-to-r from-violet-600 to-indigo-800 text-white shadow-md scale-[1.02]"
+                          : "text-slate-300 bg-slate-800/20 hover:bg-slate-700/40 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/10 text-base">
+                        📱
+                      </span>
+                      <span>Cuentas Celular</span>
                     </button>
                   </div>
                 </div>

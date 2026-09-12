@@ -8,7 +8,7 @@ import { MetaWhatsAppConfigModal } from '../modals/MetaWhatsAppConfigModal';
 import { EscPosDriver, PosPrinterJob, createTransport } from '../../utils/printer';
 import { ExportSessionModal } from '../modals/ExportSessionModal';
 import { deleteAllTenantHistoryInFirebase, deleteCashierSessionFromFirebase, exportCashierSessionToTargetTenant, getMexicoISOString, releaseTableInFirebase, updateCashierSessionInFirebase, deleteHistoryItemFromFirebase, deleteExpenseFromFirebase, deleteCashMovementFromFirebase, deletePurchaseFromFirebase } from '../../utils/firestore';
-import { getCompanyCatalog, getTenantUsers, getOperatingDay } from '../../utils/appHelpers';
+import { getCompanyCatalog, getTenantUsers, getOperatingDay, getPreferredTablesMode } from '../../utils/appHelpers';
 import { getWhatsAppCloudConfig, sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import { formatTableName } from '../../utils/formatters';
 import { generateDailyReportText, exportDailyReportExcel, generateAndSendExcelDailyReportToWhatsApp } from '../../utils/dailyReportService';
@@ -333,10 +333,10 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
                 Tu usuario cuenta con el rol de <strong>Mesero</strong>. Los meseros únicamente tienen autorización para tomar comandas y pedidos, y no pueden abrir, ver, ni cerrar turnos de caja ni realizar cortes 📊.
               </p>
               <button
-                onClick={() => setAppMode("floorplan")}
+                onClick={() => setAppMode(getPreferredTablesMode(currentUser?.id, selectedTenant?.id))}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl transition shadow border-none cursor-pointer mt-4"
               >
-                Ir al Mapa de Mesas 🍽️
+                Ir a Mesas 🍽️
               </button>
             </div>
           </IonContent>
@@ -1845,18 +1845,14 @@ export const CorteTablaView: React.FC<CorteTablaViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (window.innerHeight > window.innerWidth) {
-                    setAppMode("floorplan");
-                  } else {
-                    setAppMode("gestion_cuentas");
-                  }
+                  setAppMode(getPreferredTablesMode(currentUser?.id, selectedTenant?.id));
                 }}
                 className="bg-emerald-600 hover:bg-emerald-750 text-white font-black py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm transition duration-150 flex items-center gap-1.5 border border-emerald-500/25 mr-2 cursor-pointer shadow-sm shadow-emerald-600/20"
-                title="Volver al mapa de mesas"
+                title="Volver a mesas"
               >
                 <IonIcon icon={gridOutline} className="text-sm" />
-                <span className="hidden sm:inline">Gestionar Cuentas 🗺️</span>
-                <span className="inline sm:hidden">Cuentas 🗺️</span>
+                <span className="hidden sm:inline">Gestionar Cuentas / Mesas 🗺️</span>
+                <span className="inline sm:hidden">Mesas 🗺️</span>
               </button>
               {corteTablaSessionSelected && (
                 <button

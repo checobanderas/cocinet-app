@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonCard, IonContent, IonHeader, IonIcon, IonLabel, IonPage, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
 import { addOutline, checkmarkCircleOutline, printOutline, receiptOutline, restaurantOutline, swapHorizontalOutline, trashOutline, beerOutline } from 'ionicons/icons';
 import { formatTableName } from '../../utils/formatters';
+import { getPreferredTablesMode } from '../../utils/appHelpers';
 
 interface TableDetailsViewProps {
   appMode: any;
@@ -231,18 +232,13 @@ const allItems = (selectedTable?.comandas || []).flatMap((c) => c?.items || []) 
           if (appMode === "gestion_cuentas") {
             setSelectedTableGestion(null);
           } else {
-            try {
-              const saved = localStorage.getItem("cocinet_preferred_tables_view");
-              const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
-              const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : (saved || (isVertical ? "floorplan" : "gestion_cuentas")));
-              setAppMode(nextMode);
-              if (nextMode === "gestion_cuentas") {
-                setSelectedTableGestion(null);
-              }
-              setCheckoutReturnMode(null);
-            } catch (e) {
-              setAppMode("floorplan");
+            const preferred = getPreferredTablesMode(currentUser?.id);
+            const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred);
+            setAppMode(nextMode);
+            if (nextMode === "gestion_cuentas") {
+              setSelectedTableGestion(null);
             }
+            setCheckoutReturnMode(null);
           }
           setPrecuentaComensal(1);
           setPrecuentaTab("resumen");

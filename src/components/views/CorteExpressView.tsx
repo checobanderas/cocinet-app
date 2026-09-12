@@ -1,7 +1,7 @@
 import { ArqKeyboardModal } from '../modals/ArqKeyboardModal';
 import { ReceiptPreviewModal } from '../modals/ReceiptPreviewModal';
 import { getMexicoISOString } from '../../utils/firestore';
-import { getTenantUsers } from '../../utils/appHelpers';
+import { getTenantUsers, getPreferredTablesMode } from '../../utils/appHelpers';
 import { sendSilentWhatsAppMessage } from '../../utils/whatsappCloud';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -130,10 +130,10 @@ if (currentUser?.role === "mesero") {
                 Tu usuario cuenta con el rol de <strong>Mesero</strong>. Los meseros únicamente tienen autorización para tomar comandas y pedidos, y no pueden realizar cortes express de caja ⚡.
               </p>
               <button
-                onClick={() => setAppMode("floorplan")}
+                onClick={() => setAppMode(getPreferredTablesMode(currentUser?.id))}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl transition shadow border-none cursor-pointer mt-4"
               >
-                Ir al Mapa de Mesas 🍽️
+                Ir a Mesas 🍽️
               </button>
             </div>
           </IonContent>

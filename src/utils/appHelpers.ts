@@ -633,10 +633,24 @@ export function getProductSortScore(product: any): number {
   return score;
 }
 
-export function getPreferredTablesMode(): "floorplan" | "gestion_cuentas" {
+export type TablesMode = "floorplan" | "gestion_cuentas" | "cuentas_celular";
+
+export function getPreferredTablesMode(userId?: string | null, tenantId?: string | null): TablesMode {
   try {
+    if (userId) {
+      const userSaved = localStorage.getItem(`cocinet_preferred_tables_view_${userId}`);
+      if (userSaved === "floorplan" || userSaved === "gestion_cuentas" || userSaved === "cuentas_celular") {
+        return userSaved;
+      }
+    }
+    if (tenantId) {
+      const tenantSaved = localStorage.getItem(`cocinet_preferred_tables_view_${tenantId}`);
+      if (tenantSaved === "floorplan" || tenantSaved === "gestion_cuentas" || tenantSaved === "cuentas_celular") {
+        return tenantSaved;
+      }
+    }
     const saved = localStorage.getItem("cocinet_preferred_tables_view");
-    if (saved === "floorplan" || saved === "gestion_cuentas") {
+    if (saved === "floorplan" || saved === "gestion_cuentas" || saved === "cuentas_celular") {
       return saved;
     }
   } catch (e) {}
@@ -644,9 +658,19 @@ export function getPreferredTablesMode(): "floorplan" | "gestion_cuentas" {
   return isVertical ? "floorplan" : "gestion_cuentas";
 }
 
-export function setPreferredTablesMode(mode: "floorplan" | "gestion_cuentas"): void {
+export function setPreferredTablesMode(
+  mode: TablesMode,
+  userId?: string | null,
+  tenantId?: string | null
+): void {
   try {
     localStorage.setItem("cocinet_preferred_tables_view", mode);
+    if (userId) {
+      localStorage.setItem(`cocinet_preferred_tables_view_${userId}`, mode);
+    }
+    if (tenantId) {
+      localStorage.setItem(`cocinet_preferred_tables_view_${tenantId}`, mode);
+    }
   } catch (e) {}
 }
 

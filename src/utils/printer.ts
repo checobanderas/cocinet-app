@@ -43,7 +43,7 @@ export function getTenantPrinterPort(tenantId?: string): string {
 /** URL base del sentinel de impresión en Windows (puerto configurable) */
 export function getSentinelUrl(tenantId?: string): string {
   const port = getTenantPrinterPort(tenantId);
-  return `http://localhost:${port}`;
+  return `http://127.0.0.1:${port}`;
 }
 
 /** Devuelve true si el navegador corre en Windows */
@@ -75,11 +75,13 @@ export function startPrinterSentinelMonitor(port: string = "3010", intervalMs: n
   const checkHealth = async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1000);
-      const res = await fetch(`http://localhost:${port}/status`, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(`http://127.0.0.1:${port}/status`, { signal: controller.signal }).catch(() =>
+        fetch(`http://localhost:${port}/status`, { signal: controller.signal })
+      );
       clearTimeout(timeoutId);
 
-      if (res.ok) {
+      if (res && res.ok) {
         lastSentinelStatus = true;
       } else {
         lastSentinelStatus = false;
@@ -109,18 +111,18 @@ export function isAndroid(): boolean {
 
 /**
  * Verifica si el sentinel de Windows está activo haciendo un GET a /status.
- * Timeout de 1 segundo para no bloquear la UI.
+ * Timeout de 1.5 segundos para no bloquear la UI.
  */
 export async function isSentinelOnline(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1000);
+    const timeout = setTimeout(() => controller.abort(), 1500);
     const res = await fetch(`${getSentinelUrl()}/status`, {
       method: "GET",
       signal: controller.signal,
-    });
+    }).catch(() => fetch(`http://localhost:${getTenantPrinterPort()}/status`, { method: "GET", signal: controller.signal }));
     clearTimeout(timeout);
-    return res.ok;
+    return !!(res && res.ok);
   } catch {
     return false;
   }
@@ -134,14 +136,16 @@ export async function getWindowsPrinters(customPort?: string, tenantId?: string)
   const port = customPort || getTenantPrinterPort(tenantId) || "3010";
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`http://localhost:${port}/printers`, { signal: controller.signal });
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`http://127.0.0.1:${port}/printers`, { signal: controller.signal }).catch(() =>
+      fetch(`http://localhost:${port}/printers`, { signal: controller.signal })
+    );
     clearTimeout(timeout);
-    if (!res.ok) return [];
+    if (!res || !res.ok) return [];
     const data = await res.json();
     return data.printers ?? [];
   } catch (e) {
-    console.warn(`[getWindowsPrinters] No se pudo obtener lista de impresoras de http://localhost:${port}/printers:`, e);
+    console.warn(`[getWindowsPrinters] No se pudo obtener lista de impresoras del Centinela (puerto ${port}):`, e);
     return [];
   }
 }
@@ -385,17 +389,18 @@ export class WindowsSpoolerTransport {
       raw_data: prn,
     };
 
-    console.log(`🖨️ [WindowsSpoolerTransport] Enviando ticket a http://localhost:${port}/print (Impresora: '${key}', Tenant: '${this.tenantId || 'activo'}')`);
+    console.log(`🖨️ [WindowsSpoolerTransport] Enviando ticket al Centinela (Puerto: ${port}, Impresora: '${key}', Tenant: '${this.tenantId || 'activo'}')`);
 
-    const maxRetries = 2;
+    const maxRetries = 3;
     let lastErrorMsg = "";
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-        const res = await fetch(`http://localhost:${port}/print`, {
+        const targetUrl = attempt % 2 === 1 ? `http://127.0.0.1:${port}/print` : `http://localhost:${port}/print`;
+        const res = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -431,11 +436,11 @@ export class WindowsSpoolerTransport {
         }
       } catch (err: any) {
         lastErrorMsg = err?.message || String(err);
-        console.warn(`[Printer] Intento ${attempt}/${maxRetries} fallido enviando a http://localhost:${port}/print:`, err);
+        console.warn(`[Printer] Intento ${attempt}/${maxRetries} fallido enviando al Centinela (puerto ${port}):`, err);
       }
 
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
@@ -461,7 +466,7 @@ export class WindowsSpoolerTransport {
 
     notifyPrinterEvent({
       title: "❌ Error de Impresión - Sentinela Caído",
-      message: `No se pudo conectar al Sentinela local en http://localhost:${port}. Verifica que el servicio (sentinel_printer.py) esté iniciado (${lastErrorMsg || "Sin conexión"}).`,
+      message: `No se pudo conectar al Sentinela local en el puerto ${port}. Verifica que el servicio esté activo (${lastErrorMsg || "Sin conexión"}).`,
       type: "error",
     });
 

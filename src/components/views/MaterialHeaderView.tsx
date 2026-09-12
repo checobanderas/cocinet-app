@@ -108,13 +108,19 @@ export const MaterialHeaderView: React.FC<MaterialHeaderViewProps> = ({
                 </motion.button>
               ) : null}
 
-              {/* Title Section */}
+              {/* Title Section with fluid responsive typography (clamp) */}
               <div className="text-left flex flex-col justify-center leading-tight">
-                <h1 className="text-sm sm:text-base font-black text-amber-400 uppercase tracking-tight truncate max-w-[140px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg m-0">
+                <h1 
+                  className="font-black text-amber-400 uppercase tracking-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg m-0"
+                  style={{ fontSize: "clamp(0.92rem, 2.5vw, 1.25rem)" }}
+                >
                   {title}
                 </h1>
                 {subtitle && (
-                  <span className="text-[9px] sm:text-[11px] text-slate-300 font-bold tracking-normal truncate max-w-[140px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg">
+                  <span 
+                    className="text-slate-300 font-bold tracking-normal truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md lg:max-w-lg opacity-90 mt-0.5"
+                    style={{ fontSize: "clamp(0.68rem, 1.8vw, 0.82rem)" }}
+                  >
                     {subtitle}
                   </span>
                 )}
@@ -122,7 +128,7 @@ export const MaterialHeaderView: React.FC<MaterialHeaderViewProps> = ({
             </div>
 
             {/* Right Section: User details & Notifications & Actions & Logout */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2.5">
               {actions}
 
               {/* Notifications Button */}
@@ -131,7 +137,7 @@ export const MaterialHeaderView: React.FC<MaterialHeaderViewProps> = ({
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowNotificationModal(true)}
-                  className="relative w-9 h-9 rounded-full bg-indigo-900/40 hover:bg-indigo-800 flex items-center justify-center text-lg border-none cursor-pointer outline-none transition"
+                  className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-900/40 hover:bg-indigo-800 flex items-center justify-center text-base sm:text-lg border-none cursor-pointer outline-none transition"
                   title="Notificaciones"
                 >
                   🔔
@@ -143,15 +149,23 @@ export const MaterialHeaderView: React.FC<MaterialHeaderViewProps> = ({
                 </motion.button>
               )}
 
-              {/* Branch indicator & Switcher button */}
+              {/* Branch indicator & Switcher button (Responsive) */}
               {!minimal && selectedTenant && (
                 <div className="flex items-center gap-1.5">
-                  <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest whitespace-nowrap">
+                  {/* Full branch badge on Desktop (lg+) */}
+                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30">
+                    <span className="text-[11px] font-black text-amber-400 uppercase tracking-wide whitespace-nowrap">
                       🏢 {selectedTenant.name}
                     </span>
-                    <span className="text-[9px] font-mono font-black text-amber-200 bg-black/40 px-1 py-0.5 rounded border border-amber-500/40">
+                    <span className="text-[9px] font-mono font-black text-amber-200 bg-black/50 px-1 py-0.5 rounded border border-amber-500/30">
                       {selectedTenant.id}
+                    </span>
+                  </div>
+
+                  {/* Compact branch badge on Tablets (sm / md) */}
+                  <div className="hidden sm:flex lg:hidden items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30">
+                    <span className="text-[10px] font-black text-amber-400 whitespace-nowrap">
+                      🏢 {selectedTenant.sucursalDefault || selectedTenant.id}
                     </span>
                   </div>
 

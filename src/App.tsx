@@ -36,6 +36,7 @@ import {
   getCompanyCatalog,
   getPreferredTablesMode,
   setPreferredTablesMode,
+  TablesMode,
   getSimplifiedDeviceInfo
 } from "./utils/appHelpers";
 
@@ -131,6 +132,7 @@ const SuppliersView = React.lazy(() => import('./components/views/SuppliersView'
 const CustomersView = React.lazy(() => import('./components/views/CustomersView').then(m => ({ default: m.CustomersView })));
 const ExpensesView = React.lazy(() => import('./components/views/ExpensesView').then(m => ({ default: m.ExpensesView })));
 const GestionCuentasView = React.lazy(() => import('./components/views/GestionCuentasView').then(m => ({ default: m.GestionCuentasView })));
+const CuentasCelularView = React.lazy(() => import('./components/views/CuentasCelularView').then(m => ({ default: m.CuentasCelularView })));
 const ReporteMovimientosView = React.lazy(() => import('./components/views/ReporteMovimientosView').then(m => ({ default: m.ReporteMovimientosView })));
 const ClosedAccountsListView = React.lazy(() => import('./components/views/ClosedAccountsListView').then(m => ({ default: m.ClosedAccountsListView })));
 const DeliveryPanelView = React.lazy(() => import('./components/views/DeliveryPanelView').then(m => ({ default: m.DeliveryPanelView })));
@@ -1113,7 +1115,7 @@ export default function App() {
               if (loggedUser.role === "admin" || loggedUser.id.endsWith("-sistemas")) {
                 setAppMode("corte-tabla");
               } else {
-                setAppMode(getPreferredTablesMode());
+                setAppMode(getPreferredTablesMode(loggedUser.id, activeTenant.id));
               }
               setLoginSubStep("tenant");
               
@@ -1220,10 +1222,10 @@ export default function App() {
                 if (targetUser.role === "admin" || targetUser.id.endsWith("-sistemas")) {
                   setAppMode("corte-tabla");
                 } else {
-                  setAppMode(getPreferredTablesMode());
+                  setAppMode(getPreferredTablesMode(targetUser.id, found.id));
                 }
               } else {
-                setAppMode(getPreferredTablesMode());
+                setAppMode(getPreferredTablesMode(null, found.id));
               }
 
               setLoginSubStep("tenant");
@@ -1481,7 +1483,7 @@ export default function App() {
                 if (autoUser.role === "admin" || autoUser.id.endsWith("-sistemas")) {
                   setAppMode("corte-tabla");
                 } else {
-                  setAppMode(getPreferredTablesMode());
+                  setAppMode(getPreferredTablesMode(autoUser.id, tenant.id));
                 }
                 return autoUser;
               }
@@ -3500,7 +3502,7 @@ export default function App() {
         if (user.role === "admin" || user.id.endsWith("-sistemas")) {
           setAppMode("corte-tabla");
         } else {
-          setAppMode(getPreferredTablesMode());
+          setAppMode(getPreferredTablesMode(user.id, selectedTenant?.id));
         }
         return;
       }
@@ -3589,7 +3591,7 @@ export default function App() {
       if (matchedUser.role === "admin" || matchedUser.id.endsWith("-sistemas")) {
         setAppMode("corte-tabla");
       } else {
-        setAppMode(getPreferredTablesMode());
+        setAppMode(getPreferredTablesMode(matchedUser.id, selectedTenant?.id));
       }
     } else {
       const nextAttempts = pinAttempts + 1;
@@ -4987,6 +4989,7 @@ export default function App() {
     | "reporte-movimientos"
     | "verify-menu"
     | "gestion_cuentas"
+    | "cuentas_celular"
   >(() => getPreferredTablesMode());
 
   const [systemLocalWindowsAutoPrint, setSystemLocalWindowsAutoPrint] = useState<boolean>(() => {
@@ -6653,7 +6656,7 @@ export default function App() {
         if (adminUser && (adminUser.role === "admin" || adminUser.id.endsWith("-sistemas"))) {
           setAppMode("corte-tabla");
         } else {
-          setAppMode(getPreferredTablesMode());
+          setAppMode(getPreferredTablesMode(adminUser?.id, company.id));
         }
         triggerAppNotification(
           "🏢 Acceso Autorizado",
@@ -6816,7 +6819,7 @@ export default function App() {
               if (targetUser.role === "admin" || targetUser.id.endsWith("-sistemas")) {
                 setAppMode("corte-tabla");
               } else {
-                setAppMode(getPreferredTablesMode());
+                setAppMode(getPreferredTablesMode(targetUser.id, pendingTenant.id));
               }
             } else {
               setLoginSubStep("user");
@@ -7087,8 +7090,16 @@ export default function App() {
           `La Mesa ${freshTable.label} ha sido cancelada o liberada por un administrador. Retornando al mapa de mesas.`,
           "warning"
         );
-        setAppMode("floorplan");
-        setSelectedTableId(null);
+        const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+        setAppMode(preferred);
+        if (preferred === "gestion_cuentas") {
+          setSelectedTableGestion(null);
+        } else if (preferred === "cuentas_celular") {
+          setSelectedTableGestion(null);
+          setSelectedTableId(null);
+        } else {
+          setSelectedTableId(null);
+        }
         setCheckoutFallbackItems([]);
         setShowPaymentOptions(false);
       }
@@ -7315,7 +7326,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
             "warning"
           );
           setCorteTablaSessionSelected(null);
-          setAppMode("floorplan");
+          setAppMode(getPreferredTablesMode(currentUser?.id, selectedTenant?.id));
         }
       }
     }
@@ -7373,7 +7384,7 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       
       // Redirect based on role
       if (selectedLoginUser.role === "mesero") {
-        setAppMode(getPreferredTablesMode());
+        setAppMode(getPreferredTablesMode(selectedLoginUser.id, selectedTenant?.id));
       } else {
         setAppMode("corte-tabla");
       }
@@ -8963,16 +8974,36 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     const hasComandas = Array.isArray(table.comandas) && table.comandas.length > 0;
     const isOccupied = table.status === "occupied" || hasComandas;
 
-    if (!isOccupied) {
-      setAppMode("menu");
-      setCart([]);
-      if (table.zone === "Servicio a Domicilio") {
-        setShowDeliverySetupModal(true);
+    if (appMode === "gestion_cuentas") {
+      setSelectedTableGestion(table);
+      setSelectedTableId(table.id);
+      if (!isOccupied) {
+        setCart([]);
+        if (table.zone === "Servicio a Domicilio") {
+          setShowDeliverySetupModal(true);
+        }
+      } else {
+        setPrecuentaComensal(1);
+        setPrecuentaTab("resumen");
+      }
+    } else if (appMode === "cuentas_celular") {
+      setSelectedTableId(table.id);
+      if (!isOccupied) {
+        setCart([]);
       }
     } else {
-      setAppMode("table-details");
-      setPrecuentaComensal(1);
-      setPrecuentaTab("resumen");
+      setSelectedTableId(table.id);
+      if (!isOccupied) {
+        setAppMode("menu");
+        setCart([]);
+        if (table.zone === "Servicio a Domicilio") {
+          setShowDeliverySetupModal(true);
+        }
+      } else {
+        setAppMode("table-details");
+        setPrecuentaComensal(1);
+        setPrecuentaTab("resumen");
+      }
     }
   };
 
@@ -9411,15 +9442,18 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       setPaymentDiscountValue(0);
       setPaymentAmountReceived("");
       setPaymentMethod("cash");
-      setCheckoutReturnMode(appMode);
+      const currentOriginMode = appMode === "gestion_cuentas" ? "gestion_cuentas" : (appMode === "cuentas_celular" ? "cuentas_celular" : (appMode === "floorplan" ? "floorplan" : getPreferredTablesMode(currentUser?.id, selectedTenant?.id)));
+      setCheckoutReturnMode(currentOriginMode);
       setAppMode("checkout");
     } else {
-      const preferred = getPreferredTablesMode();
-      if (appMode === "gestion_cuentas" || preferred === "gestion_cuentas") {
-        setAppMode("gestion_cuentas");
+      const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+      setAppMode(preferred);
+      if (preferred === "gestion_cuentas") {
         setSelectedTableGestion(null);
+      } else if (preferred === "cuentas_celular") {
+        setSelectedTableGestion(null);
+        setSelectedTableId(null);
       } else {
-        setAppMode("floorplan");
         setSelectedTableId(null);
       }
     }
@@ -9586,10 +9620,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       if (!freshTable || freshTable.status === "available" || !freshTable.comandas || freshTable.comandas.length === 0) {
         isProcessingPaymentRef.current = false;
         alert("⚠️ Esta mesa ya ha sido cancelada o liberada por un administrador. No se puede cobrar.");
-        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+        const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+        const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "cuentas_celular" ? "cuentas_celular" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred));
         setAppMode(nextMode);
         if (nextMode === "gestion_cuentas") {
           setSelectedTableGestion(null);
+        } else if (nextMode === "cuentas_celular") {
+          setSelectedTableGestion(null);
+          setSelectedTableId(null);
+        } else {
+          setSelectedTableId(null);
         }
         setCheckoutReturnMode(null);
         setSelectedTableId(null);
@@ -9677,10 +9717,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       isProcessingPaymentRef.current = false;
     }
 
-    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+    const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "cuentas_celular" ? "cuentas_celular" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred));
     setAppMode(nextMode);
     if (nextMode === "gestion_cuentas") {
       setSelectedTableGestion(null);
+    } else if (nextMode === "cuentas_celular") {
+      setSelectedTableGestion(null);
+      setSelectedTableId(null);
+    } else {
+      setSelectedTableId(null);
     }
     setCheckoutReturnMode(null);
     setSelectedTableId(null);
@@ -9749,10 +9795,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
       isProcessingPaymentRef.current = false;
     }
 
-    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+    const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+    const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "cuentas_celular" ? "cuentas_celular" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred));
     setAppMode(nextMode);
     if (nextMode === "gestion_cuentas") {
       setSelectedTableGestion(null);
+    } else if (nextMode === "cuentas_celular") {
+      setSelectedTableGestion(null);
+      setSelectedTableId(null);
+    } else {
+      setSelectedTableId(null);
     }
     setCheckoutReturnMode(null);
     setSelectedTableId(null);
@@ -9796,9 +9848,10 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
 
       setShowTransferTableModal(false);
       setTransferTargetTableId("");
-      const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+      const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+      const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "cuentas_celular" ? "cuentas_celular" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred));
       setAppMode(nextMode);
-      if (nextMode === "gestion_cuentas") {
+      if (nextMode === "gestion_cuentas" || nextMode === "cuentas_celular") {
         setSelectedTableGestion(null);
       }
       setCheckoutReturnMode(null);
@@ -9881,10 +9934,16 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
        setShowMoveItemsModal(false);
        setMoveItemsSelection({});
        setMoveTargetTableId("");
-       const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : getPreferredTablesMode());
+       const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+       const nextMode = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "cuentas_celular" ? "cuentas_celular" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred));
        setAppMode(nextMode);
        if (nextMode === "gestion_cuentas") {
          setSelectedTableGestion(null);
+       } else if (nextMode === "cuentas_celular") {
+         setSelectedTableGestion(null);
+         setSelectedTableId(null);
+       } else {
+         setSelectedTableId(null);
        }
        setCheckoutReturnMode(null);
        setSelectedTableId(null);
@@ -11081,12 +11140,15 @@ const [pendingInvoiceTarget, setPendingInvoiceTarget] = useState<{
     />
   );
 
-  const handleSwitchTablesMode = (targetMode: "floorplan" | "gestion_cuentas") => {
-    setPreferredTablesMode(targetMode);
+  const handleSwitchTablesMode = (targetMode: TablesMode) => {
+    setPreferredTablesMode(targetMode, currentUser?.id, selectedTenant?.id);
     setAppMode(targetMode);
     if (targetMode === "floorplan") {
       setSelectedTableGestion(null);
-    } else {
+    } else if (targetMode === "gestion_cuentas") {
+      setSelectedTableId(null);
+    } else if (targetMode === "cuentas_celular") {
+      setSelectedTableGestion(null);
       setSelectedTableId(null);
     }
   };
@@ -13288,6 +13350,7 @@ Instrucciones:
       setConfigActiveTab={setConfigActiveTab}
       setManageMenuTab={setManageMenuTab}
       setSelectedTableGestion={setSelectedTableGestion}
+      setSelectedTableId={setSelectedTableId}
       setShowBluetoothConfigModal={setShowBluetoothConfigModal}
       setShowBranchSwitcherModal={setShowBranchSwitcherModal}
       setShowSidebar={setShowSidebar}
@@ -13507,7 +13570,34 @@ Instrucciones:
           onSwitchTablesMode={handleSwitchTablesMode}
           handleTableClick={handleTableClick}
     />
-  );;
+  );
+
+  const renderCuentasCelular = () => (
+    <CuentasCelularView
+      tables={tables}
+      effectiveTables={effectiveTables}
+      zones={zones}
+      products={products}
+      productCategories={productCategories}
+      cart={cart}
+      setCart={setCart}
+      addToCart={addToCart}
+      currentUser={currentUser}
+      selectedTenant={selectedTenant}
+      renderMaterialHeader={renderMaterialHeader}
+      onSwitchTablesMode={handleSwitchTablesMode}
+      generateOrder={generateOrder}
+      setAppMode={setAppMode}
+      setCheckoutReturnMode={setCheckoutReturnMode}
+      selectedTableId={selectedTableId}
+      setSelectedTableId={setSelectedTableId}
+      isOnline={isOnline}
+      isListening={isListening}
+      startVoiceRecognition={startVoiceRecognition}
+      generalNotes={generalNotes}
+      setGeneralNotes={setGeneralNotes}
+    />
+  );
 
   const renderDashboard = () => null;    const renderCorteNuevo = () => (
     <CorteNuevoView
@@ -14311,6 +14401,7 @@ Instrucciones:
             {appMode === "corte-x" && renderCorteX()}
             {appMode === "expenses" && renderExpenses()}
             {appMode === "gestion_cuentas" && renderGestionCuentas()}
+            {appMode === "cuentas_celular" && renderCuentasCelular()}
           </React.Suspense>
 
           {renderSidebar()}

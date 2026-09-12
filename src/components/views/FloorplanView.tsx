@@ -1,8 +1,9 @@
-import { getFormattedProductName } from '../../utils/appHelpers';
+import { getFormattedProductName, TablesMode } from '../../utils/appHelpers';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonAccordion, IonAccordionGroup, IonBadge, IonButton, IonCol, IonContent, IonFooter, IonGrid, IonHeader, IonIcon, IonItem, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonText, IonToolbar } from '@ionic/react';
 import { arrowForwardOutline, beerOutline, printOutline, receiptOutline, restaurantOutline } from 'ionicons/icons';
+import { TablesModeSwitcher } from '../common/TablesModeSwitcher';
 
 interface FloorplanViewProps {
   generalNotes: any;
@@ -21,7 +22,7 @@ interface FloorplanViewProps {
   printComanda: any;
   startVoiceRecognition: any;
   zones: any;
-  onSwitchTablesMode?: (mode: "floorplan" | "gestion_cuentas") => void;
+  onSwitchTablesMode?: (mode: TablesMode) => void;
 }
 
 export const FloorplanView: React.FC<FloorplanViewProps> = ({
@@ -41,24 +42,13 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
   return (
 <IonPage>
       {renderMaterialHeader({
-        title: selectedTenant ? `🏢 ${selectedTenant.name}` : "Cocinet",
-        subtitle: `📍 ${selectedTenant?.sucursalDefault || "Matriz"}`,
+        title: selectedTenant?.sucursalDefault ? `🏢 ${selectedTenant.sucursalDefault}` : (selectedTenant?.name ? `🏢 ${selectedTenant.name}` : "Cocinet"),
+        subtitle: selectedTenant?.sucursalDefault && selectedTenant?.name ? `📍 ${selectedTenant.name}` : "📍 Mapa de Mesas",
         showBack: false,
         showMenu: true,
         actions: (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {onSwitchTablesMode && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => onSwitchTablesMode("gestion_cuentas")}
-                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-black text-[11px] sm:text-xs transition-all cursor-pointer border border-emerald-500/40 shadow-sm"
-                title="Cambiar a Gestión de Cuentas (Pantalla Dividida)"
-              >
-                <span>💻</span>
-                <span className="hidden sm:inline">Gestión Cuentas</span>
-              </motion.button>
-            )}
+            <TablesModeSwitcher currentMode="floorplan" onSwitchMode={onSwitchTablesMode} />
             {isOnline && (
               <motion.button
                 whileHover={{ scale: 1.05 }}

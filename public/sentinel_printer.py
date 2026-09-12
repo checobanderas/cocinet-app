@@ -1325,6 +1325,22 @@ def receive_proceso_pico_log():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/printer-log", methods=["GET", "POST", "OPTIONS"])
+def handle_printer_log_api():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True}), 200
+    return jsonify({"success": True}), 200
+
+@app.route("/api/sync", methods=["GET", "POST", "OPTIONS"])
+def handle_sync_api():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True}), 200
+    return jsonify({"success": True, "synced": True}), 200
+
+@app.route("/api/config/menu_image", methods=["GET", "OPTIONS"])
+def handle_menu_image():
+    return jsonify({"error": "No custom menu image"}), 404
+
 @app.route("/download/<filename>", methods=["GET"])
 def download_sentinel_file(filename):
     safe_files = ["sentinel_printer.py", "instalador.bat", "instalador_sentinela.py", "printer_config.json"]
@@ -1959,8 +1975,21 @@ def run_flask():
         
         from werkzeug.serving import make_server
         global _flask_server
-        _flask_server = make_server("0.0.0.0", PORT, app)
-        notify_step("SERVICE_ONLINE", f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT} (HTTP/WS)")
+        
+        # Intentar enlazar el puerto con reintentos para evitar fallos por TIME_WAIT al reiniciar
+        max_bind_attempts = 10
+        for attempt in range(1, max_bind_attempts + 1):
+            try:
+                _flask_server = make_server("0.0.0.0", PORT, app, threaded=True)
+                break
+            except OSError as bind_err:
+                if attempt < max_bind_attempts:
+                    notify_step("PORT_RETRY", f"Puerto {PORT} ocupado o en espera (intento {attempt}/{max_bind_attempts}): {bind_err}. Reintentando en 1s...", status="WARNING")
+                    time.sleep(1)
+                else:
+                    raise bind_err
+
+        notify_step("SERVICE_ONLINE", f"COCINET Print Sentinel v{VERSION} escuchando en puerto {PORT} (HTTP/WS Multihilo)")
         _flask_server.serve_forever()
     except Exception as e:
         import traceback

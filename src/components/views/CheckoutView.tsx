@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IonButton, IonCard, IonCardContent, IonCol, IonContent, IonFooter, IonGrid, IonIcon, IonLabel, IonPage, IonRow, IonSegment, IonSegmentButton, IonSpinner, IonText, IonToolbar } from '@ionic/react';
 import { addOutline, cardOutline, cashOutline, flashOutline, swapHorizontalOutline, trashOutline } from 'ionicons/icons';
 import { formatTableName } from '../../utils/formatters';
+import { getPreferredTablesMode } from '../../utils/appHelpers';
 
 interface CheckoutViewProps {
   cancellationReason: any;
@@ -104,7 +105,7 @@ if (currentUser?.role === "mesero") {
               <div style={{ fontSize: "4rem", marginBottom: "20px" }}>🚫</div>
               <h2 className="text-xl font-bold text-red-600">Acceso Restringido</h2>
               <p className="text-slate-600 mt-2">Los meseros no tienen permisos para cobrar cuentas.</p>
-              <IonButton className="mt-6" onClick={() => setAppMode("floorplan")} style={{ "--border-radius": "16px" }}>
+              <IonButton className="mt-6" onClick={() => setAppMode(getPreferredTablesMode(currentUser?.id, selectedTenant?.id))} style={{ "--border-radius": "16px" }}>
                 Volver a Mesas
               </IonButton>
             </div>
@@ -546,7 +547,8 @@ if (currentUser?.role === "mesero") {
         subtitle: `Cobrando por: ${currentUser?.name || "Cajero"}`,
         showBack: true,
         onBack: () => {
-          const next = checkoutReturnMode || "gestion_cuentas";
+          const preferred = getPreferredTablesMode(currentUser?.id, selectedTenant?.id);
+          const next = checkoutReturnMode === "gestion_cuentas" ? "gestion_cuentas" : (checkoutReturnMode === "floorplan" ? "floorplan" : preferred);
           setAppMode(next);
           setPrecuentaComensal(1);
           setPrecuentaTab("resumen");

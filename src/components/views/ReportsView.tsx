@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonContent, IonPage } from '@ionic/react';
+import { getPreferredTablesMode } from '../../utils/appHelpers';
 
 
 interface ReportsViewProps {
@@ -269,7 +270,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         title: "Estadísticas y Reportes Financieros",
         subtitle: "Métricas de Desempeño y Caja",
         showBack: true,
-        onBack: () => setAppMode("floorplan"),
+        onBack: () => setAppMode(getPreferredTablesMode()),
       })}
         <IonContent
           className="ion-padding"

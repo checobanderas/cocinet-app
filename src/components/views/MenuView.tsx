@@ -1,4 +1,4 @@
-import { getProductInventoryStatus } from '../../utils/appHelpers';
+import { getProductInventoryStatus, getPreferredTablesMode } from '../../utils/appHelpers';
 import { ComensalPreview } from '../modals/ComensalPreview';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -109,14 +109,8 @@ const subcategories = Array.from(
           if (appMode === "gestion_cuentas") {
             setSelectedTableGestion(null);
           } else {
-            try {
-              const saved = localStorage.getItem("cocinet_preferred_tables_view");
-              const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
-              const nextMode = saved || (isVertical ? "floorplan" : "gestion_cuentas");
-              setAppMode(nextMode);
-            } catch (e) {
-              setAppMode("floorplan");
-            }
+            const nextMode = getPreferredTablesMode(currentUser?.id);
+            setAppMode(nextMode);
           }
         },
         actions: isOnline ? (
