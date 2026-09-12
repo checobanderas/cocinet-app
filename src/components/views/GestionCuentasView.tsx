@@ -247,7 +247,11 @@ return (
           actions: (
             <div className="flex items-center gap-1.5 sm:gap-2">
               {!selectedTableGestion && (
-                <TablesModeSwitcher currentMode="gestion_cuentas" onSwitchMode={onSwitchTablesMode} />
+                <TablesModeSwitcher 
+                  currentMode="gestion_cuentas" 
+                  onSwitchMode={onSwitchTablesMode} 
+                  branchName={selectedTenant?.sucursalDefault || selectedTenant?.name}
+                />
               )}
               {isOnline && (
                 <motion.button

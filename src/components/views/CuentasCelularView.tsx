@@ -197,7 +197,11 @@ export const CuentasCelularView: React.FC<CuentasCelularViewProps> = ({
         actions: (
           <div className="flex items-center gap-1.5 sm:gap-2">
             {!currentTable && (
-              <TablesModeSwitcher currentMode="cuentas_celular" onSwitchMode={onSwitchTablesMode} />
+              <TablesModeSwitcher 
+                currentMode="cuentas_celular" 
+                onSwitchMode={onSwitchTablesMode} 
+                branchName={selectedTenant?.sucursalDefault || selectedTenant?.name}
+              />
             )}
             {isOnline && (
               <motion.button

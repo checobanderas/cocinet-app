@@ -637,6 +637,35 @@ export type TablesMode = "floorplan" | "gestion_cuentas" | "cuentas_celular";
 
 export function getPreferredTablesMode(userId?: string | null, tenantId?: string | null): TablesMode {
   try {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlMode = params.get("mode") || params.get("vista") || params.get("tables_mode") || (params.get("device") === "mobile" ? "celular" : null);
+      if (urlMode) {
+        let matchedMode: TablesMode | null = null;
+        if (urlMode === "celular" || urlMode === "cuentas_celular" || urlMode === "mobile") {
+          matchedMode = "cuentas_celular";
+        } else if (urlMode === "mapa" || urlMode === "floorplan") {
+          matchedMode = "floorplan";
+        } else if (urlMode === "gestion" || urlMode === "gestion_cuentas") {
+          matchedMode = "gestion_cuentas";
+        }
+
+        if (matchedMode) {
+          setPreferredTablesMode(matchedMode, userId, tenantId);
+          try {
+            params.delete("mode");
+            params.delete("vista");
+            params.delete("tables_mode");
+            params.delete("device");
+            const newSearch = params.toString();
+            const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
+            window.history.replaceState(null, "", newUrl);
+          } catch (e) {}
+          return matchedMode;
+        }
+      }
+    }
+
     if (userId) {
       const userSaved = localStorage.getItem(`cocinet_preferred_tables_view_${userId}`);
       if (userSaved === "floorplan" || userSaved === "gestion_cuentas" || userSaved === "cuentas_celular") {
@@ -654,8 +683,8 @@ export function getPreferredTablesMode(userId?: string | null, tenantId?: string
       return saved;
     }
   } catch (e) {}
-  const isVertical = window.innerWidth < window.innerHeight || window.innerWidth < 768;
-  return isVertical ? "floorplan" : "gestion_cuentas";
+  const isVertical = typeof window !== "undefined" && (window.innerWidth < window.innerHeight || window.innerWidth < 768);
+  return isVertical ? "cuentas_celular" : "gestion_cuentas";
 }
 
 export function setPreferredTablesMode(

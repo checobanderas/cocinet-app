@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IonIcon } from '@ionic/react';
 import { closeOutline, logoToUse, restaurantOutline } from 'ionicons/icons';
+import { Smartphone, QrCode } from 'lucide-react';
 import { setPreferredTablesMode } from '../../utils/appHelpers';
+import { ConnectWaiterModal } from '../modals/ConnectWaiterModal';
 
 interface SidebarViewProps {
   logoToUse: any;
@@ -65,7 +67,10 @@ export const SidebarView: React.FC<SidebarViewProps> = ({
   activeOwnerBranchesCount,
   logoToUse
 }) => {
-return (
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  return (
+    <>
       <AnimatePresence>
         {showSidebar && (
           <>
@@ -564,6 +569,19 @@ return (
                       </span>
                       <span>Cuentas Celular</span>
                     </button>
+
+                    <button
+                      onClick={() => {
+                        setShowConnectModal(true);
+                        setShowSidebar(false);
+                      }}
+                      className="flex items-center gap-3 w-full p-2.5 mt-2 rounded-xl text-xs font-black bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 border border-purple-500/30 transition-all duration-200 cursor-pointer text-left shadow-sm"
+                    >
+                      <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/20 text-purple-200 text-sm">
+                        📱
+                      </span>
+                      <span>Conectar Celular / Mesero (QR/WA)</span>
+                    </button>
                   </div>
                 </div>
 
@@ -803,5 +821,14 @@ return (
           </>
         )}
       </AnimatePresence>
-    );
+
+      {showConnectModal && (
+        <ConnectWaiterModal
+          isOpen={showConnectModal}
+          onClose={() => setShowConnectModal(false)}
+          branchName={selectedTenant?.sucursalDefault || selectedTenant?.name}
+        />
+      )}
+    </>
+  );
 };

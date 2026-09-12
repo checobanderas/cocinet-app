@@ -48,7 +48,11 @@ export const FloorplanView: React.FC<FloorplanViewProps> = ({
         showMenu: true,
         actions: (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <TablesModeSwitcher currentMode="floorplan" onSwitchMode={onSwitchTablesMode} />
+            <TablesModeSwitcher 
+              currentMode="floorplan" 
+              onSwitchMode={onSwitchTablesMode} 
+              branchName={selectedTenant?.sucursalDefault || selectedTenant?.name}
+            />
             {isOnline && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
